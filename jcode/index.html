@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swarm Bay — Parallel Agent Sandbox</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#11161d;
+    --panel-2:#161d26;
+    --border:#232b36;
+    --text:#e6edf3;
+    --text-dim:#8b98a5;
+    --accent:#5ee6a8;
+    --accent-2:#5ea8e6;
+    --warn:#e6a85e;
+    --danger:#e65e6e;
+    --mono: "SF Mono", "Fira Code", Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height:1.5;
+  }
+  header{
+    padding:28px 32px 18px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:-0.02em;
+  }
+  header p{
+    margin:0;
+    color:var(--text-dim);
+    font-size:14px;
+    max-width:700px;
+  }
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--accent);
+    border:1px solid #234a3a;
+    background:#0f1f18;
+    padding:3px 8px;
+    border-radius:5px;
+    margin-bottom:10px;
+  }
+  main{
+    max-width:1180px;
+    margin:0 auto;
+    padding:24px 32px 60px;
+  }
+  .controls{
+    display:flex;
+    align-items:center;
+    gap:20px;
+    flex-wrap:wrap;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px 20px;
+    margin-bottom:20px;
+  }
+  .controls label{
+    font-size:13px;
+    color:var(--text-dim);
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .controls input[type=range]{
+    width:180px;
+    accent-color:var(--accent);
+  }
+  .fleet-count{
+    font-family:var(--mono);
+    color:var(--accent);
+    font-weight:600;
+    min-width:24px;
+    display:inline-block;
+  }
+  button{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding:10px 18px;
+    border-radius:8px;
+    border:1px solid transparent;
+    cursor:pointer;
+    transition:transform .08s ease, opacity .15s ease;
+  }
+  button:active{transform:scale(0.97);}
+  .btn-primary{
+    background:var(--accent);
+    color:#04140c;
+  }
+  .btn-primary:disabled{
+    opacity:0.4;
+    cursor:not-allowed;
+  }
+  .btn-ghost{
+    background:transparent;
+    border-color:var(--border);
+    color:var(--text-dim);
+  }
+  .meters{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    margin-bottom:22px;
+  }
+  .meter-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px 18px;
+  }
+  .meter-card h3{
+    margin:0 0 10px;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--text-dim);
+    font-weight:600;
+    display:flex;
+    justify-content:space-between;
+  }
+  .meter-card .value{
+    font-family:var(--mono);
+    font-size:20px;
+    color:var(--text);
+  }
+  .bar-track{
+    height:10px;
+    background:#0a0e13;
+    border-radius:5px;
+    margin-top:10px;
+    overflow:hidden;
+    border:1px solid var(--border);
+  }
+  .bar-fill{
+    height:100%;
+    border-radius:5px;
+    transition:width .3s ease;
+  }
+  .bar-fill.ram-swarm{background:linear-gradient(90deg,var(--accent-2),var(--accent));}
+  .bar-fill.ram-baseline{background:linear-gradient(90deg,var(--danger),var(--warn));}
+  .stat-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:8px;
+    font-family:var(--mono);
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(230px, 1fr));
+    gap:12px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    min-height:190px;
+  }
+  .card-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:8px 12px;
+    background:var(--panel-2);
+    border-bottom:1px solid var(--border);
+    font-size:11px;
+    font-family:var(--mono);
+    color:var(--text-dim);
+  }
+  .dot{
+    width:8px;height:8px;border-radius:50%;
+    display:inline-block;
+    margin-right:6px;
+  }
+  .dot.queued{background:#3a4553;}
+  .dot.running{background:var(--accent-2); box-shadow:0 0 6px var(--accent-2); animation:pulse 1s infinite;}
+  .dot.done{background:var(--accent);}
+  @keyframes pulse{
+    0%,100%{opacity:1;}
+    50%{opacity:0.4;}
+  }
+  .card-body{
+    flex:1;
+    padding:10px 12px;
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:#aeb9c4;
+    white-space:pre-wrap;
+    overflow:hidden;
+  }
+  .card-body .add{color:var(--accent);}
+  .card-body .rem{color:var(--danger);}
+  .card-task{
+    padding:6px 12px 10px;
+    font-size:11px;
+    color:var(--text-dim);
+    border-top:1px solid var(--border);
+  }
+  .empty-hint{
+    color:var(--text-dim);
+    font-size:13px;
+    padding:30px;
+    text-align:center;
+    border:1px dashed var(--border);
+    border-radius:10px;
+  }
+  footer{
+    max-width:1180px;
+    margin:0 auto;
+    padding:24px 32px 40px;
+    color:var(--text-dim);
+    font-size:12px;
+    border-top:1px solid var(--border);
+  }
+  .cursor{
+    display:inline-block;
+    width:6px;height:12px;
+    background:var(--accent);
+    vertical-align:-2px;
+    animation:blink 0.9s step-end infinite;
+  }
+  @keyframes blink{50%{opacity:0;}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">toy sandbox</div>
+  <h1>Swarm Bay</h1>
+  <p>A tiny demo of parallel low-footprint coding agents: spin up a fleet, watch each one pull a task off a shared queue and stream a real-looking diff, and compare the memory cost against a fleet of "heavy" agents doing the same work.</p>
+</header>
+
+<main>
+  <div class="controls">
+    <label>
+      Fleet size
+      <input id="fleetSlider" type="range" min="1" max="20" value="6">
+      <span class="fleet-count" id="fleetCount">6</span> agents
+    </label>
+    <button class="btn-primary" id="launchBtn">Launch fleet</button>
+    <button class="btn-ghost" id="resetBtn">Reset</button>
+    <span id="statusMsg" style="font-size:12px;color:var(--text-dim);"></span>
+  </div>
+
+  <div class="meters">
+    <div class="meter-card">
+      <h3>This approach <span style="color:var(--accent)">~11 MB / session</span></h3>
+      <div class="value" id="swarmRamValue">0 MB</div>
+      <div class="bar-track"><div class="bar-fill ram-swarm" id="swarmRamBar" style="width:0%"></div></div>
+      <div class="stat-row"><span id="swarmActive">0 active</span><span id="swarmBudget">of 512 MB budget</span></div>
+    </div>
+    <div class="meter-card">
+      <h3>Typical heavy agent <span style="color:var(--warn)">~410 MB / session</span></h3>
+      <div class="value" id="baseRamValue">0 MB</div>
+      <div class="bar-track"><div class="bar-fill ram-baseline" id="baseRamBar" style="width:0%"></div></div>
+      <div class="stat-row"><span id="baseActive">0 would-be active</span><span id="baseBudget">capped at 512 MB</span></div>
+    </div>
+  </div>
+
+  <div id="gridWrap">
+    <div class="empty-hint">Pick a fleet size and click "Launch fleet" to send agents at the task queue.</div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Jcode (YC S26). Not affiliated with Jcode.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- synthetic task queue -------------------------------------------------
+  var TASKS = [
+    {file:"auth/session.py", diff:[
+      ["-", "    if user.token:"],
+      ["+", "    if user.token and not user.token.expired:"],
+      ["+", "        refresh_token(user)"]
+    ]},
+    {file:"parser/lexer.rs", diff:[
+      ["-", "fn next_token(&mut self) -> Token {"],
+      ["+", "fn next_token(&mut self) -> Result<Token, LexError> {"],
+      ["+", "    self.skip_whitespace();"]
+    ]},
+    {file:"api/routes.js", diff:[
+      ["-", "app.get('/users', getUsers)"],
+      ["+", "app.get('/users', rateLimit(60), getUsers)"],
+      ["+", "app.get('/users/:id', rateLimit(60), getUserById)"]
+    ]},
+    {file:"tests/test_cache.py", diff:[
+      ["+", "def test_cache_eviction_lru():"],
+      ["+", "    cache = LRUCache(size=2)"],
+      ["+", "    cache.put('a', 1); cache.put('b', 2); cache.put('c', 3)"],
+      ["+", "    assert 'a' not in cache"]
+    ]},
+    {file:"db/migrations/0042_index.sql", diff:[
+      ["+", "CREATE INDEX CONCURRENTLY idx_orders_user_id"],
+      ["+", "  ON orders (user_id) WHERE deleted_at IS NULL;"]
+    ]},
+    {file:"ui/components/Modal.tsx", diff:[
+      ["-", "  useEffect(() => { document.body.style.overflow = 'hidden' })"],
+      ["+", "  useEffect(() => {"],
+      ["+", "    document.body.style.overflow = 'hidden'"],
+      ["+", "    return () => { document.body.style.overflow = '' }"],
+      ["+", "  }, [])"]
+    ]},
+    {file:"infra/deploy.yaml", diff:[
+      ["-", "  replicas: 2"],
+      ["+", "  replicas: 4"],
+      ["+", "  resources: { limits: { memory: '256Mi' } }"]
+    ]},
+    {file:"core/scheduler.go", diff:[
+      ["-", "func (s *Scheduler) Run() {"],
+      ["+", "func (s *Scheduler) Run(ctx context.Context) error {"],
+      ["+", "    defer s.drain()"]
+    ]},
+    {file:"utils/retry.py", diff:[
+      ["+", "def with_backoff(fn, retries=3, base=0.2):"],
+      ["+", "    for i in range(retries):"],
+      ["+", "        try: return fn()"],
+      ["+", "        except Exception: time.sleep(base * 2 ** i)"]
+    ]},
+    {file:"parser/ast_walker.rs", diff:[
+      ["-", "match node.kind {"],
+      ["+", "match node.kind {"],
+      ["+", "    NodeKind::Loop(_) => self.enter_loop_scope(node),"]
+    ]},
+    {file:"billing/invoice.py", diff:[
+      ["-", "    total = sum(i.amount for i in items)"],
+      ["+", "    total = sum(i.amount for i in items if not i.void)"]
+    ]},
+    {file:"search/index.ts", diff:[
+      ["+", "export function tokenize(input: string): string[] {"],
+      ["+", "  return input.toLowerCase().match(/[a-z0-9]+/g) ?? []"],
+      ["+", "}"]
+    ]}
+  ];
+
+  // ---- constants --------------------------------------------------------
+  var SWARM_MB_PER_AGENT = 11;
+  var BASE_MB_PER_AGENT = 410;
+  var RAM_BUDGET = 512; // shared MB budget both fleets are measured against
+
+  var el = {
+    slider: document.getElementById("fleetSlider"),
+    count: document.getElementById("fleetCount"),
+    launch: document.getElementById("launchBtn"),
+    reset: document.getElementById("resetBtn"),
+    status: document.getElementById("statusMsg"),
+    grid: document.getElementById("gridWrap"),
+    swarmRamValue: document.getElementById("swarmRamValue"),
+    swarmRamBar: document.getElementById("swarmRamBar"),
+    swarmActive: document.getElementById("swarmActive"),
+    baseRamValue: document.getElementById("baseRamValue"),
+    baseRamBar: document.getElementById("baseRamBar"),
+    baseActive: document.getElementById("baseActive")
+  };
+
+  var timers = [];
+  var running = false;
+
+  el.slider.addEventListener("input", function(){
+    el.count.textContent = el.slider.value;
+  });
+
+  el.launch.addEventListener("click", launchFleet);
+  el.reset.addEventListener("click", resetAll);
+
+  function clearTimers(){
+    timers.forEach(function(t){ clearTimeout(t); clearInterval(t); });
+    timers = [];
+  }
+
+  function resetAll(){
+    clearTimers();
+    running = false;
+    el.launch.disabled = false;
+    el.status.textContent = "";
+    el.grid.innerHTML = '<div class="empty-hint">Pick a fleet size and click "Launch fleet" to send agents at the task queue.</div>';
+    updateMeters(0, 0);
+  }
+
+  function shuffledTasks(n){
+    var pool = TASKS.slice();
+    for(var i = pool.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i+1));
+      var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
+    var out = [];
+    for(var k = 0; k < n; k++){
+      out.push(pool[k % pool.length]);
+    }
+    return out;
+  }
+
+  function launchFleet(){
+    if(running) return;
+    clearTimers();
+    running = true;
+    el.launch.disabled = true;
+    el.status.textContent = "spinning up agents…";
+
+    var n = parseInt(el.slider.value, 10);
+    var tasks = shuffledTasks(n);
+    el.grid.innerHTML = "";
+
+    var cards = [];
+    var doneCount = 0;
+
+    for(var i = 0; i < n; i++){
+      (function(idx){
+        var task = tasks[idx];
+        var card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML =
+          '<div class="card-head"><span><span class="dot queued"></span>agent-' + String(idx+1).padStart(2,"0") + '</span><span class="ram-tag">queued</span></div>' +
+          '<div class="card-body"></div>' +
+          '<div class="card-task">' + task.file + '</div>';
+        el.grid.appendChild(card);
+        cards.push({el: card, task: task, active: false, done: false});
+      })(i);
+    }
+
+    // stagger start times so agents don't all begin at once, simulating a queue
+    cards.forEach(function(c, idx){
+      var startDelay = 120 * idx + Math.random() * 300;
+      var t = setTimeout(function(){
+        startAgent(c, idx, function(){
+          doneCount++;
+          if(doneCount === n){
+            el.status.textContent = "fleet finished " + n + " tasks.";
+            running = false;
+            el.launch.disabled = false;
+          }
+        });
+      }, startDelay);
+      timers.push(t);
+    });
+
+    tickMeters(cards);
+  }
+
+  function startAgent(cardObj, idx, onDone){
+    cardObj.active = true;
+    var dot = cardObj.el.querySelector(".dot");
+    var tag = cardObj.el.querySelector(".ram-tag");
+    var body = cardObj.el.querySelector(".card-body");
+    dot.className = "dot running";
+    tag.textContent = "running";
+
+    var lines = cardObj.task.diff;
+    var lineIdx = 0;
+    var charIdx = 0;
+    var rendered = [];
+
+    function renderLine(text, cls){
+      var span = document.createElement("div");
+      if(cls) span.className = cls;
+      span.textContent = text;
+      body.appendChild(span);
+    }
+
+    var interval = setInterval(function(){
+      if(lineIdx >= lines.length){
+        clearInterval(interval);
+        dot.className = "dot done";
+        tag.textContent = "done";
+        cardObj.active = false;
+        cardObj.done = true;
+        onDone();
+        return;
+      }
+      var pair = lines[lineIdx];
+      var prefix = pair[0];
+      var text = pair[1];
+      if(charIdx === 0){
+        var div = document.createElement("div");
+        div.className = prefix === "+" ? "add" : "rem";
+        div.textContent = "";
+        body.appendChild(div);
+        rendered.push(div);
+      }
+      var target = prefix + " " + text;
+      var cur = rendered[rendered.length-1];
+      charIdx += 3;
+      cur.textContent = target.slice(0, charIdx);
+      if(charIdx >= target.length){
+        lineIdx++;
+        charIdx = 0;
+      }
+      body.scrollTop = body.scrollHeight;
+    }, 16);
+    timers.push(interval);
+  }
+
+  function tickMeters(cards){
+    var interval = setInterval(function(){
+      var activeCount = cards.filter(function(c){ return c.active; }).length;
+      var doneOrActive = cards.filter(function(c){ return c.active || c.done; }).length;
+      updateMeters(activeCount, doneOrActive, cards.length);
+      if(!running){
+        clearInterval(interval);
+      }
+    }, 120);
+    timers.push(interval);
+  }
+
+  function updateMeters(activeCount, concurrentPeak, fleetSize){
+    fleetSize = fleetSize || 0;
+    var swarmMb = activeCount * SWARM_MB_PER_AGENT;
+    var swarmPct = Math.min(100, (swarmMb / RAM_BUDGET) * 100);
+    el.swarmRamValue.textContent = swarmMb.toFixed(0) + " MB";
+    el.swarmRamBar.style.width = swarmPct + "%";
+    el.swarmActive.textContent = activeCount + " active";
+
+    // how many "heavy" agents could run concurrently in the same budget
+    var maxHeavyConcurrent = Math.max(1, Math.floor(RAM_BUDGET / BASE_MB_PER_AGENT));
+    var wouldBeActive = Math.min(activeCount, maxHeavyConcurrent);
+    var baseMb = Math.min(RAM_BUDGET, wouldBeActive * BASE_MB_PER_AGENT);
+    var basePct = Math.min(100, (baseMb / RAM_BUDGET) * 100);
+    el.baseRamValue.textContent = baseMb.toFixed(0) + " MB";
+    el.baseRamBar.style.width = basePct + "%";
+    if(activeCount > maxHeavyConcurrent){
+      el.baseActive.textContent = wouldBeActive + " active, " + (activeCount - maxHeavyConcurrent) + " stalled — out of RAM";
+    } else {
+      el.baseActive.textContent = wouldBeActive + " active";
+    }
+  }
+
+  updateMeters(0, 0);
+})();
+</script>
+
+</body>
+</html>

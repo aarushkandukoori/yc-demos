@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Constellation Coverage Sandbox — sovereign LEO network toy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0a0e14; --panel:#111826; --panel2:#0d1420; --line:#1e2a3d;
+    --text:#dfe8f5; --muted:#7c8ba3; --accent:#3bd6c6; --accent2:#f2b74a;
+    --danger:#e2586b; --ok:#4fd17e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+  header{margin-bottom:20px;}
+  h1{font-size:1.5rem;margin:0 0 6px;letter-spacing:-0.01em;}
+  header p{color:var(--muted);margin:0;font-size:0.95rem;max-width:720px;line-height:1.5;}
+  .badge{display:inline-block;font-size:0.68rem;letter-spacing:.08em;text-transform:uppercase;
+    background:rgba(59,214,198,0.12);color:var(--accent);border:1px solid rgba(59,214,198,0.35);
+    padding:3px 8px;border-radius:999px;margin-bottom:10px;}
+  .layout{display:grid;grid-template-columns:1fr 320px;gap:18px;}
+  @media (max-width:900px){.layout{grid-template-columns:1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;}
+  #mapCanvas{width:100%;display:block;border-radius:10px;background:var(--panel2);
+    cursor:crosshair;touch-action:none;}
+  .maphint{color:var(--muted);font-size:0.78rem;margin-top:8px;}
+  .controls{display:flex;flex-direction:column;gap:16px;}
+  .ctrl{display:flex;flex-direction:column;gap:4px;}
+  .ctrl label{font-size:0.78rem;color:var(--muted);display:flex;justify-content:space-between;}
+  .ctrl label span.val{color:var(--accent);font-variant-numeric:tabular-nums;}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  .presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;}
+  .presets button{flex:1 1 auto;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:7px 8px;border-radius:8px;font-size:0.75rem;cursor:pointer;}
+  .presets button:hover{border-color:var(--accent);color:var(--accent);}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;}
+  .stat .k{font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  .stat .v{font-size:1.25rem;font-weight:600;margin-top:2px;}
+  .stat .v.good{color:var(--ok);}
+  .stat .v.bad{color:var(--danger);}
+  .stat .v.mid{color:var(--accent2);}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:0.75rem;color:var(--muted);margin-top:10px;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .section-title{font-size:0.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+    margin:0 0 8px;}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+  .toggle-row .label{font-size:0.85rem;}
+  .toggle-row .sub{font-size:0.72rem;color:var(--muted);}
+  .switch{position:relative;width:40px;height:22px;flex:none;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider-toggle{position:absolute;inset:0;background:#28364d;border-radius:999px;cursor:pointer;transition:.2s;}
+  .slider-toggle:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;
+    background:#cfd8e6;border-radius:50%;transition:.2s;}
+  input:checked + .slider-toggle{background:var(--accent);}
+  input:checked + .slider-toggle:before{transform:translateX(18px);background:#06110f;}
+  footer{margin-top:30px;color:var(--muted);font-size:0.78rem;text-align:center;
+    border-top:1px solid var(--line);padding-top:16px;}
+  footer strong{color:var(--text);font-weight:500;}
+  .note{font-size:0.72rem;color:var(--muted);line-height:1.5;margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge">toy orbital sim · not real telemetry</div>
+    <h1>Constellation Coverage Sandbox</h1>
+    <p>A miniature model of the core problem behind a distributed low-cost LEO comms network:
+      how many satellites, in what orbit, does it take to keep a patch of ground continuously
+      connected — without relying on any single country's ground infrastructure. Drop a target
+      anywhere on the map, dial in the constellation, and watch coverage converge in real time.</p>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="mapCanvas" width="900" height="450"></canvas>
+      <div class="maphint">Click or tap anywhere on the map to move the ground target. Simulated time runs
+        ~450× real speed, so a 95-minute LEO orbit completes in about 12 seconds.</div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--accent2)"></span> satellite ground track</span>
+        <span><span class="dot" style="background:rgba(59,214,198,0.5)"></span> footprint (min. 25° elevation)</span>
+        <span><span class="dot" style="background:var(--danger)"></span> ground target</span>
+        <span><span class="dot" style="background:var(--ok)"></span> target currently connected</span>
+      </div>
+      <div class="note">Continents are drawn schematically for orientation, not geodetically accurate.
+        Orbital mechanics (Walker-delta planes, ground-track precession, elevation-mask footprint,
+        two-way slant-range latency) are computed live in-browser from altitude and inclination —
+        this is a simplified model for intuition, not a mission-design tool.</div>
+    </div>
+
+    <div class="panel controls">
+      <div>
+        <div class="section-title">Constellation</div>
+        <div class="ctrl">
+          <label>Satellites <span class="val" id="satCountVal">240</span></label>
+          <input type="range" id="satCount" min="24" max="960" step="24" value="240">
+        </div>
+        <div class="ctrl">
+          <label>Altitude (km) <span class="val" id="altVal">550</span></label>
+          <input type="range" id="alt" min="400" max="1200" step="10" value="550">
+        </div>
+        <div class="ctrl">
+          <label>Inclination (°) <span class="val" id="incVal">70</span></label>
+          <input type="range" id="inc" min="0" max="98" step="1" value="70">
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Ground target presets</div>
+        <div class="presets">
+          <button data-lat="43.2" data-lon="76.9">Central Asia</button>
+          <button data-lat="13.7" data-lon="100.5">SE Asia</button>
+          <button data-lat="24.7" data-lon="46.7">Middle East</button>
+          <button data-lat="-3.4" data-lon="-62.2">Remote Amazon</button>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="label">Sovereign gateway routing</div>
+          <div class="sub">Only relay through gateways outside great-power territory</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="sovToggle" checked>
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+
+      <div>
+        <div class="section-title">Live coverage</div>
+        <div class="stat-grid">
+          <div class="stat"><div class="k">Connected now</div><div class="v" id="connectedNow">—</div></div>
+          <div class="stat"><div class="k">Sats overhead</div><div class="v mid" id="satsOverhead">0</div></div>
+          <div class="stat"><div class="k">Uptime (session)</div><div class="v" id="uptimePct">0%</div></div>
+          <div class="stat"><div class="k">Round-trip latency</div><div class="v" id="latencyVal">—</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by <strong>Aarush Kandukoori</strong>, inspired by Exosat (YC S26).
+    Not affiliated with Exosat.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var canvas = document.getElementById('mapCanvas');
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+
+  var RE = 6371;       // earth radius km
+  var MU = 398600.4418; // km^3/s^2
+  var C  = 299792.458;  // km/s
+  var MIN_ELEV_DEG = 25;
+  var SIM_SPEED = 450;  // simulated seconds per real second
+
+  var satCountEl = document.getElementById('satCount');
+  var altEl = document.getElementById('alt');
+  var incEl = document.getElementById('inc');
+  var satCountVal = document.getElementById('satCountVal');
+  var altVal = document.getElementById('altVal');
+  var incVal = document.getElementById('incVal');
+  var sovToggle = document.getElementById('sovToggle');
+
+  var connectedNowEl = document.getElementById('connectedNow');
+  var satsOverheadEl = document.getElementById('satsOverhead');
+  var uptimePctEl = document.getElementById('uptimePct');
+  var latencyValEl = document.getElementById('latencyVal');
+
+  var target = { lat: 43.2, lon: 76.9 }; // Almaty-ish, Central Asia
+  var simTime = 0; // seconds
+  var uptimeAccum = 0, uptimeTotal = 0;
+  var lastFrame = null;
+
+  function deg2rad(d){ return d * Math.PI/180; }
+  function rad2deg(r){ return r * 180/Math.PI; }
+
+  function projX(lon){ return (lon+180)/360 * W; }
+  function projY(lat){ return (90-lat)/180 * H; }
+
+  // -- schematic continents (rough blobs, not geodetic data) --
+  var continents = [
+    // Eurasia
+    [[ -10,60],[20,68],[60,72],[100,70],[140,62],[150,45],[130,25],[100,10],[70,8],[40,15],
+      [30,35],[10,42],[-5,45],[-10,60]],
+    // Africa
+    [[-15,35],[10,32],[35,20],[42,0],[38,-25],[20,-34],[12,-15],[8,5],[-17,15],[-15,35]],
+    // N. America
+    [[-165,68],[-140,70],[-95,68],[-70,50],[-80,25],[-97,18],[-115,30],[-125,48],[-165,68]],
+    // S. America
+    [[-80,10],[-60,10],[-35,-5],[-40,-23],[-58,-34],[-72,-45],[-75,-15],[-80,10]],
+    // Australia
+    [[113,-12],[135,-11],[153,-25],[145,-38],[128,-32],[113,-22],[113,-12]]
+  ];
+
+  function drawContinents(){
+    ctx.fillStyle = '#152033';
+    ctx.strokeStyle = '#22314a';
+    ctx.lineWidth = 1;
+    continents.forEach(function(poly){
+      ctx.beginPath();
+      poly.forEach(function(p,i){
+        var x = projX(p[0]), y = projY(p[1]);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+
+  function drawGrid(){
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    for(var lon=-180; lon<=180; lon+=30){
+      ctx.beginPath(); ctx.moveTo(projX(lon),0); ctx.lineTo(projX(lon),H); ctx.stroke();
+    }
+    for(var lat=-90; lat<=90; lat+=30){
+      ctx.beginPath(); ctx.moveTo(0,projY(lat)); ctx.lineTo(W,projY(lat)); ctx.stroke();
+    }
+    // equator emphasis
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+    ctx.beginPath(); ctx.moveTo(0,projY(0)); ctx.lineTo(W,projY(0)); ctx.stroke();
+  }
+
+  // approximate landmass regions to avoid for "sovereign" gateway routing
+  // (very rough bounding boxes purely for demo flavor, not real borders)
+  var restrictedBoxes = [
+    { lonMin:-125, lonMax:-66, latMin:24, latMax:49 },   // CONUS
+    { lonMin:73,   lonMax:135, latMin:18, latMax:53 }     // China
+  ];
+  function inRestricted(lat, lon){
+    for(var i=0;i<restrictedBoxes.length;i++){
+      var b = restrictedBoxes[i];
+      if(lon>=b.lonMin && lon<=b.lonMax && lat>=b.latMin && lat<=b.latMax) return true;
+    }
+    return false;
+  }
+
+  function haversineDeg(lat1,lon1,lat2,lon2){
+    var p1=deg2rad(lat1), p2=deg2rad(lat2);
+    var dp=deg2rad(lat2-lat1), dl=deg2rad(lon2-lon1);
+    var a = Math.sin(dp/2)*Math.sin(dp/2) + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)*Math.sin(dl/2);
+    var c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return rad2deg(c);
+  }
+
+  function buildConstellation(n, altKm, incDeg){
+    var numPlanes = Math.max(1, Math.round(Math.sqrt(n/2)));
+    var perPlane = Math.ceil(n/numPlanes);
+    var sats = [];
+    var a = RE + altKm;
+    var periodSec = 2*Math.PI*Math.sqrt((a*a*a)/MU);
+    for(var p=0;p<numPlanes;p++){
+      var raan = p * (360/numPlanes);
+      var stagger = (p % 2) * (360/perPlane)/2;
+      for(var s=0;s<perPlane;s++){
+        if(sats.length>=n) break;
+        var phase0 = s*(360/perPlane) + stagger;
+        sats.push({ raan: raan, phase0: phase0, period: periodSec });
+      }
+    }
+    return sats;
+  }
+
+  function elevationFootprintDeg(altKm){
+    var minElevRad = deg2rad(MIN_ELEV_DEG);
+    var ratio = RE/(RE+altKm) * Math.cos(minElevRad);
+    var lam = Math.acos(ratio) - minElevRad;
+    return rad2deg(lam);
+  }
+
+  function slantRangeKm(altKm, centralAngleDeg){
+    var a = RE, r = RE+altKm;
+    var psi = deg2rad(centralAngleDeg);
+    var d2 = a*a + r*r - 2*a*r*Math.cos(psi);
+    return Math.sqrt(Math.max(d2,0));
+  }
+
+  function subPoint(sat, tSec){
+    var incRad = deg2rad(parseFloat(incEl.value));
+    var u = deg2rad(sat.phase0) + (tSec/sat.period) * 2*Math.PI;
+    var lat = Math.asin(Math.sin(incRad)*Math.sin(u));
+    var lonOrbit = Math.atan2(Math.cos(incRad)*Math.sin(u), Math.cos(u));
+    var earthRotDeg = (tSec/86164) * 360;
+    var lonDeg = rad2deg(lonOrbit) + sat.raan - earthRotDeg;
+    lonDeg = ((lonDeg + 180) % 360 + 360) % 360 - 180;
+    return { lat: rad2deg(lat), lon: lonDeg };
+  }
+
+  var sats = [];
+  function rebuild(){
+    var n = parseInt(satCountEl.value,10);
+    var alt = parseFloat(altEl.value);
+    var inc = parseFloat(incEl.value);
+    satCountVal.textContent = n;
+    altVal.textContent = alt;
+    incVal.textContent = inc;
+    sats = buildConstellation(n, alt, inc);
+    uptimeAccum = 0; uptimeTotal = 0;
+  }
+
+  function pickTarget(clientX, clientY){
+    var rect = canvas.getBoundingClientRect();
+    var x = (clientX-rect.left) * (W/rect.width);
+    var y = (clientY-rect.top) * (H/rect.height);
+    target.lon = (x/W)*360 - 180;
+    target.lat = 90 - (y/H)*180;
+    uptimeAccum = 0; uptimeTotal = 0;
+  }
+
+  canvas.addEventListener('click', function(e){ pickTarget(e.clientX, e.clientY); });
+  canvas.addEventListener('touchstart', function(e){
+    if(e.touches && e.touches[0]){ pickTarget(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
+  }, {passive:false});
+
+  document.querySelectorAll('.presets button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      target.lat = parseFloat(btn.getAttribute('data-lat'));
+      target.lon = parseFloat(btn.getAttribute('data-lon'));
+      uptimeAccum = 0; uptimeTotal = 0;
+    });
+  });
+
+  [satCountEl, altEl, incEl].forEach(function(el){
+    el.addEventListener('input', rebuild);
+  });
+
+  function draw(tSec){
+    ctx.clearRect(0,0,W,H);
+    drawContinents();
+    drawGrid();
+
+    var alt = parseFloat(altEl.value);
+    var footprintDeg = elevationFootprintDeg(alt);
+    var sov = sovToggle.checked;
+
+    var overhead = 0;
+    var connected = false;
+    var bestCentral = null;
+
+    for(var i=0;i<sats.length;i++){
+      var sp = subPoint(sats[i], tSec);
+      var x = projX(sp.lon), y = projY(sp.lat);
+
+      var restricted = inRestricted(sp.lat, sp.lon);
+      var dimmed = sov && restricted;
+
+      // footprint
+      var footPxRadius = (footprintDeg/360)*W;
+      ctx.beginPath();
+      ctx.arc(x,y,footPxRadius,0,Math.PI*2);
+      ctx.fillStyle = dimmed ? 'rgba(226,88,107,0.05)' : 'rgba(59,214,198,0.05)';
+      ctx.fill();
+
+      // satellite dot
+      ctx.beginPath();
+      ctx.arc(x,y, dimmed ? 1.6 : 2.2, 0, Math.PI*2);
+      ctx.fillStyle = dimmed ? 'rgba(226,88,107,0.55)' : '#f2b74a';
+      ctx.fill();
+
+      var central = haversineDeg(target.lat, target.lon, sp.lat, sp.lon);
+      if(central <= footprintDeg && !dimmed){
+        overhead++;
+        connected = true;
+        if(bestCentral===null || central < bestCentral) bestCentral = central;
+      }
+    }
+
+    // ground target
+    var tx = projX(target.lon), ty = projY(target.lat);
+    ctx.beginPath();
+    ctx.arc(tx,ty,6,0,Math.PI*2);
+    ctx.fillStyle = connected ? '#4fd17e' : '#e2586b';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(tx,ty,10,0,Math.PI*2);
+    ctx.strokeStyle = connected ? 'rgba(79,209,126,0.6)' : 'rgba(226,88,107,0.6)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    connectedNowEl.textContent = connected ? 'ONLINE' : 'NO LINK';
+    connectedNowEl.className = 'v ' + (connected ? 'good' : 'bad');
+    satsOverheadEl.textContent = overhead;
+
+    uptimeTotal += 1;
+    if(connected) uptimeAccum += 1;
+    var pct = uptimeTotal>0 ? Math.round((uptimeAccum/uptimeTotal)*100) : 0;
+    uptimePctEl.textContent = pct + '%';
+    uptimePctEl.className = 'v ' + (pct>90?'good':(pct>50?'mid':'bad'));
+
+    if(connected && bestCentral!==null){
+      var d = slantRangeKm(alt, bestCentral);
+      var latencyMs = Math.round((2*d/C)*1000);
+      latencyValEl.textContent = latencyMs + ' ms';
+      latencyValEl.className = 'v mid';
+    } else {
+      latencyValEl.textContent = '—';
+      latencyValEl.className = 'v';
+    }
+  }
+
+  function loop(ts){
+    if(lastFrame===null) lastFrame = ts;
+    var dtReal = (ts-lastFrame)/1000;
+    lastFrame = ts;
+    simTime += dtReal * SIM_SPEED;
+    draw(simTime);
+    requestAnimationFrame(loop);
+  }
+
+  rebuild();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

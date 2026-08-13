@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imprint Reader — a toy antigen reverse-engineering demo</title>
+<style>
+  :root{
+    --bg:#0b1020;
+    --panel:#131a2e;
+    --panel2:#1a2338;
+    --line:#293252;
+    --text:#e8ecf7;
+    --dim:#8b93ab;
+    --accent:#5fd6c0;
+    --accent2:#f2a65a;
+    --bad:#e8607a;
+    --good:#5fd6c0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #17203a 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+  }
+  .wrap{max-width:980px;margin:0 auto;padding:36px 20px 60px;}
+  header{margin-bottom:28px;}
+  .kicker{
+    display:inline-block;
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--accent);
+    border:1px solid rgba(95,214,192,.35);
+    padding:4px 10px;
+    border-radius:999px;
+    margin-bottom:14px;
+  }
+  h1{font-size:30px;margin:0 0 10px;line-height:1.25;}
+  h1 span{color:var(--accent);}
+  .sub{color:var(--dim);font-size:15px;line-height:1.6;max-width:680px;}
+  .board{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    margin-top:26px;
+  }
+  .step-title{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:14px;
+    font-weight:600;
+    color:var(--dim);
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    margin-bottom:14px;
+  }
+  .step-num{
+    width:22px;height:22px;border-radius:50%;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;color:var(--text);
+  }
+  .step-num.done{background:var(--accent);color:#04231d;border-color:var(--accent);}
+  p.help{color:var(--dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;}
+  button{
+    font-family:inherit;
+    background:var(--accent);
+    color:#04231d;
+    border:none;
+    font-weight:700;
+    font-size:14px;
+    padding:11px 18px;
+    border-radius:9px;
+    cursor:pointer;
+    transition:transform .1s ease, opacity .15s ease;
+  }
+  button:hover{transform:translateY(-1px);}
+  button:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+  button.secondary{
+    background:transparent;
+    color:var(--text);
+    border:1px solid var(--line);
+  }
+  .antigen-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+    gap:10px;
+    margin:14px 0;
+  }
+  .antigen{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px;
+    position:relative;
+    overflow:hidden;
+  }
+  .antigen .code{font-size:12.5px;font-weight:700;color:var(--text);}
+  .antigen .bar-track{
+    height:6px;background:#0e1526;border-radius:4px;margin-top:8px;overflow:hidden;
+  }
+  .antigen .bar-fill{
+    height:100%;width:0%;background:var(--dim);border-radius:4px;
+    transition:width .6s ease, background .3s ease;
+  }
+  .antigen .signal-val{font-size:11px;color:var(--dim);margin-top:5px;display:block;}
+  .antigen.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .antigen.selected .bar-fill{background:var(--accent);}
+  .antigen.selected .code{color:var(--accent);}
+  .antigen.true-tag::after{
+    content:"imprint match";
+    position:absolute;top:8px;right:8px;
+    font-size:9px;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--accent);opacity:0;
+  }
+  .antigen.reveal-true::after{opacity:1;}
+
+  .cocktail{
+    display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px;
+  }
+  .chip{
+    background:rgba(95,214,192,.12);
+    border:1px solid rgba(95,214,192,.4);
+    color:var(--accent);
+    font-size:12.5px;font-weight:700;
+    padding:6px 12px;border-radius:999px;
+  }
+
+  .sim-row{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px;}
+  @media (max-width:720px){.sim-row{grid-template-columns:1fr;}}
+  .sim-panel{
+    background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;
+  }
+  .sim-panel h3{margin:0 0 4px;font-size:14px;}
+  .sim-panel .tag{font-size:11.5px;color:var(--dim);margin-bottom:10px;display:block;}
+  .cell-grid{
+    display:grid;
+    grid-template-columns:repeat(14,1fr);
+    gap:3px;
+    margin:10px 0;
+  }
+  .cell{
+    aspect-ratio:1;
+    border-radius:2px;
+    background:var(--bad);
+    transition:background .4s ease, transform .4s ease;
+  }
+  .cell.dead{background:#1b2338;transform:scale(.55);}
+  .stat-line{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim);margin-top:6px;}
+  .stat-line b{color:var(--text);font-size:13px;}
+
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+  .note{
+    font-size:12.5px;color:var(--dim);background:var(--panel2);
+    border:1px dashed var(--line);border-radius:10px;padding:12px 14px;margin-top:18px;line-height:1.6;
+  }
+  .badge-row{display:flex;gap:18px;margin-top:10px;flex-wrap:wrap;}
+  .badge{font-size:12.5px;color:var(--dim);}
+  .badge b{color:var(--text);}
+  footer{
+    margin-top:40px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+    font-size:12.5px;
+    color:var(--dim);
+    text-align:center;
+    line-height:1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="kicker">toy simulation · synthetic data only</span>
+    <h1>Imprint Reader: stop guessing antigens, <span>read them off the immune system</span></h1>
+    <p class="sub">
+      Most vaccine design starts by predicting which molecular fragments (antigens) might trigger
+      an immune response, then testing that guess. This toy flips the order: it samples immune cells
+      that are already fighting a synthetic tumor, measures which candidate antigens they actually
+      react to, and assembles a vaccine cocktail from that signal — no prediction step. Then it races
+      that cocktail against a blind-guess vaccine so you can see why reading beats guessing.
+    </p>
+  </header>
+
+  <div class="board">
+    <div class="step-title"><span class="step-num" id="sn1">1</span> Generate a synthetic patient</div>
+    <p class="help">
+      Creates a patient with a tumor expressing a hidden set of driver antigens, drawn from a library
+      of 16 candidates. The identities are hidden from you — the same way they'd be hidden from a
+      vaccine designer working from prediction alone.
+    </p>
+    <div class="controls">
+      <button id="btnGen">Generate patient</button>
+      <span class="badge" id="patientLabel" style="align-self:center;"></span>
+    </div>
+  </div>
+
+  <div class="board">
+    <div class="step-title"><span class="step-num" id="sn2">2</span> Read the immune imprint</div>
+    <p class="help">
+      Simulates sorting circulating T-cells and measuring how strongly each reacts to every candidate
+      antigen. Real driver antigens produce a strong, consistent signal; everything else is noise.
+      This is the "one input" the whole cocktail gets built from.
+    </p>
+    <div class="controls">
+      <button id="btnRead" disabled>Sequence immune imprint</button>
+    </div>
+    <div class="antigen-grid" id="antigenGrid"></div>
+  </div>
+
+  <div class="board">
+    <div class="step-title"><span class="step-num" id="sn3">3</span> Reverse-engineer the vaccine cocktail</div>
+    <p class="help">
+      The algorithm takes the top-signal antigens from the imprint read and proposes them as the vaccine
+      payload — the antigens the patient's own immune system already flagged as worth attacking.
+    </p>
+    <div class="controls">
+      <button id="btnAssemble" disabled>Assemble cocktail</button>
+    </div>
+    <div class="cocktail" id="cocktailChips"></div>
+  </div>
+
+  <div class="board">
+    <div class="step-title"><span class="step-num" id="sn4">4</span> Deploy &amp; compare against a blind guess</div>
+    <p class="help">
+      Two identical synthetic tumors, 140 cells each. The left is treated with your imprint-derived
+      cocktail; the right is treated with a same-size vaccine picked without reading the imprint —
+      the traditional "predict and hope" baseline. Each simulated round, a cell's odds of being cleared
+      scale with how many of its true driver antigens the deployed vaccine actually targets.
+    </p>
+    <div class="controls">
+      <button id="btnRun" disabled>Run simulated treatment</button>
+      <button id="btnReset" class="secondary">Reset demo</button>
+    </div>
+    <div class="sim-row">
+      <div class="sim-panel">
+        <h3>Imprint-derived vaccine</h3>
+        <span class="tag">built from steps 1–3</span>
+        <div class="cell-grid" id="gridImprint"></div>
+        <div class="stat-line"><span>Cleared</span><b id="statImprintCleared">0 / 140</b></div>
+        <div class="stat-line"><span>Antigen overlap with true drivers</span><b id="statImprintOverlap">–</b></div>
+      </div>
+      <div class="sim-panel">
+        <h3>Blind-guess vaccine</h3>
+        <span class="tag">same cocktail size, chosen without imprint data</span>
+        <div class="cell-grid" id="gridGuess"></div>
+        <div class="stat-line"><span>Cleared</span><b id="statGuessCleared">0 / 140</b></div>
+        <div class="stat-line"><span>Antigen overlap with true drivers</span><b id="statGuessOverlap">–</b></div>
+      </div>
+    </div>
+    <div class="badge-row">
+      <span class="badge">Rounds run: <b id="roundCount">0</b></span>
+      <span class="badge">Speed-up vs. guess: <b id="speedup">–</b></span>
+    </div>
+    <div class="note">
+      This is a deliberately simplified model — one static "imprint read," uniform per-cell odds, no
+      real biology, sequences, or lab data. It exists to show the shape of the idea: build the vaccine
+      from what the immune system already recognizes, not from a prediction of what it might.
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by TareBio (YC S26). Not affiliated with TareBio.
+  </footer>
+</div>
+
+<script>
+(function(){
+  var LIBRARY_SIZE = 16;
+  var TRUE_COUNT = 5;
+  var COCKTAIL_SIZE = 5;
+  var CELLS_PER_SIDE = 140;
+
+  var state = {
+    library: [],
+    trueSet: [],
+    signals: {},
+    cocktail: [],
+    guessCocktail: [],
+    rounds: 0,
+    imprintAlive: [],
+    guessAlive: [],
+    running: false
+  };
+
+  function makeLibrary(){
+    var codes = [];
+    for(var i=1;i<=LIBRARY_SIZE;i++){
+      codes.push("PEP-" + String(i).padStart(2,"0"));
+    }
+    return codes;
+  }
+
+  function pickRandomSubset(arr, n){
+    var pool = arr.slice();
+    var out = [];
+    while(out.length < n && pool.length){
+      var idx = Math.floor(Math.random()*pool.length);
+      out.push(pool.splice(idx,1)[0]);
+    }
+    return out;
+  }
+
+  function el(id){ return document.getElementById(id); }
+
+  function markStep(n, done){
+    var badge = el("sn"+n);
+    if(done){ badge.classList.add("done"); badge.textContent = "✓"; }
+    else { badge.classList.remove("done"); badge.textContent = n; }
+  }
+
+  function resetAll(){
+    state.library = makeLibrary();
+    state.trueSet = [];
+    state.signals = {};
+    state.cocktail = [];
+    state.guessCocktail = [];
+    state.rounds = 0;
+    state.imprintAlive = [];
+    state.guessAlive = [];
+    state.running = false;
+
+    el("antigenGrid").innerHTML = "";
+    el("cocktailChips").innerHTML = "";
+    el("gridImprint").innerHTML = "";
+    el("gridGuess").innerHTML = "";
+    el("patientLabel").textContent = "";
+    el("statImprintCleared").textContent = "0 / " + CELLS_PER_SIDE;
+    el("statGuessCleared").textContent = "0 / " + CELLS_PER_SIDE;
+    el("statImprintOverlap").textContent = "–";
+    el("statGuessOverlap").textContent = "–";
+    el("roundCount").textContent = "0";
+    el("speedup").textContent = "–";
+
+    for(var i=1;i<=4;i++) markStep(i,false);
+
+    el("btnRead").disabled = true;
+    el("btnAssemble").disabled = true;
+    el("btnRun").disabled = true;
+  }
+
+  function generatePatient(){
+    state.trueSet = pickRandomSubset(state.library, TRUE_COUNT);
+    el("patientLabel").textContent = "Patient #" + (1000 + Math.floor(Math.random()*8999)) + " generated — " + TRUE_COUNT + " hidden driver antigens seeded.";
+    markStep(1, true);
+    el("btnRead").disabled = false;
+    el("antigenGrid").innerHTML = "";
+    state.library.forEach(function(code){
+      var isTrue = state.trueSet.indexOf(code) !== -1;
+      var card = document.createElement("div");
+      card.className = "antigen";
+      card.id = "ag-" + code;
+      card.innerHTML =
+        '<div class="code">' + code + '</div>' +
+        '<div class="bar-track"><div class="bar-fill" id="fill-' + code + '"></div></div>' +
+        '<span class="signal-val" id="val-' + code + '">not sequenced</span>';
+      card.dataset.true = isTrue ? "1" : "0";
+      el("antigenGrid").appendChild(card);
+    });
+  }
+
+  function readImprint(){
+    state.library.forEach(function(code){
+      var isTrue = state.trueSet.indexOf(code) !== -1;
+      var base = isTrue ? (62 + Math.random()*33) : (4 + Math.random()*30);
+      state.signals[code] = Math.round(base);
+    });
+    var maxSig = Math.max.apply(null, Object.values(state.signals));
+    state.library.forEach(function(code){
+      var v = state.signals[code];
+      var fill = el("fill-"+code);
+      var val = el("val-"+code);
+      var pct = Math.round((v/maxSig)*100);
+      setTimeout(function(){
+        fill.style.width = pct + "%";
+        val.textContent = "signal " + v;
+        if(v >= 55){
+          fill.style.background = "var(--accent)";
+        }
+      }, 60);
+    });
+    markStep(2, true);
+    el("btnAssemble").disabled = false;
+  }
+
+  function assembleCocktail(){
+    var ranked = state.library.slice().sort(function(a,b){
+      return state.signals[b] - state.signals[a];
+    });
+    state.cocktail = ranked.slice(0, COCKTAIL_SIZE);
+
+    var remaining = state.library.filter(function(c){ return state.cocktail.indexOf(c) === -1; });
+    state.guessCocktail = pickRandomSubset(remaining.length >= COCKTAIL_SIZE ? remaining : state.library, COCKTAIL_SIZE);
+
+    el("cocktailChips").innerHTML = "";
+    state.cocktail.forEach(function(code){
+      var chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = code;
+      el("cocktailChips").appendChild(chip);
+      var card = el("ag-"+code);
+      if(card){ card.classList.add("selected"); }
+    });
+
+    state.library.forEach(function(code){
+      var card = el("ag-"+code);
+      if(card && card.dataset.true === "1"){ card.classList.add("reveal-true"); }
+    });
+
+    markStep(3, true);
+    el("btnRun").disabled = false;
+    buildSimGrids();
+  }
+
+  function overlapCount(cocktail){
+    return cocktail.filter(function(c){ return state.trueSet.indexOf(c) !== -1; }).length;
+  }
+
+  function buildSimGrids(){
+    var gi = el("gridImprint");
+    var gg = el("gridGuess");
+    gi.innerHTML = "";
+    gg.innerHTML = "";
+    state.imprintAlive = [];
+    state.guessAlive = [];
+    for(var i=0;i<CELLS_PER_SIDE;i++){
+      var c1 = document.createElement("div");
+      c1.className = "cell";
+      c1.id = "ic-"+i;
+      gi.appendChild(c1);
+      state.imprintAlive.push(true);
+
+      var c2 = document.createElement("div");
+      c2.className = "cell";
+      c2.id = "gc-"+i;
+      gg.appendChild(c2);
+      state.guessAlive.push(true);
+    }
+    var io = overlapCount(state.cocktail);
+    var go = overlapCount(state.guessCocktail);
+    el("statImprintOverlap").textContent = io + " / " + TRUE_COUNT + " true drivers targeted";
+    el("statGuessOverlap").textContent = go + " / " + TRUE_COUNT + " true drivers targeted";
+    state.rounds = 0;
+    el("roundCount").textContent = "0";
+    el("speedup").textContent = "–";
+  }
+
+  function clearOdds(overlap){
+    return 0.05 + (overlap/TRUE_COUNT) * 0.4;
+  }
+
+  function runRound(){
+    if(state.running) return;
+    state.running = true;
+    el("btnRun").disabled = true;
+
+    var io = overlapCount(state.cocktail);
+    var go = overlapCount(state.guessCocktail);
+    var pImprint = clearOdds(io);
+    var pGuess = clearOdds(go);
+
+    for(var i=0;i<CELLS_PER_SIDE;i++){
+      if(state.imprintAlive[i] && Math.random() < pImprint){
+        state.imprintAlive[i] = false;
+        el("ic-"+i).classList.add("dead");
+      }
+      if(state.guessAlive[i] && Math.random() < pGuess){
+        state.guessAlive[i] = false;
+        el("gc-"+i).classList.add("dead");
+      }
+    }
+    state.rounds++;
+    var deadImprint = state.imprintAlive.filter(function(a){return !a;}).length;
+    var deadGuess = state.guessAlive.filter(function(a){return !a;}).length;
+    el("statImprintCleared").textContent = deadImprint + " / " + CELLS_PER_SIDE;
+    el("statGuessCleared").textContent = deadGuess + " / " + CELLS_PER_SIDE;
+    el("roundCount").textContent = state.rounds;
+    if(deadGuess > 0){
+      el("speedup").textContent = (deadImprint/Math.max(deadGuess,1)).toFixed(1) + "x";
+    } else if(deadImprint > 0){
+      el("speedup").textContent = "∞";
+    }
+
+    markStep(4, true);
+
+    var stillGoing = state.imprintAlive.some(function(a){return a;}) || state.guessAlive.some(function(a){return a;});
+    setTimeout(function(){
+      state.running = false;
+      el("btnRun").disabled = !stillGoing;
+      if(!stillGoing){
+        el("btnRun").textContent = "Simulation complete";
+      }
+    }, 350);
+  }
+
+  el("btnGen").addEventListener("click", function(){
+    resetAll();
+    generatePatient();
+  });
+  el("btnRead").addEventListener("click", readImprint);
+  el("btnAssemble").addEventListener("click", assembleCocktail);
+  el("btnRun").addEventListener("click", runRound);
+  el("btnReset").addEventListener("click", function(){
+    el("btnRun").textContent = "Run simulated treatment";
+    resetAll();
+  });
+
+  resetAll();
+})();
+</script>
+</body>
+</html>

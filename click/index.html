@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fetchpoint — connector-backed chat research</title>
+<style>
+  :root{
+    --bg:#0e1016;
+    --panel:#161923;
+    --panel2:#1d2130;
+    --border:#2a2f42;
+    --text:#e9ebf3;
+    --dim:#8b91a8;
+    --accent:#6ee7b7;
+    --accent2:#7dd3fc;
+    --accent3:#f0abfc;
+    --warn:#fbbf24;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:radial-gradient(circle at 20% -10%, #1b2036 0%, var(--bg) 55%);
+    color:var(--text); font-family:var(--sans); min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; padding:32px 16px 20px;
+  }
+  .wrap{ width:100%; max-width:920px; }
+  header{ text-align:center; margin-bottom:22px; }
+  .brand{ display:inline-flex; align-items:center; gap:9px; font-weight:700; font-size:15px; letter-spacing:.04em; color:var(--dim); text-transform:uppercase; }
+  .brand .dot{ width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent); }
+  h1{ font-size:30px; margin:14px 0 8px; }
+  h1 span{ background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  p.sub{ color:var(--dim); max-width:620px; margin:0 auto; line-height:1.55; font-size:14.5px; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:20px; margin-top:22px; box-shadow:0 20px 60px -30px rgba(0,0,0,.6);
+  }
+
+  .queries{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+  .qchip{
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    padding:7px 12px; border-radius:999px; font-size:12.5px; cursor:pointer;
+    transition:.15s; font-family:var(--sans);
+  }
+  .qchip:hover{ border-color:var(--accent2); color:var(--accent2); }
+  .qchip.active{ background:rgba(110,231,183,.12); border-color:var(--accent); color:var(--accent); }
+
+  .inputrow{ display:flex; gap:10px; }
+  input#q{
+    flex:1; background:#0d0f17; border:1px solid var(--border); border-radius:10px;
+    padding:13px 14px; color:var(--text); font-size:14.5px; font-family:var(--sans);
+    outline:none;
+  }
+  input#q:focus{ border-color:var(--accent2); }
+  button#run{
+    background:linear-gradient(90deg,var(--accent),var(--accent2)); color:#08110d; border:none;
+    border-radius:10px; padding:0 20px; font-weight:700; font-size:14px; cursor:pointer;
+    white-space:nowrap;
+  }
+  button#run:disabled{ opacity:.5; cursor:default; }
+  button#run:not(:disabled):hover{ filter:brightness(1.08); }
+
+  .connectors{ display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  .conn{
+    display:flex; align-items:center; gap:7px; font-size:12px; padding:6px 10px;
+    border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--dim);
+    transition:.2s;
+  }
+  .conn .led{ width:7px; height:7px; border-radius:50%; background:#3a3f52; transition:.2s; }
+  .conn.active{ color:var(--text); border-color:var(--accent2); }
+  .conn.active .led{ background:var(--accent2); box-shadow:0 0 8px var(--accent2); animation:pulse 1s infinite; }
+  .conn.done{ color:var(--accent); border-color:var(--accent); }
+  .conn.done .led{ background:var(--accent); box-shadow:none; animation:none; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  .stage{ min-height:40px; }
+  .empty{ color:var(--dim); font-size:13.5px; padding:26px 4px; text-align:center; }
+
+  .brief{ margin-top:18px; border-top:1px dashed var(--border); padding-top:16px; }
+  .brief h2{ font-size:16px; margin:0 0 4px; }
+  .brief .meta{ color:var(--dim); font-size:12px; margin-bottom:14px; }
+  .line{ display:flex; gap:10px; align-items:flex-start; margin-bottom:11px; font-size:14px; line-height:1.55; opacity:0; animation:fadein .4s forwards; }
+  @keyframes fadein{ to{opacity:1; transform:translateY(0);} from{transform:translateY(4px);} }
+  .line .tag{
+    flex-shrink:0; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.03em;
+    padding:3px 7px; border-radius:6px; margin-top:2px; white-space:nowrap;
+  }
+  .tag.linkedin{ background:rgba(125,211,252,.14); color:var(--accent2); }
+  .tag.filings{ background:rgba(240,171,252,.14); color:var(--accent3); }
+  .tag.maps{ background:rgba(110,231,183,.14); color:var(--accent); }
+  .tag.flights{ background:rgba(251,191,36,.14); color:var(--warn); }
+  .tag.news{ background:rgba(148,163,184,.18); color:#cbd5e1; }
+  .tag.social{ background:rgba(244,114,182,.14); color:#f472b6; }
+
+  table.fares{ width:100%; border-collapse:collapse; margin-top:6px; font-size:13px; }
+  table.fares th, table.fares td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); }
+  table.fares th{ color:var(--dim); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
+  table.fares tr:last-child td{ border-bottom:none; }
+  .best{ color:var(--accent); font-weight:700; }
+
+  .compare{ margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .compare .col{ background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:13px; }
+  .compare .col h3{ font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); margin:0 0 8px; }
+  .compare .col.plain{ opacity:.7; }
+  .compare .col p{ font-size:13px; line-height:1.5; margin:0 0 8px; color:var(--text); }
+  .compare .col.rich h3{ color:var(--accent); }
+
+  footer{ margin-top:30px; text-align:center; color:var(--dim); font-size:12px; line-height:1.7; padding-bottom:10px; }
+  footer a{ color:var(--accent2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span> Fetchpoint (concept demo)</div>
+    <h1>Chat that goes <span>fetch specific things</span>, not just search</h1>
+    <p class="sub">Type a research question. Fetchpoint fans it out across specialized connectors — professional profiles, filings, maps, live fares — instead of one blended web index, then hands the model back source-tagged facts to answer with.</p>
+  </header>
+
+  <div class="panel">
+    <div class="queries" id="queries"></div>
+    <div class="inputrow">
+      <input id="q" type="text" placeholder="e.g. brief me on this founder before our call" maxlength="120">
+      <button id="run">Run research</button>
+    </div>
+    <div class="connectors" id="connectors"></div>
+
+    <div class="stage" id="stage">
+      <div class="empty">Pick a sample query above (or write your own) and hit Run research.</div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Click (YC S26). Not affiliated with Click.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- synthetic "connector" backends ----------------------------------
+  var CONNECTOR_DEFS = [
+    {id:"linkedin", label:"LinkedIn"},
+    {id:"filings",  label:"Financial filings"},
+    {id:"maps",     label:"Maps & places"},
+    {id:"flights",  label:"Flight fares"},
+    {id:"social",   label:"Social signals"},
+    {id:"news",     label:"News"}
+  ];
+
+  // Each sample query declares which connectors it hits, plain-search vs
+  // connector-backed answers for the comparison panel, and the synthesized
+  // brief lines with per-line source tags. All data below is fabricated
+  // for demo purposes.
+  var SAMPLES = {
+    "brief me on this founder before our call": {
+      connectors: ["linkedin","filings","social","news"],
+      plain: "Web search returns a generic bio blurb and a few old press mentions — nothing recent, nothing you can act on before a call.",
+      rich: "Connector fetch returns: current role + last 3 job changes, a filing that names her as an officer, a LinkedIn post from 6 days ago on hiring plans, and 2 recent interview quotes.",
+      lines: [
+        {tag:"linkedin", text:"Priya Raman — Founder & CEO, moved from VP Eng at a Series C startup 14 months ago. Posted 6 days ago about opening a GTM lead role."},
+        {tag:"filings", text:"Named as an executive officer in the company's most recent state incorporation filing, alongside one co-founder."},
+        {tag:"social", text:"Recent X activity: 3 posts this month about usage-based pricing, one exchange with a competitor's founder about churn benchmarks."},
+        {tag:"news", text:"Quoted in a trade newsletter two weeks ago saying the team is \"heads down on enterprise SSO\" for Q3."}
+      ]
+    },
+    "compare flights sf to nyc next friday": {
+      connectors: ["flights","maps"],
+      plain: "Web search surfaces a booking site's SEO page with stale sample prices from a cached snapshot.",
+      rich: "Connector fetch pulls live fare quotes directly, ranked, with cabin, duration and layover count attached — ready to answer inline.",
+      lines: [
+        {tag:"flights", text:"Queried 4 live fare sources for SFO → JFK, next Friday, one adult, economy."},
+        {tag:"maps", text:"Cross-checked airport transfer time: JFK to Midtown ~55min via car service at typical Friday evening traffic."}
+      ],
+      fares: [
+        {carrier:"Compass Air", stops:"Nonstop", dur:"5h 32m", price:214, best:true},
+        {carrier:"Alto Airlines", stops:"Nonstop", dur:"5h 41m", price:239},
+        {carrier:"Regal Wings", stops:"1 stop (DEN)", dur:"7h 05m", price:178},
+        {carrier:"Northline", stops:"Nonstop", dur:"5h 38m", price:261}
+      ]
+    },
+    "research this company for a sales call": {
+      connectors: ["filings","maps","news","linkedin"],
+      plain: "Web search gives the homepage and a Crunchbase-style summary that's a year out of date on headcount and funding.",
+      rich: "Connector fetch adds: latest filing figures, real office locations from maps data, 2 recent hires who'd likely be in the room, and a funding note from last month.",
+      lines: [
+        {tag:"filings", text:"Latest annual report lists 3 registered business addresses and a revised registered-agent contact as of last quarter."},
+        {tag:"maps", text:"Primary office confirmed active: listed hours, 4.6 rating, foot traffic pattern typical of a 40-80 person office."},
+        {tag:"linkedin", text:"Two Director-of-Procurement hires in the last 60 days — likely stakeholders for a sales conversation."},
+        {tag:"news", text:"Closed an extension round last month per a regional business journal, no amount disclosed."}
+      ]
+    }
+  };
+
+  var sampleKeys = Object.keys(SAMPLES);
+  var qContainer = document.getElementById("queries");
+  var connectorsEl = document.getElementById("connectors");
+  var stage = document.getElementById("stage");
+  var input = document.getElementById("q");
+  var runBtn = document.getElementById("run");
+  var activeChip = null;
+  var running = false;
+
+  sampleKeys.forEach(function(key){
+    var chip = document.createElement("div");
+    chip.className = "qchip";
+    chip.textContent = key;
+    chip.addEventListener("click", function(){
+      input.value = key;
+      setActiveChip(chip);
+    });
+    qContainer.appendChild(chip);
+  });
+
+  function setActiveChip(chip){
+    if(activeChip) activeChip.classList.remove("active");
+    activeChip = chip || null;
+    if(chip) chip.classList.add("active");
+  }
+
+  input.addEventListener("input", function(){
+    if(activeChip && input.value !== activeChip.textContent) setActiveChip(null);
+  });
+
+  CONNECTOR_DEFS.forEach(function(c){
+    var el = document.createElement("div");
+    el.className = "conn";
+    el.id = "conn-" + c.id;
+    el.innerHTML = '<span class="led"></span><span>' + c.label + '</span>';
+    connectorsEl.appendChild(el);
+  });
+
+  function resetConnectors(){
+    CONNECTOR_DEFS.forEach(function(c){
+      var el = document.getElementById("conn-" + c.id);
+      el.classList.remove("active","done");
+    });
+  }
+
+  function pickDataset(query){
+    var norm = query.trim().toLowerCase();
+    if(SAMPLES[norm]) return SAMPLES[norm];
+    // fuzzy fallback: pick the sample with the most shared words, else default to founder brief
+    var words = norm.split(/\s+/).filter(Boolean);
+    var best = null, bestScore = -1;
+    sampleKeys.forEach(function(key){
+      var kw = key.split(/\s+/);
+      var score = kw.filter(function(w){ return words.indexOf(w) !== -1; }).length;
+      if(score > bestScore){ bestScore = score; best = key; }
+    });
+    if(norm.indexOf("flight") !== -1 || norm.indexOf("fare") !== -1) best = "compare flights sf to nyc next friday";
+    else if(norm.indexOf("compan") !== -1 || norm.indexOf("sales") !== -1) best = "research this company for a sales call";
+    else if(bestScore <= 0) best = "brief me on this founder before our call";
+    return SAMPLES[best];
+  }
+
+  function run(){
+    if(running) return;
+    var query = input.value.trim();
+    if(!query){ input.focus(); return; }
+    var data = pickDataset(query);
+
+    running = true;
+    runBtn.disabled = true;
+    runBtn.textContent = "Fetching…";
+    resetConnectors();
+    stage.innerHTML = "";
+
+    var order = data.connectors.slice();
+    var i = 0;
+
+    function step(){
+      if(i > 0){
+        var prevId = order[i-1];
+        var prevEl = document.getElementById("conn-" + prevId);
+        prevEl.classList.remove("active");
+        prevEl.classList.add("done");
+      }
+      if(i >= order.length){
+        renderBrief(query, data);
+        running = false;
+        runBtn.disabled = false;
+        runBtn.textContent = "Run research";
+        return;
+      }
+      var id = order[i];
+      document.getElementById("conn-" + id).classList.add("active");
+      i++;
+      setTimeout(step, 360 + Math.random()*220);
+    }
+    step();
+  }
+
+  function renderBrief(query, data){
+    var wrap = document.createElement("div");
+    wrap.className = "brief";
+
+    var h2 = document.createElement("h2");
+    h2.textContent = "Synthesized brief";
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = data.connectors.length + " connectors queried · " + data.lines.length + " source-backed facts · query: “" + query + "”";
+    wrap.appendChild(h2);
+    wrap.appendChild(meta);
+
+    data.lines.forEach(function(l, idx){
+      var row = document.createElement("div");
+      row.className = "line";
+      row.style.animationDelay = (idx*90) + "ms";
+      var tag = document.createElement("span");
+      tag.className = "tag " + l.tag;
+      tag.textContent = l.tag;
+      var text = document.createElement("span");
+      text.textContent = l.text;
+      row.appendChild(tag);
+      row.appendChild(text);
+      wrap.appendChild(row);
+    });
+
+    if(data.fares){
+      var table = document.createElement("table");
+      table.className = "fares";
+      var thead = document.createElement("tr");
+      ["Carrier","Stops","Duration","Price"].forEach(function(h){
+        var th = document.createElement("th"); th.textContent = h; thead.appendChild(th);
+      });
+      table.appendChild(thead);
+      var sorted = data.fares.slice().sort(function(a,b){ return a.price - b.price; });
+      sorted.forEach(function(f){
+        var tr = document.createElement("tr");
+        var priceCell = "$" + f.price;
+        tr.innerHTML = "<td>" + f.carrier + "</td><td>" + f.stops + "</td><td>" + f.dur + "</td>" +
+          "<td class=\"" + (f.best ? "best" : "") + "\">" + priceCell + (f.best ? " ✓ lowest" : "") + "</td>";
+        table.appendChild(tr);
+      });
+      wrap.appendChild(table);
+    }
+
+    var compare = document.createElement("div");
+    compare.className = "compare";
+    compare.innerHTML =
+      '<div class="col plain"><h3>Plain web search</h3><p>' + data.plain + '</p></div>' +
+      '<div class="col rich"><h3>Connector-backed</h3><p>' + data.rich + '</p></div>';
+    wrap.appendChild(compare);
+
+    stage.innerHTML = "";
+    stage.appendChild(wrap);
+  }
+
+  runBtn.addEventListener("click", run);
+  input.addEventListener("keydown", function(e){
+    if(e.key === "Enter") run();
+  });
+
+  // seed with the first sample selected but not run
+  input.value = sampleKeys[0];
+})();
+</script>
+</body>
+</html>
