@@ -1,0 +1,316 @@
+<title>Trace Refinery</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #131824;
+    --panel-2: #1a2233;
+    --border: #263049;
+    --text: #e6ebf5;
+    --dim: #8b97b0;
+    --accent: #5ee6a8;
+    --accent-2: #7aa2ff;
+    --warn: #ffb454;
+    --bad: #ff6b6b;
+    --mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: radial-gradient(circle at 20% -10%, #182238 0%, var(--bg) 45%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 20px 60px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 1.7rem; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .sub { color: var(--dim); font-size: 0.95rem; max-width: 640px; line-height: 1.5; }
+  .badge {
+    display: inline-block; font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--accent); border: 1px solid #2a4a3c;
+    background: #10261c; padding: 3px 8px; border-radius: 20px; margin-bottom: 10px;
+  }
+
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 20px;
+  }
+  .panel h2 { font-size: 0.95rem; margin: 0 0 4px; }
+  .panel .hint { color: var(--dim); font-size: 0.8rem; margin-bottom: 14px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  button {
+    font-family: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    border-radius: 8px; padding: 9px 16px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); transition: all 0.15s;
+  }
+  button:hover { border-color: var(--accent-2); }
+  button.primary { background: var(--accent); color: #06170f; border-color: var(--accent); }
+  button.primary:hover { filter: brightness(1.08); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  .slider-row { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--dim); flex: 1; min-width: 220px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th { text-align: left; color: var(--dim); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 7px 8px; border-bottom: 1px solid #1c2334; font-family: var(--mono); }
+  tr.rejected td { color: #566078; }
+  tr.rejected { opacity: 0.55; }
+  .tier { padding: 2px 7px; border-radius: 5px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
+  .tier.premium { background: #1e2f1f; color: var(--accent); }
+  .tier.standard { background: #1c2740; color: var(--accent-2); }
+  .tier.rejected { background: #2a1f22; color: var(--bad); }
+
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat .label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 4px; }
+  .stat .value { font-size: 1.3rem; font-weight: 700; font-family: var(--mono); }
+  .stat .value.accent { color: var(--accent); }
+
+  .bid-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+  .bid {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 12px; font-size: 0.82rem; opacity: 0; transform: translateY(6px);
+    animation: rise 0.35s forwards;
+  }
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+  .bid .lab { font-weight: 600; }
+  .bid .amt { font-family: var(--mono); color: var(--accent); }
+  .bid .note { color: var(--dim); font-size: 0.72rem; }
+
+  .empty { color: var(--dim); font-size: 0.85rem; padding: 20px 0; text-align: center; }
+
+  .payout {
+    margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .payout .big { font-size: 1.7rem; font-weight: 800; color: var(--accent); font-family: var(--mono); }
+  .payout .small { color: var(--dim); font-size: 0.78rem; }
+
+  footer {
+    margin-top: 40px; text-align: center; color: var(--dim);
+    font-size: 0.78rem; border-top: 1px solid var(--border); padding-top: 18px;
+  }
+  footer strong { color: var(--text); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="badge">toy demo · trace monetization</div>
+    <h1>Trace Refinery</h1>
+    <div class="sub">
+      Point this at a stream of raw agent traces. It scores each one for licensing value,
+      sorts the junk from the gold, and simulates labs bidding on the resulting dataset —
+      all with synthetic sample data, entirely client-side.
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>1 — Raw trace stream</h2>
+      <div class="hint">Sample interaction logs from a fictional customer-support agent. Nothing here is real user data.</div>
+      <div class="controls">
+        <button class="primary" id="scanBtn">Scan traces</button>
+        <button id="regenBtn">New batch</button>
+        <div class="slider-row">
+          <span>Quality floor</span>
+          <input type="range" id="threshold" min="0" max="100" value="55" />
+          <span id="threshVal" style="font-family:var(--mono); color:var(--text);">55</span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Task</th><th>Signal</th><th>Score</th><th>Tier</th></tr>
+        </thead>
+        <tbody id="traceTable"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>2 — Package economics</h2>
+      <div class="hint">Live estimate as your quality floor moves.</div>
+      <div class="stat-row">
+        <div class="stat"><div class="label">Traces kept</div><div class="value" id="statKept">–</div></div>
+        <div class="stat"><div class="label">Avg score</div><div class="value" id="statAvg">–</div></div>
+        <div class="stat"><div class="label">Est. value</div><div class="value accent" id="statValue">–</div></div>
+      </div>
+
+      <h2>3 — Lab bidding</h2>
+      <div class="hint">Once packaged, simulated labs bid on the dataset in real time.</div>
+      <button class="primary" id="listBtn" disabled>Package &amp; list dataset</button>
+      <div class="bid-list" id="bidList" style="margin-top:12px;">
+        <div class="empty" id="bidEmpty">Scan a batch, then list it to see bids come in.</div>
+      </div>
+      <div class="payout" id="payout" style="display:none;">
+        <div>
+          <div class="small">Your revenue share (70%)</div>
+          <div class="big" id="payoutAmt">$0</div>
+        </div>
+        <div class="small" id="payoutMeta"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Magma (YC S26). Not affiliated with Magma.
+  </footer>
+</div>
+
+<script>
+(function () {
+  // ---- deterministic-ish PRNG so a "batch" is reproducible within a session ----
+  var seed = 42;
+  function rand() {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return (seed % 10000) / 10000;
+  }
+  function pick(arr) { return arr[Math.floor(rand() * arr.length)]; }
+
+  var TASKS = [
+    'refund dispute', 'password reset', 'billing question', 'plan upgrade',
+    'bug report triage', 'shipping delay', 'API integration help', 'cancel request',
+    'feature walkthrough', 'account merge', 'invoice correction', 'churn save'
+  ];
+  var SIGNALS = [
+    { key: 'clean_success', label: 'clean success', weight: 0.9 },
+    { key: 'human_correction', label: 'human-corrected', weight: 0.78 },
+    { key: 'multi_turn_recovery', label: 'multi-turn recovery', weight: 0.7 },
+    { key: 'tool_call_chain', label: 'tool-call chain', weight: 0.65 },
+    { key: 'boilerplate', label: 'boilerplate reply', weight: 0.2 },
+    { key: 'abandoned', label: 'abandoned mid-task', weight: 0.1 },
+    { key: 'duplicate_pattern', label: 'near-duplicate pattern', weight: 0.15 }
+  ];
+
+  var traces = [];
+
+  function genBatch(n) {
+    traces = [];
+    for (var i = 0; i < n; i++) {
+      var sig = pick(SIGNALS);
+      var noise = (rand() - 0.5) * 22;
+      var uniqueness = rand();
+      var rawScore = sig.weight * 100 + noise + (uniqueness - 0.5) * 20;
+      var score = Math.max(2, Math.min(99, Math.round(rawScore)));
+      traces.push({
+        id: i + 1,
+        task: pick(TASKS),
+        signal: sig.label,
+        score: score
+      });
+    }
+    traces.sort(function (a, b) { return b.score - a.score; });
+  }
+
+  function tierFor(score, floor) {
+    if (score < floor) return 'rejected';
+    if (score >= 80) return 'premium';
+    return 'standard';
+  }
+
+  function render() {
+    var floor = parseInt(document.getElementById('threshold').value, 10);
+    document.getElementById('threshVal').textContent = floor;
+
+    var tbody = document.getElementById('traceTable');
+    tbody.innerHTML = '';
+    var kept = [], sum = 0, value = 0;
+
+    traces.forEach(function (t) {
+      var tier = tierFor(t.score, floor);
+      var tr = document.createElement('tr');
+      if (tier === 'rejected') tr.className = 'rejected';
+      tr.innerHTML =
+        '<td>' + t.id + '</td>' +
+        '<td>' + t.task + '</td>' +
+        '<td>' + t.signal + '</td>' +
+        '<td>' + t.score + '</td>' +
+        '<td><span class="tier ' + tier + '">' + tier + '</span></td>';
+      tbody.appendChild(tr);
+
+      if (tier !== 'rejected') {
+        kept.push(t);
+        sum += t.score;
+        // premium traces are worth roughly 3x a standard one per unit
+        value += tier === 'premium' ? t.score * 4.2 : t.score * 1.3;
+      }
+    });
+
+    document.getElementById('statKept').textContent = kept.length + ' / ' + traces.length;
+    document.getElementById('statAvg').textContent = kept.length
+      ? Math.round(sum / kept.length)
+      : '–';
+    document.getElementById('statValue').textContent = '$' + Math.round(value).toLocaleString();
+
+    document.getElementById('listBtn').disabled = kept.length === 0;
+    return { kept: kept, value: value };
+  }
+
+  var LABS = [
+    { name: 'Frontier Labs Research', style: 'wants premium, low volume' },
+    { name: 'Sable AI', style: 'wants breadth for fine-tuning' },
+    { name: 'Northwind Cognition', style: 'wants edge-case recoveries' },
+    { name: 'Delta Reasoning Co.', style: 'wants tool-call chains' }
+  ];
+
+  function runAuction(packaged) {
+    var list = document.getElementById('bidList');
+    list.innerHTML = '';
+    document.getElementById('payout').style.display = 'none';
+    document.getElementById('listBtn').disabled = true;
+
+    var order = LABS.slice().sort(function () { return rand() - 0.5; });
+    var total = 0;
+    var delay = 0;
+
+    order.forEach(function (lab, idx) {
+      delay += 450 + rand() * 400;
+      (function (lab, idx) {
+        setTimeout(function () {
+          var base = packaged.value * (0.18 + rand() * 0.14);
+          total += base;
+          var el = document.createElement('div');
+          el.className = 'bid';
+          el.innerHTML =
+            '<div><div class="lab">' + lab.name + '</div>' +
+            '<div class="note">' + lab.style + '</div></div>' +
+            '<div class="amt">$' + Math.round(base).toLocaleString() + '</div>';
+          list.appendChild(el);
+
+          if (idx === order.length - 1) {
+            var share = total * 0.7;
+            document.getElementById('payoutAmt').textContent = '$' + Math.round(share).toLocaleString();
+            document.getElementById('payoutMeta').textContent =
+              'from $' + Math.round(total).toLocaleString() + ' total across ' + order.length + ' labs';
+            document.getElementById('payout').style.display = 'flex';
+            document.getElementById('listBtn').disabled = false;
+          }
+        }, delay);
+      })(lab, idx);
+    });
+  }
+
+  document.getElementById('threshold').addEventListener('input', render);
+  document.getElementById('scanBtn').addEventListener('click', function () {
+    genBatch(18);
+    render();
+  });
+  document.getElementById('regenBtn').addEventListener('click', function () {
+    seed = Math.floor(Date.now() % 100000) || 7;
+    genBatch(18);
+    render();
+  });
+  document.getElementById('listBtn').addEventListener('click', function () {
+    var packaged = render();
+    runAuction(packaged);
+  });
+
+  genBatch(18);
+  render();
+})();
+</script>

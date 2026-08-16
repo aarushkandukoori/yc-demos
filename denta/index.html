@@ -1,0 +1,309 @@
+<title>Straight-Line Dental</title>
+<style>
+  :root {
+    --bg: #0b1210;
+    --panel: #111b18;
+    --panel-2: #16211d;
+    --border: #24352f;
+    --text: #eaf2ee;
+    --muted: #93a89e;
+    --accent: #3ddc97;
+    --accent-dim: #1f6b4b;
+    --bad: #e0654f;
+    --gold: #e0b64f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 24px 32px; }
+  header { text-align: center; margin-bottom: 36px; }
+  h1 { font-size: 2rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+  header p { color: var(--muted); max-width: 620px; margin: 0 auto; font-size: 0.98rem; }
+  .tag {
+    display: inline-block; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); background: rgba(61,220,151,0.1); border: 1px solid var(--accent-dim);
+    padding: 4px 10px; border-radius: 20px; margin-bottom: 14px;
+  }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 20px; }
+  .panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  .panel .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 18px; }
+
+  .slider-row { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
+  .slider-row label { font-size: 0.85rem; color: var(--muted); min-width: 190px; }
+  input[type="range"] {
+    flex: 1; min-width: 180px; accent-color: var(--accent); height: 4px;
+  }
+  .slider-val { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 90px; text-align: right; }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+
+  .carrier-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--panel-2); }
+  .carrier-card h3 { margin: 0 0 2px; font-size: 0.95rem; }
+  .carrier-card .amt { font-size: 1.6rem; font-weight: 700; margin: 6px 0 14px; }
+  .bar-stack { display: flex; height: 26px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .seg { display: flex; align-items: center; justify-content: center; font-size: 0.68rem; color: #0b1210; font-weight: 700; white-space: nowrap; overflow: hidden; transition: width 0.35s ease; }
+  .seg.dentist { background: var(--accent); }
+  .seg.admin { background: #5a6b64; color: #eaf2ee; }
+  .seg.broker { background: #7a8a83; color: #eaf2ee; }
+  .seg.csuite { background: var(--bad); color: #eaf2ee; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 0.76rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  .callout { margin-top: 18px; padding: 14px 16px; border-radius: 10px; background: rgba(61,220,151,0.08); border: 1px solid var(--accent-dim); font-size: 0.9rem; }
+  .callout b { color: var(--accent); }
+
+  .claim-panel { display: grid; grid-template-columns: 1fr auto 1fr; gap: 18px; align-items: center; }
+  @media (max-width: 720px) { .claim-panel { grid-template-columns: 1fr; } }
+  .node { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--panel-2); text-align: center; }
+  .node .role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+  .node .name { font-weight: 700; margin-bottom: 4px; }
+  .node .detail { font-size: 0.8rem; color: var(--muted); }
+  .arrow-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .arrow-line { width: 100%; height: 3px; background: var(--border); position: relative; border-radius: 2px; overflow: hidden; }
+  .arrow-line .pulse { position: absolute; top: 0; left: -30%; width: 30%; height: 100%; background: var(--accent); animation: travel 1.4s linear infinite; }
+  @keyframes travel { from { left: -30%; } to { left: 100%; } }
+  .arrow-label { font-size: 0.72rem; color: var(--accent); font-weight: 600; }
+
+  select, button {
+    font-family: inherit; font-size: 0.9rem; padding: 9px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #0b1210; border: none; font-weight: 700; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.primary:disabled { opacity: 0.5; cursor: default; filter: none; }
+
+  .claim-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .log { margin-top: 16px; font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px; min-height: 20px; }
+  .log div { margin-bottom: 4px; }
+  .log .ok { color: var(--accent); }
+
+  footer { text-align: center; color: var(--muted); font-size: 0.78rem; margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag">interactive demo · not affiliated with any insurer</div>
+    <h1>Where does your premium dollar actually go?</h1>
+    <p>A toy simulation of two ways to structure a dental plan: the traditional broker-and-carrier stack, versus a carrier built to pay dentists directly. Drag the slider, then run a claim through both.</p>
+  </header>
+
+  <div class="panel">
+    <h2>1. Premium dollar breakdown</h2>
+    <div class="sub">Adjust the monthly premium your company pays per employee. Watch how the split changes — the traditional stack takes a fixed cut off the top no matter the size of the group.</div>
+
+    <div class="slider-row">
+      <label for="premium">Monthly premium / employee</label>
+      <input type="range" id="premium" min="20" max="120" step="1" value="55">
+      <div class="slider-val" id="premiumVal">$55</div>
+    </div>
+
+    <div class="split">
+      <div class="carrier-card">
+        <h3>Traditional carrier</h3>
+        <div class="amt" id="oldTotal">$55.00</div>
+        <div class="bar-stack" id="oldBar"></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--accent)"></span>Dentist reimbursement</span>
+          <span><span class="dot" style="background:#5a6b64"></span>Claims admin</span>
+          <span><span class="dot" style="background:#7a8a83"></span>Broker commission</span>
+          <span><span class="dot" style="background:var(--bad)"></span>Overhead / execs</span>
+        </div>
+      </div>
+      <div class="carrier-card">
+        <h3>Straight-line carrier</h3>
+        <div class="amt" id="newTotal">$55.00</div>
+        <div class="bar-stack" id="newBar"></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--accent)"></span>Dentist reimbursement</span>
+          <span><span class="dot" style="background:#5a6b64"></span>Claims admin</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout" id="deltaCallout"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Run a claim through both pipelines</h2>
+    <div class="sub">Pick a procedure. Same claim, same day, sent through both plans — watch who touches the money before it reaches the dentist.</div>
+
+    <div class="claim-controls">
+      <select id="procedure">
+        <option value="cleaning" data-cost="120">Routine cleaning — billed $120</option>
+        <option value="filling" data-cost="240">Composite filling — billed $240</option>
+        <option value="crown" data-cost="1100">Crown — billed $1,100</option>
+        <option value="rootcanal" data-cost="900">Root canal — billed $900</option>
+      </select>
+      <button class="primary" id="runClaim">Submit claim</button>
+    </div>
+
+    <div class="claim-panel">
+      <div class="node">
+        <div class="role">Step 1</div>
+        <div class="name">Patient visits dentist</div>
+        <div class="detail" id="claimAmt">Claim: $120</div>
+      </div>
+      <div class="arrow-col">
+        <div class="arrow-label" id="pathLabel">choose a plan below</div>
+        <div class="arrow-line"><div class="pulse" id="pulse1" style="display:none"></div></div>
+      </div>
+      <div class="node">
+        <div class="role">Step 2 — payout</div>
+        <div class="name" id="payoutName">—</div>
+        <div class="detail" id="payoutDetail">Run a claim to see the payout</div>
+      </div>
+    </div>
+
+    <div class="claim-controls" style="margin-top:16px; margin-bottom:0;">
+      <button id="viaTraditional">Send via traditional carrier</button>
+      <button id="viaStraight" class="primary">Send via straight-line carrier</button>
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Denta (YC S26). Not affiliated with Denta.</footer>
+</div>
+
+<script>
+  // ---- Section 1: premium split ----
+  const OLD_SPLIT = { admin: 0.14, broker: 0.09, csuite: 0.10 }; // fixed fractions off the top
+  const NEW_SPLIT = { admin: 0.06 }; // lean ops only, rest goes to dentist
+
+  const premiumSlider = document.getElementById('premium');
+  const premiumVal = document.getElementById('premiumVal');
+  const oldTotal = document.getElementById('oldTotal');
+  const newTotal = document.getElementById('newTotal');
+  const oldBar = document.getElementById('oldBar');
+  const newBar = document.getElementById('newBar');
+  const deltaCallout = document.getElementById('deltaCallout');
+
+  function fmt(n) { return '$' + n.toFixed(2); }
+
+  function renderSplit() {
+    const p = parseFloat(premiumSlider.value);
+    premiumVal.textContent = '$' + p;
+    oldTotal.textContent = fmt(p);
+    newTotal.textContent = fmt(p);
+
+    const oldAdmin = p * OLD_SPLIT.admin;
+    const oldBroker = p * OLD_SPLIT.broker;
+    const oldCsuite = p * OLD_SPLIT.csuite;
+    const oldDentist = p - oldAdmin - oldBroker - oldCsuite;
+
+    const newAdmin = p * NEW_SPLIT.admin;
+    const newDentist = p - newAdmin;
+
+    oldBar.innerHTML = `
+      <div class="seg dentist" style="width:${(oldDentist/p)*100}%">${fmt(oldDentist)}</div>
+      <div class="seg admin" style="width:${(oldAdmin/p)*100}%">${(oldAdmin/p*100).toFixed(0)}%</div>
+      <div class="seg broker" style="width:${(oldBroker/p)*100}%">${(oldBroker/p*100).toFixed(0)}%</div>
+      <div class="seg csuite" style="width:${(oldCsuite/p)*100}%">${(oldCsuite/p*100).toFixed(0)}%</div>
+    `;
+    newBar.innerHTML = `
+      <div class="seg dentist" style="width:${(newDentist/p)*100}%">${fmt(newDentist)}</div>
+      <div class="seg admin" style="width:${(newAdmin/p)*100}%">${(newAdmin/p*100).toFixed(0)}%</div>
+    `;
+
+    const diff = newDentist - oldDentist;
+    const pctMore = ((diff / oldDentist) * 100).toFixed(0);
+    deltaCallout.innerHTML = `At $${p}/employee/month, the straight-line plan sends <b>${fmt(diff)} more</b> to the dentist for the exact same premium — <b>${pctMore}% more</b> reimbursement per dollar collected, with no broker or executive layer to fund.`;
+  }
+
+  premiumSlider.addEventListener('input', renderSplit);
+  renderSplit();
+
+  // ---- Section 2: claim simulation ----
+  const procedureSelect = document.getElementById('procedure');
+  const claimAmt = document.getElementById('claimAmt');
+  const pathLabel = document.getElementById('pathLabel');
+  const pulse1 = document.getElementById('pulse1');
+  const payoutName = document.getElementById('payoutName');
+  const payoutDetail = document.getElementById('payoutDetail');
+  const log = document.getElementById('log');
+  const viaTraditional = document.getElementById('viaTraditional');
+  const viaStraight = document.getElementById('viaStraight');
+  const runClaim = document.getElementById('runClaim');
+
+  function currentCost() {
+    const opt = procedureSelect.options[procedureSelect.selectedIndex];
+    return parseFloat(opt.getAttribute('data-cost'));
+  }
+
+  function updateClaimDisplay() {
+    claimAmt.textContent = 'Claim: $' + currentCost().toLocaleString();
+  }
+  procedureSelect.addEventListener('change', updateClaimDisplay);
+  updateClaimDisplay();
+
+  function logLine(text, ok) {
+    const d = document.createElement('div');
+    if (ok) d.className = 'ok';
+    d.textContent = text;
+    log.prepend(d);
+  }
+
+  let running = false;
+
+  function runPipeline(mode) {
+    if (running) return;
+    running = true;
+    viaTraditional.disabled = true;
+    viaStraight.disabled = true;
+    runClaim.disabled = true;
+
+    const cost = currentCost();
+    pulse1.style.display = 'block';
+    payoutName.textContent = '…processing…';
+    payoutDetail.textContent = '';
+
+    const stops = mode === 'traditional'
+      ? [
+          { label: 'routed to third-party administrator', delay: 700 },
+          { label: 'broker commission deducted', delay: 700 },
+          { label: 'overhead allocation deducted', delay: 700 },
+        ]
+      : [
+          { label: 'auto-adjudicated by carrier', delay: 700 },
+        ];
+
+    let elapsed = 400;
+    stops.forEach((s, i) => {
+      setTimeout(() => logLine('Claim #' + (10000 + Math.floor(cost)) + ': ' + s.label), elapsed);
+      elapsed += s.delay;
+    });
+
+    setTimeout(() => {
+      let dentistCut, note;
+      if (mode === 'traditional') {
+        dentistCut = cost * (1 - OLD_SPLIT.admin - OLD_SPLIT.broker - OLD_SPLIT.csuite);
+        note = `${(100 - (OLD_SPLIT.admin+OLD_SPLIT.broker+OLD_SPLIT.csuite)*100).toFixed(0)}% of billed amount, after admin/broker/overhead cuts · takes ~3 stops`;
+        pathLabel.textContent = 'traditional: 3 intermediaries';
+      } else {
+        dentistCut = cost * (1 - NEW_SPLIT.admin);
+        note = `${(100 - NEW_SPLIT.admin*100).toFixed(0)}% of billed amount, straight to the practice · takes 1 stop`;
+        pathLabel.textContent = 'straight-line: direct settlement';
+      }
+      payoutName.textContent = 'Dr. practice receives ' + fmt(dentistCut);
+      payoutDetail.textContent = note;
+      logLine('Claim #' + (10000 + Math.floor(cost)) + ': settled — dentist paid ' + fmt(dentistCut), true);
+      pulse1.style.display = 'none';
+      running = false;
+      viaTraditional.disabled = false;
+      viaStraight.disabled = false;
+      runClaim.disabled = false;
+    }, elapsed + 200);
+  }
+
+  viaTraditional.addEventListener('click', () => runPipeline('traditional'));
+  viaStraight.addEventListener('click', () => runPipeline('straight'));
+  runClaim.addEventListener('click', () => runPipeline('straight'));
+</script>
