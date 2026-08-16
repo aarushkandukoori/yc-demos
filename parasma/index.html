@@ -1,0 +1,421 @@
+<title>Wetware Trainer</title>
+<style>
+  :root {
+    --bg: #0b0e0c;
+    --panel: #121712;
+    --panel2: #161d16;
+    --ink: #e8f0e6;
+    --dim: #8fa892;
+    --line: #263226;
+    --spike: #6fe08a;
+    --spike-dim: #2c4a30;
+    --warn: #e0a86f;
+    --bad: #e06f6f;
+    --accent: #7fd6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    padding: 32px 20px 60px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: 0.02em; }
+  .sub { color: var(--dim); font-size: 13px; line-height: 1.6; max-width: 640px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+  .panel h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  .culture {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .neuron {
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    position: relative;
+    transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
+  }
+  .neuron.fired {
+    background: var(--spike);
+    box-shadow: 0 0 10px 2px rgba(111, 224, 138, 0.5);
+    transform: scale(1.12);
+  }
+  .neuron.weak {
+    background: var(--spike-dim);
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: var(--panel2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1c3320; border-color: #2c4a30; color: var(--spike); }
+  button.primary:hover { border-color: var(--spike); }
+  .stat {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 14px;
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    min-width: 92px;
+  }
+  .stat .k { font-size: 10px; text-transform: uppercase; color: var(--dim); letter-spacing: 0.06em; }
+  .stat .v { font-size: 18px; font-weight: 600; }
+  .seq {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 14px 0;
+    font-size: 15px;
+  }
+  .tok {
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--panel2);
+    border: 1px solid var(--line);
+  }
+  .tok.ctx { color: var(--dim); }
+  .tok.target { border-color: var(--accent); color: var(--accent); }
+  .tok.predicted { border-color: var(--spike); color: var(--spike); }
+  .tok.wrong { border-color: var(--bad); color: var(--bad); }
+  .predrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .predbtn {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 14px;
+    color: var(--ink);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    position: relative;
+  }
+  .predbtn .bar {
+    position: absolute;
+    left: 0; bottom: 0; height: 3px;
+    background: var(--accent);
+    border-radius: 0 0 6px 6px;
+    transition: width 0.4s;
+  }
+  .predbtn:hover { border-color: var(--accent); }
+  .log {
+    font-size: 12px;
+    color: var(--dim);
+    max-height: 130px;
+    overflow-y: auto;
+    line-height: 1.7;
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    margin-top: 4px;
+  }
+  .log .ok { color: var(--spike); }
+  .log .no { color: var(--bad); }
+  .note {
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.6;
+    margin-top: 10px;
+  }
+  footer {
+    margin-top: 34px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--dim);
+    text-align: center;
+    line-height: 1.6;
+  }
+  .flash {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+  }
+  .flash.good { background: rgba(111,224,138,0.15); color: var(--spike); }
+  .flash.bad { background: rgba(224,111,111,0.15); color: var(--bad); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Wetware Trainer — a toy neuron culture that learns next-token prediction</h1>
+    <div class="sub">
+      A simulated dish of 64 cultured neurons. Each token in a made-up sequence gets converted
+      to an electrical stimulation pattern across the dish. The culture predicts what comes next;
+      right guesses reinforce the synapses that fired, wrong guesses weaken them. Train it enough
+      and it starts to learn the sequence's structure — with no GPU involved, just a plausible
+      simulation of Hebbian-style reinforcement.
+    </div>
+  </header>
+
+  <div class="panel">
+    <h2>Culture Dish (64 neurons, stimulated by the current context)</h2>
+    <div class="culture" id="dish"></div>
+    <div class="row">
+      <div class="stat"><span class="k">Epoch</span><span class="v" id="statEpoch">0</span></div>
+      <div class="stat"><span class="k">Accuracy</span><span class="v" id="statAcc">0%</span></div>
+      <div class="stat"><span class="k">Synapse strength</span><span class="v" id="statSyn">0.10</span></div>
+      <div class="stat"><span class="k">Stimuli (µA sim)</span><span class="v" id="statStim">0</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Sequence — token stream fed to the dish as stimuli</h2>
+    <div class="seq" id="seqDisplay"></div>
+    <div class="note" id="taskNote">Context shown in gray. Predict the highlighted next token by clicking a candidate below — the dish's actual response is simulated from current synapse weights.</div>
+    <div class="predrow" id="predRow"></div>
+    <div class="row" style="margin-top:14px;">
+      <button class="primary" id="stimBtn">Stimulate dish &amp; let it guess</button>
+      <button id="autoBtn">Auto-train 25 epochs</button>
+      <button id="resetBtn">Reset culture</button>
+      <span id="flash"></span>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Parasma (YC S26). Not affiliated with Parasma.
+  </footer>
+</div>
+
+<script>
+(function () {
+  const N = 64;
+  const VOCAB = ["A", "B", "C", "D"];
+  // A tiny deterministic-ish pattern: A->B->C->D->A... with occasional branch, so learning is visible but not trivial.
+  const PATTERN = ["A","B","C","D","A","B","C","D","A","C","B","D","A","B","C","D"];
+
+  let synapses = {}; // key: token -> Float array of length N, weight per neuron
+  let epoch = 0;
+  let correct = 0;
+  let attempts = 0;
+  let cursor = 0; // position in PATTERN we're predicting
+  let dishEl, seqEl, predRowEl, logEl, flashEl;
+
+  function initSynapses() {
+    synapses = {};
+    VOCAB.forEach(tok => {
+      synapses[tok] = new Array(N).fill(0).map(() => 0.08 + Math.random() * 0.04);
+    });
+  }
+
+  function stimPattern(token) {
+    // deterministic "electrode map": each token lights a semi-fixed subset of neurons
+    const seed = token.charCodeAt(0);
+    const idx = [];
+    for (let i = 0; i < N; i++) {
+      const h = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453;
+      if ((h - Math.floor(h)) > 0.55) idx.push(i);
+    }
+    return idx;
+  }
+
+  function render() {
+    dishEl.innerHTML = "";
+    for (let i = 0; i < N; i++) {
+      const d = document.createElement("div");
+      d.className = "neuron";
+      dishEl.appendChild(d);
+    }
+    document.getElementById("statEpoch").textContent = epoch;
+    document.getElementById("statAcc").textContent = attempts ? Math.round(100 * correct / attempts) + "%" : "0%";
+    const avgSyn = VOCAB.reduce((s, t) => s + synapses[t].reduce((a,b) => a+b, 0) / N, 0) / VOCAB.length;
+    document.getElementById("statSyn").textContent = avgSyn.toFixed(2);
+    document.getElementById("statStim").textContent = attempts * 12;
+    renderSeq();
+    renderPred();
+  }
+
+  function renderSeq() {
+    seqEl.innerHTML = "";
+    const start = Math.max(0, cursor - 5);
+    for (let i = start; i < cursor; i++) {
+      const s = document.createElement("div");
+      s.className = "tok ctx";
+      s.textContent = PATTERN[i % PATTERN.length];
+      seqEl.appendChild(s);
+    }
+    const t = document.createElement("div");
+    t.className = "tok target";
+    t.textContent = "?";
+    seqEl.appendChild(t);
+  }
+
+  function targetToken() {
+    return PATTERN[cursor % PATTERN.length];
+  }
+
+  function predictFromDish() {
+    // "fire" the dish based on the last context token's synapse weights, pick argmax with noise
+    const ctxTok = cursor === 0 ? PATTERN[PATTERN.length - 1] : PATTERN[(cursor - 1) % PATTERN.length];
+    const scores = {};
+    VOCAB.forEach(tok => {
+      const w = synapses[tok];
+      // correlate synapse strength for this token with the stim pattern of the context token
+      const stim = stimPattern(ctxTok);
+      let s = 0;
+      stim.forEach(i => s += w[i]);
+      scores[tok] = s / Math.max(1, stim.length) + (Math.random() - 0.5) * 0.05;
+    });
+    let best = VOCAB[0];
+    VOCAB.forEach(tok => { if (scores[tok] > scores[best]) best = tok; });
+    return { best, scores };
+  }
+
+  function renderPred() {
+    predRowEl.innerHTML = "";
+    const { scores } = predictFromDish();
+    const max = Math.max(...Object.values(scores), 0.001);
+    VOCAB.forEach(tok => {
+      const b = document.createElement("button");
+      b.className = "predbtn";
+      b.innerHTML = tok + '<span class="bar" style="width:' + Math.round(100 * scores[tok] / max) + '%"></span>';
+      b.onclick = () => userPick(tok);
+      predRowEl.appendChild(b);
+    });
+  }
+
+  function userPick(userTok) {
+    // user is just choosing which candidate to "test" — the dish's own guess drives learning
+    stimulateAndLearn(userTok);
+  }
+
+  function fireNeurons(idxList, weak) {
+    const cells = dishEl.children;
+    idxList.forEach(i => {
+      if (cells[i]) cells[i].className = "neuron " + (weak ? "weak" : "fired");
+    });
+  }
+
+  function stimulateAndLearn(userGuess) {
+    const target = targetToken();
+    const ctxTok = cursor === 0 ? PATTERN[PATTERN.length - 1] : PATTERN[(cursor - 1) % PATTERN.length];
+    const { best } = predictFromDish();
+    const idx = stimPattern(ctxTok);
+    fireNeurons(idx, false);
+
+    const dishCorrect = best === target;
+    attempts++;
+    if (dishCorrect) correct++;
+
+    // reinforcement: strengthen synapses for the correct token if dish matched, else nudge toward correct answer
+    const lr = 0.06;
+    if (dishCorrect) {
+      idx.forEach(i => synapses[target][i] = Math.min(1, synapses[target][i] + lr));
+    } else {
+      idx.forEach(i => {
+        synapses[target][i] = Math.min(1, synapses[target][i] + lr * 0.8);
+        synapses[best][i] = Math.max(0.02, synapses[best][i] - lr * 0.5);
+      });
+    }
+
+    logLine(userGuess, target, best, dishCorrect);
+
+    setTimeout(() => {
+      cursor = (cursor + 1) % 999999;
+      epoch++;
+      render();
+    }, 220);
+
+    flashEl.textContent = dishCorrect ? "dish predicted " + best + " — correct" : "dish predicted " + best + ", target was " + target;
+    flashEl.className = "flash " + (dishCorrect ? "good" : "bad");
+  }
+
+  function logLine(userGuess, target, dishGuess, ok) {
+    const line = document.createElement("div");
+    line.innerHTML = "epoch " + epoch + " — context stimulus fired, dish guessed <b>" + dishGuess +
+      "</b>, actual next token was <b>" + target + "</b> " +
+      (ok ? '<span class="ok">[reinforced]</span>' : '<span class="no">[corrected]</span>');
+    logEl.prepend(line);
+    while (logEl.children.length > 40) logEl.removeChild(logEl.lastChild);
+  }
+
+  function autoTrain(n) {
+    let i = 0;
+    const step = () => {
+      if (i >= n) return;
+      const { best } = predictFromDish();
+      stimulateAndLearnSilent(best);
+      i++;
+      setTimeout(step, 30);
+    };
+    step();
+  }
+
+  function stimulateAndLearnSilent(userGuess) {
+    const target = targetToken();
+    const ctxTok = cursor === 0 ? PATTERN[PATTERN.length - 1] : PATTERN[(cursor - 1) % PATTERN.length];
+    const { best } = predictFromDish();
+    const idx = stimPattern(ctxTok);
+    const dishCorrect = best === target;
+    attempts++;
+    if (dishCorrect) correct++;
+    const lr = 0.06;
+    if (dishCorrect) {
+      idx.forEach(i => synapses[target][i] = Math.min(1, synapses[target][i] + lr));
+    } else {
+      idx.forEach(i => {
+        synapses[target][i] = Math.min(1, synapses[target][i] + lr * 0.8);
+        synapses[best][i] = Math.max(0.02, synapses[best][i] - lr * 0.5);
+      });
+    }
+    cursor = (cursor + 1) % 999999;
+    epoch++;
+    render();
+  }
+
+  function reset() {
+    initSynapses();
+    epoch = 0; correct = 0; attempts = 0; cursor = 0;
+    render();
+    flashEl.textContent = "";
+    logEl.innerHTML = "";
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    dishEl = document.getElementById("dish");
+    seqEl = document.getElementById("seqDisplay");
+    predRowEl = document.getElementById("predRow");
+    logEl = document.getElementById("log");
+    flashEl = document.getElementById("flash");
+
+    document.getElementById("stimBtn").onclick = () => {
+      const { best } = predictFromDish();
+      stimulateAndLearn(best);
+    };
+    document.getElementById("autoBtn").onclick = () => autoTrain(25);
+    document.getElementById("resetBtn").onclick = reset;
+
+    initSynapses();
+    render();
+  });
+})();
+</script>
