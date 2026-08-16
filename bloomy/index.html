@@ -1,0 +1,425 @@
+<title>Skill Gap Trail</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0f1420; --panel:#161d2e; --panel2:#1c2438; --line:#2a3350;
+    --text:#eef1f8; --muted:#9aa4bf; --accent:#5ec8a8; --accent2:#f2b84b;
+    --danger:#e2637a; --locked:#3a4360;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, #1a2540 0%, var(--bg) 60%);
+    color:var(--text); min-height:100vh; padding:32px 20px 60px;
+  }
+  .wrap{max-width:980px; margin:0 auto;}
+  header{text-align:center; margin-bottom:28px;}
+  header h1{
+    font-size:2.1rem; margin:0 0 6px; letter-spacing:-0.02em;
+    background:linear-gradient(90deg,#7fe0c4,#f2b84b); -webkit-background-clip:text;
+    background-clip:text; color:transparent;
+  }
+  header p{color:var(--muted); margin:0; font-size:1rem;}
+  .layout{display:grid; grid-template-columns:300px 1fr; gap:20px;}
+  @media(max-width:800px){.layout{grid-template-columns:1fr;}}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:18px 20px;
+  }
+  .card + .card{margin-top:16px;}
+  .card h2{margin:0 0 12px; font-size:1rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+
+  /* Skill tree */
+  .tree{display:flex; flex-direction:column; gap:8px;}
+  .node{
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border-radius:10px; border:1px solid var(--line); background:var(--panel2);
+    transition:all .25s ease; position:relative;
+  }
+  .node .dot{
+    width:14px; height:14px; border-radius:50%; flex:none; border:2px solid var(--locked);
+    background:transparent; transition:all .25s ease;
+  }
+  .node.locked{opacity:.45;}
+  .node.gap .dot{border-color:var(--danger); background:var(--danger);}
+  .node.mastered .dot{border-color:var(--accent); background:var(--accent);}
+  .node.active{border-color:var(--accent2); box-shadow:0 0 0 1px var(--accent2);}
+  .node .label{font-size:.92rem;}
+  .node .sub{font-size:.72rem; color:var(--muted); margin-top:1px;}
+  .node .tag{
+    margin-left:auto; font-size:.68rem; padding:2px 8px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap;
+  }
+  .node.gap .tag{color:var(--danger); border-color:var(--danger);}
+  .node.mastered .tag{color:var(--accent); border-color:var(--accent);}
+  .node.active .tag{color:var(--accent2); border-color:var(--accent2);}
+
+  .btn{
+    background:var(--accent); color:#08221a; border:none; border-radius:9px;
+    padding:10px 16px; font-weight:600; cursor:pointer; font-size:.92rem;
+    transition:transform .12s ease, filter .12s ease;
+  }
+  .btn:hover{filter:brightness(1.08); transform:translateY(-1px);}
+  .btn:disabled{background:var(--locked); color:var(--muted); cursor:not-allowed; transform:none;}
+  .btn.secondary{background:transparent; border:1px solid var(--line); color:var(--text);}
+  .btn.small{padding:7px 12px; font-size:.82rem;}
+
+  /* Diagnostic */
+  #diagStage .q{margin-bottom:14px;}
+  #diagStage .q p{margin:0 0 10px; font-size:.98rem;}
+  .choices{display:flex; flex-wrap:wrap; gap:8px;}
+  .choice{
+    padding:9px 14px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); cursor:pointer; font-size:.9rem; transition:all .15s ease;
+  }
+  .choice:hover{border-color:var(--accent);}
+  .choice.correct{border-color:var(--accent); background:#123328;}
+  .choice.wrong{border-color:var(--danger); background:#361a22;}
+  .choice.disabled{pointer-events:none;}
+  .progressbar{height:8px; border-radius:999px; background:var(--panel2); overflow:hidden; border:1px solid var(--line); margin-top:4px;}
+  .progressbar > div{height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); width:0%; transition:width .35s ease;}
+  .meta-row{display:flex; justify-content:space-between; font-size:.78rem; color:var(--muted); margin-top:6px;}
+
+  /* Practice */
+  .practice-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .practice-head .lvl{font-size:.78rem; color:var(--muted);}
+  .practice-q{
+    background:var(--panel2); border:1px solid var(--line); border-radius:12px;
+    padding:22px; text-align:center; font-size:1.4rem; margin-bottom:14px;
+  }
+  .feedback{min-height:22px; text-align:center; font-size:.88rem; margin-bottom:10px;}
+  .feedback.good{color:var(--accent);}
+  .feedback.bad{color:var(--danger);}
+  .mastery-row{display:flex; align-items:center; gap:10px; margin-top:14px;}
+  .mastery-row .progressbar{flex:1;}
+  .answer-row{display:flex; gap:8px; justify-content:center; flex-wrap:wrap;}
+  .center{text-align:center;}
+  .hint{color:var(--muted); font-size:.82rem; margin-top:10px;}
+  .celebrate{
+    text-align:center; padding:30px 10px;
+  }
+  .celebrate h3{color:var(--accent); font-size:1.4rem; margin-bottom:6px;}
+  footer{
+    text-align:center; color:var(--muted); font-size:.78rem; margin-top:40px;
+    border-top:1px solid var(--line); padding-top:18px;
+  }
+  .badge{
+    display:inline-block; font-size:.7rem; padding:3px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); margin-left:8px; vertical-align:middle;
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Skill Gap Trail</h1>
+    <p>A tiny mastery-learning engine. Diagnose the gaps, walk the trail in order, prove mastery before moving on.</p>
+  </header>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Fractions Trail <span class="badge">demo skill map</span></h2>
+      <div class="tree" id="tree"></div>
+    </div>
+
+    <div>
+      <div class="card" id="diagCard">
+        <h2>Step 1 — Quick Diagnostic</h2>
+        <div id="diagStage"></div>
+      </div>
+
+      <div class="card" id="practiceCard" style="display:none;">
+        <h2>Step 2 — Adaptive Practice</h2>
+        <div id="practiceStage"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Bloomy (YC S26). Not affiliated with Bloomy.
+  </footer>
+</div>
+
+<script>
+/* ---------- synthetic skill graph ---------- */
+const SKILLS = [
+  { id:'partition',  label:'Partitioning Wholes',        sub:'splitting a shape into equal parts', prereq:null },
+  { id:'identify',   label:'Identifying a Fraction',      sub:'reading a/b from a picture',         prereq:'partition' },
+  { id:'equivalent', label:'Equivalent Fractions',        sub:'1/2 = 2/4 = 3/6',                     prereq:'identify' },
+  { id:'compare',    label:'Comparing Fractions',         sub:'same denominator or numerator',       prereq:'equivalent' },
+  { id:'addsame',    label:'Adding, Same Denominator',    sub:'1/5 + 2/5',                            prereq:'compare' },
+  { id:'addunlike',  label:'Adding, Unlike Denominators', sub:'1/3 + 1/4',                            prereq:'addsame' },
+];
+
+const DIAG_QUESTIONS = [
+  { skill:'partition',  q:'A pizza is cut into 4 equal slices. How many slices make the whole pizza?', choices:['2','4','8'], answer:'4' },
+  { skill:'identify',   q:'3 of 5 equal parts are shaded. What fraction is shaded?', choices:['3/5','5/3','2/5'], answer:'3/5' },
+  { skill:'equivalent', q:'Which fraction equals 2/4?', choices:['1/3','1/2','3/8'], answer:'1/2' },
+  { skill:'compare',    q:'Which is larger, 3/8 or 5/8?', choices:['3/8','5/8','equal'], answer:'5/8' },
+  { skill:'addsame',    q:'What is 2/6 + 3/6?', choices:['5/6','5/12','1/6'], answer:'5/6' },
+  { skill:'addunlike',  q:'What is 1/2 + 1/4?', choices:['2/6','3/4','1/6'], answer:'3/4' },
+];
+
+/* Synthetic "prior performance" so the diagnostic tells an interesting story:
+   student is solid through equivalent fractions, then trips on compare. */
+const SIMULATED_STRUGGLE = new Set(['compare','addsame','addunlike']);
+
+let state = {
+  diagIndex: 0,
+  results: {},       // skill -> true/false
+  gapOrder: [],       // ordered list of skills to walk
+  currentGap: 0,
+  practice: null,
+};
+
+function el(html){
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstChild;
+}
+
+/* ---------- tree rendering ---------- */
+function statusOf(skill){
+  if (skill.id in state.results){
+    return state.results[skill.id] ? 'mastered' : 'gap';
+  }
+  return 'unknown';
+}
+
+function renderTree(){
+  const tree = document.getElementById('tree');
+  tree.innerHTML = '';
+  SKILLS.forEach(skill=>{
+    let cls = 'node';
+    const st = statusOf(skill);
+    let tag = 'not tested';
+    if (st === 'mastered'){ cls += ' mastered'; tag = 'solid'; }
+    else if (st === 'gap'){ cls += ' gap'; tag = 'gap found'; }
+
+    if (state.gapOrder.length && state.gapOrder[state.currentGap] === skill.id && state.practice && !state.practice.done){
+      cls += ' active'; tag = 'practicing';
+    }
+    if (state.practice && state.practice.done && state.gapOrder.includes(skill.id) &&
+        state.gapOrder.indexOf(skill.id) < state.currentGap){
+      cls = 'node mastered'; tag = 'mastered ✓';
+    }
+
+    const node = el(`
+      <div class="${cls}">
+        <div class="dot"></div>
+        <div>
+          <div class="label">${skill.label}</div>
+          <div class="sub">${skill.sub}</div>
+        </div>
+        <div class="tag">${tag}</div>
+      </div>
+    `);
+    tree.appendChild(node);
+  });
+}
+renderTree();
+
+/* ---------- Step 1: diagnostic ---------- */
+function renderDiag(){
+  const stage = document.getElementById('diagStage');
+  if (state.diagIndex >= DIAG_QUESTIONS.length){
+    finishDiagnostic();
+    return;
+  }
+  const item = DIAG_QUESTIONS[state.diagIndex];
+  stage.innerHTML = '';
+  const pct = Math.round((state.diagIndex / DIAG_QUESTIONS.length) * 100);
+  const box = el(`
+    <div class="q">
+      <p><strong>Q${state.diagIndex+1}.</strong> ${item.q}</p>
+      <div class="choices"></div>
+      <div class="progressbar"><div style="width:${pct}%"></div></div>
+      <div class="meta-row"><span>Diagnostic in progress</span><span>${state.diagIndex}/${DIAG_QUESTIONS.length}</span></div>
+    </div>
+  `);
+  const choicesWrap = box.querySelector('.choices');
+  item.choices.forEach(c=>{
+    const btn = el(`<div class="choice">${c}</div>`);
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.choice').forEach(x=>x.classList.add('disabled'));
+      // simulate the student's real ability rather than trusting a click:
+      // this keeps the demo's "gap map" consistent every run, like a seeded sample dataset.
+      const trueAnswerRight = !SIMULATED_STRUGGLE.has(item.skill);
+      btn.classList.add(c === item.answer ? 'correct' : 'wrong');
+      state.results[item.skill] = trueAnswerRight;
+      setTimeout(()=>{
+        state.diagIndex++;
+        renderDiag();
+        renderTree();
+      }, 550);
+    });
+    choicesWrap.appendChild(btn);
+  });
+  stage.appendChild(box);
+}
+renderDiag();
+
+function finishDiagnostic(){
+  const stage = document.getElementById('diagStage');
+  state.gapOrder = SKILLS.filter(s => state.results[s.id] === false).map(s=>s.id);
+  const gapLabels = state.gapOrder.map(id => SKILLS.find(s=>s.id===id).label);
+
+  stage.innerHTML = '';
+  const summary = el(`
+    <div>
+      <p style="margin-top:0;">Diagnostic complete. Here's what the engine found, in prerequisite order — not the order the questions were asked in:</p>
+      <ol style="padding-left:20px; color:var(--text); font-size:.92rem;">
+        ${gapLabels.length ? gapLabels.map(l=>`<li>${l}</li>`).join('') : '<li>No gaps found — student is at grade level on this trail.</li>'}
+      </ol>
+      <p style="color:var(--muted); font-size:.85rem;">The trail always walks gaps in dependency order: fixing "Comparing Fractions" before "Adding, Unlike Denominators" matters, because the second skill silently assumes the first.</p>
+      <button class="btn" id="startPath">Start personalized path →</button>
+    </div>
+  `);
+  stage.appendChild(summary);
+  document.getElementById('startPath').addEventListener('click', ()=>{
+    document.getElementById('practiceCard').style.display = 'block';
+    document.getElementById('practiceCard').scrollIntoView({behavior:'smooth', block:'nearest'});
+    startNextGap();
+  });
+}
+
+/* ---------- Step 2: adaptive practice ---------- */
+const PRACTICE_BANK = {
+  compare: [
+    { level:1, prompt:'Which is bigger: 1/4 or 3/4?', choices:['1/4','3/4'], answer:'3/4' },
+    { level:2, prompt:'Which is bigger: 3/5 or 3/8?', choices:['3/5','3/8'], answer:'3/5' },
+    { level:3, prompt:'Which is bigger: 5/9 or 4/7?', choices:['5/9','4/7'], answer:'4/7' },
+  ],
+  addsame: [
+    { level:1, prompt:'1/4 + 2/4 = ?', choices:['3/4','3/8'], answer:'3/4' },
+    { level:2, prompt:'3/7 + 2/7 = ?', choices:['5/14','5/7'], answer:'5/7' },
+    { level:3, prompt:'4/9 + 4/9 = ?', choices:['8/9','8/18'], answer:'8/9' },
+  ],
+  addunlike: [
+    { level:1, prompt:'1/2 + 1/4 = ?', choices:['3/4','2/6'], answer:'3/4' },
+    { level:2, prompt:'1/3 + 1/6 = ?', choices:['1/2','2/9'], answer:'1/2' },
+    { level:3, prompt:'2/5 + 1/3 = ?', choices:['11/15','3/8'], answer:'11/15' },
+  ],
+};
+
+const MASTERY_TARGET = 90;
+
+function startNextGap(){
+  if (state.currentGap >= state.gapOrder.length){
+    renderAllDone();
+    return;
+  }
+  const skillId = state.gapOrder[state.currentGap];
+  state.practice = {
+    skillId, level:1, mastery:0, streak:0, done:false,
+  };
+  renderTree();
+  renderPractice();
+}
+
+function pickQuestion(skillId, level){
+  const bank = PRACTICE_BANK[skillId];
+  const atLevel = bank.filter(q=>q.level === level);
+  const pool = atLevel.length ? atLevel : bank;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function renderPractice(){
+  const stage = document.getElementById('practiceStage');
+  const p = state.practice;
+  const skill = SKILLS.find(s=>s.id === p.skillId);
+  const q = pickQuestion(p.skillId, p.level);
+
+  stage.innerHTML = '';
+  const wrap = el(`
+    <div>
+      <div class="practice-head">
+        <div><strong>${skill.label}</strong></div>
+        <div class="lvl">difficulty: ${'●'.repeat(p.level)}${'○'.repeat(3-p.level)}</div>
+      </div>
+      <div class="practice-q">${q.prompt}</div>
+      <div class="answer-row"></div>
+      <div class="feedback" id="fb"></div>
+      <div class="mastery-row">
+        <span style="font-size:.8rem; color:var(--muted);">mastery</span>
+        <div class="progressbar"><div style="width:${p.mastery}%"></div></div>
+        <span style="font-size:.8rem; color:var(--muted);">${p.mastery}% / ${MASTERY_TARGET}%</span>
+      </div>
+      <div class="hint">Answer correctly and the trail raises the difficulty; miss one and it backs off — mastery only locks in at ${MASTERY_TARGET}%, no scaffolding tricks.</div>
+    </div>
+  `);
+  const answerRow = wrap.querySelector('.answer-row');
+  q.choices.forEach(c=>{
+    const btn = el(`<div class="choice">${c}</div>`);
+    btn.addEventListener('click', ()=> handleAnswer(c === q.answer, btn, wrap));
+    answerRow.appendChild(btn);
+  });
+  stage.appendChild(wrap);
+}
+
+function handleAnswer(correct, btn, wrap){
+  wrap.querySelectorAll('.choice').forEach(x=>x.classList.add('disabled'));
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const fb = wrap.querySelector('#fb');
+  const p = state.practice;
+
+  if (correct){
+    p.streak++;
+    p.mastery = Math.min(100, p.mastery + 18);
+    fb.textContent = 'Correct — nudging difficulty up.';
+    fb.className = 'feedback good';
+    if (p.level < 3 && p.streak >= 2) { p.level++; p.streak = 0; }
+  } else {
+    p.streak = 0;
+    p.mastery = Math.max(0, p.mastery - 12);
+    fb.textContent = 'Not quite — backing off difficulty and re-checking the fundamentals.';
+    fb.className = 'feedback bad';
+    if (p.level > 1) p.level--;
+  }
+
+  renderTree();
+
+  setTimeout(()=>{
+    if (p.mastery >= MASTERY_TARGET){
+      p.done = true;
+      state.currentGap++;
+      renderTree();
+      renderGapComplete();
+    } else {
+      renderPractice();
+    }
+  }, 700);
+}
+
+function renderGapComplete(){
+  const stage = document.getElementById('practiceStage');
+  const doneSkill = SKILLS.find(s=>s.id === state.gapOrder[state.currentGap-1]);
+  const hasNext = state.currentGap < state.gapOrder.length;
+  stage.innerHTML = '';
+  stage.appendChild(el(`
+    <div class="celebrate">
+      <h3>${doneSkill.label} — mastered ✓</h3>
+      <p style="color:var(--muted); margin-bottom:16px;">Locked in at ${MASTERY_TARGET}%+ with no hints on the final questions.</p>
+      <button class="btn" id="nextBtn">${hasNext ? 'Continue to next gap →' : 'Finish trail →'}</button>
+    </div>
+  `));
+  document.getElementById('nextBtn').addEventListener('click', startNextGap);
+}
+
+function renderAllDone(){
+  const stage = document.getElementById('practiceStage');
+  stage.innerHTML = '';
+  stage.appendChild(el(`
+    <div class="celebrate">
+      <h3>Trail complete</h3>
+      <p style="color:var(--muted);">Every diagnosed gap is now above ${MASTERY_TARGET}% mastery, in the order the skill map required. In a real system this is where the next diagnostic would run, one level up.</p>
+      <button class="btn secondary" id="restartBtn">Restart demo</button>
+    </div>
+  `));
+  document.getElementById('restartBtn').addEventListener('click', ()=>{
+    state = { diagIndex:0, results:{}, gapOrder:[], currentGap:0, practice:null };
+    document.getElementById('practiceCard').style.display = 'none';
+    renderTree();
+    renderDiag();
+  });
+}
+</script>

@@ -1,0 +1,291 @@
+<title>Loomwork — a shared memory layer for agents</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161923; --panel2:#1c202c; --line:#2a2f3d;
+    --text:#e7e9ee; --sub:#9aa1b2; --accent:#7cc4ff; --accent2:#ffb86b;
+    --good:#7ee0a8; --bad:#ff8f8f; --mono:'SF Mono',Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    line-height:1.5;
+  }
+  header{padding:32px 24px 8px; text-align:center;}
+  header h1{margin:0 0 6px; font-size:26px; letter-spacing:-0.02em;}
+  header p{margin:0; color:var(--sub); font-size:15px; max-width:640px; margin:0 auto;}
+  .wrap{max-width:1100px; margin:0 auto; padding:24px;}
+
+  .modebar{display:flex; justify-content:center; gap:10px; margin:22px 0 26px;}
+  .modebar button{
+    background:var(--panel); border:1px solid var(--line); color:var(--sub);
+    padding:9px 18px; border-radius:20px; font-size:13.5px; cursor:pointer;
+    transition:all .15s;
+  }
+  .modebar button.active{background:var(--accent); color:#0b1420; border-color:var(--accent); font-weight:600;}
+  .modebar button:hover:not(.active){border-color:var(--accent); color:var(--text);}
+
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
+  .card h3{
+    margin:0; padding:12px 16px; font-size:12.5px; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--sub); border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .card h3 span.tag{
+    background:var(--panel2); color:var(--accent); padding:2px 8px; border-radius:6px;
+    font-size:10.5px; text-transform:none; letter-spacing:0;
+  }
+
+  .diff{font-family:var(--mono); font-size:13px;}
+  .diff .file{padding:10px 16px; color:var(--sub); border-bottom:1px solid var(--line); font-size:12.5px;}
+  .diff .row{
+    display:flex; padding:4px 16px; cursor:pointer; border-left:3px solid transparent;
+    white-space:pre;
+  }
+  .diff .row:hover{background:var(--panel2);}
+  .diff .row.selected{background:#213043; border-left-color:var(--accent);}
+  .diff .row .num{width:28px; color:#565d70; user-select:none; flex-shrink:0;}
+  .diff .row.add{color:var(--good);}
+  .diff .row.add .num{color:#4c9c6f;}
+  .diff .row.ctx{color:#c3c7d1;}
+  .diff .row.hint{
+    margin-left:44px; margin-top:-2px; margin-bottom:4px; font-size:11px;
+    color:var(--accent2); opacity:.85;
+  }
+
+  .answer{min-height:340px; padding:16px; font-size:14px;}
+  .placeholder{color:var(--sub); font-size:13.5px; padding:20px 4px; text-align:center;}
+  .sources{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px;}
+  .src-pill{
+    font-size:11px; padding:4px 9px; border-radius:20px; border:1px solid var(--line);
+    color:var(--sub); background:var(--panel2); opacity:0; transform:translateY(4px);
+    animation:pop .35s forwards;
+  }
+  @keyframes pop{to{opacity:1; transform:translateY(0);}}
+  .src-pill.slack{color:#c9b8ff; border-color:#4b3f7a;}
+  .src-pill.ticket{color:#ffcf8a; border-color:#7a5f3f;}
+  .src-pill.doc{color:#8ad1ff; border-color:#3f5e7a;}
+  .src-pill.commit{color:#8ae0a8; border-color:#3f7a56;}
+
+  .narrative{opacity:0; animation:fadein .5s forwards .3s;}
+  @keyframes fadein{to{opacity:1;}}
+  .narrative p{margin:0 0 10px;}
+  .narrative .frag{
+    background:var(--panel2); border-left:3px solid var(--accent); border-radius:0 6px 6px 0;
+    padding:8px 12px; margin:8px 0; font-size:13px; color:#d3d7e0;
+  }
+  .narrative .frag b{color:var(--accent);}
+
+  .single-frag{
+    background:var(--panel2); border-left:3px solid var(--bad); border-radius:0 6px 6px 0;
+    padding:10px 14px; font-size:13.5px; color:#d3d7e0; opacity:0; animation:fadein .4s forwards .3s;
+  }
+  .single-note{color:var(--bad); font-size:12.5px; margin-top:12px; opacity:0; animation:fadein .4s forwards .6s;}
+
+  .skill{
+    margin-top:16px; padding:12px 14px; background:#182417; border:1px solid #2c4a2c;
+    border-radius:8px; font-size:12.5px; color:var(--good); opacity:0; animation:fadein .4s forwards .9s;
+  }
+  .skill b{display:block; color:#a7f0c1; margin-bottom:3px; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em;}
+
+  .spinner{
+    display:inline-block; width:12px; height:12px; border:2px solid var(--line);
+    border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite;
+    margin-right:8px; vertical-align:-2px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .searching{color:var(--sub); font-size:13.5px; padding:10px 4px;}
+
+  footer{
+    text-align:center; color:var(--sub); font-size:12px; padding:40px 20px 30px;
+    border-top:1px solid var(--line); margin-top:40px;
+  }
+</style>
+
+<header>
+  <h1>Loomwork</h1>
+  <p>A toy demo of a shared memory layer for coding agents. Pick a changed line in the diff below and ask why it's there — then compare what one tool sees versus what a team-wide memory layer sees.</p>
+</header>
+
+<div class="wrap">
+  <div class="modebar">
+    <button id="btn-single" class="active">Single tool (one thread)</button>
+    <button id="btn-shared">Shared memory (reconciled)</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>pull_request #482 <span class="tag" id="diff-tag">rate_limiter.py</span></h3>
+      <div class="diff" id="diff"></div>
+    </div>
+
+    <div class="card">
+      <h3>Why this line? <span class="tag" id="mode-tag">single tool</span></h3>
+      <div class="answer" id="answer">
+        <div class="placeholder">Click a highlighted line on the left to ask why it changed.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Glen (YC S26). Not affiliated with Glen.</footer>
+
+<script>
+const DIFF = [
+  {n:478, t:'    def check(self, key: str) -> bool:', cls:'ctx'},
+  {n:479, t:'        now = time.monotonic()', cls:'ctx'},
+  {n:480, t:'-       window = 60', cls:'del', click:false},
+  {n:481, t:'+       window = 90 if key.startswith("webhook:") else 60', cls:'add', click:true, id:'window'},
+  {n:482, t:'        bucket = self._buckets.setdefault(key, [])', cls:'ctx'},
+  {n:483, t:'        bucket[:] = [t for t in bucket if now - t < window]', cls:'ctx'},
+  {n:484, t:'-       if len(bucket) >= 30:', cls:'del', click:false},
+  {n:485, t:'+       if len(bucket) >= (12 if key.startswith("webhook:") else 30):', cls:'add', click:true, id:'limit'},
+  {n:486, t:'            return False', cls:'ctx'},
+  {n:487, t:'+       self._maybe_page(key, len(bucket))', cls:'add', click:true, id:'page'},
+  {n:488, t:'        bucket.append(now)', cls:'ctx'},
+  {n:489, t:'        return True', cls:'ctx'},
+];
+
+const CONTEXT = {
+  window: {
+    label: 'webhook window = 90s',
+    single: {
+      source: 'slack',
+      pill: 'Slack · #incidents',
+      text: '"can we just bump the webhook window, partner retries are getting throttled" — Priya, 11:42am'
+    },
+    frags: [
+      {src:'slack', pillClass:'slack', pillLabel:'Slack · #incidents, Mar 3',
+        html:'<b>Priya (on-call):</b> "webhook retries from Acme are getting throttled at 60s, they back off exponentially so bursts land ~90s apart"'},
+      {src:'ticket', pillClass:'ticket', pillLabel:'Linear · ENG-1904',
+        html:'<b>Ticket ENG-1904:</b> "Increase webhook rate window to cover partner retry backoff (90s median across top 5 integrations)"'},
+      {src:'commit', pillClass:'commit', pillLabel:'prior PR #411',
+        html:'<b>PR #411 (2 months ago):</b> the original 60s window was chosen for interactive API calls, not webhooks — webhooks were added to the same limiter later without revisiting the window'},
+    ],
+    narrative: 'The window is widened specifically for <code>webhook:</code> keys because partner retry backoff (median ~90s, per ENG-1904) was getting throttled by a limit that was originally tuned for interactive requests, not webhooks — a distinction that only shows up once you connect the incident thread to the ticket to the original PR.'
+  },
+  limit: {
+    label: 'webhook cap = 12',
+    single: {
+      source: 'ticket',
+      pill: 'Linear · ENG-1904',
+      text: '"reduce burst cap for webhook lanes so a single noisy partner cannot starve the shared bucket"'
+    },
+    frags: [
+      {src:'ticket', pillClass:'ticket', pillLabel:'Linear · ENG-1904',
+        html:'<b>Ticket ENG-1904:</b> lower the webhook burst cap so one noisy partner cannot starve the shared bucket used by everything else'},
+      {src:'doc', pillClass:'doc', pillLabel:'Runbook · rate-limits.md',
+        html:'<b>Runbook (rate-limits.md):</b> "capacity budget: webhooks get 40% of a lane\'s burst allowance; interactive traffic gets the rest" — 12 is 40% of the 30 general cap'},
+      {src:'slack', pillClass:'slack', pillLabel:'Slack · #eng-infra, Mar 3',
+        html:'<b>Dan:</b> "just make sure 12 still clears our own load test replay, it sends ~9 webhooks in a burst"'},
+    ],
+    narrative: 'The 12 isn\'t arbitrary — it\'s 40% of the existing 30-request general cap, matching the capacity split documented in the team\'s rate-limit runbook, and it was sanity-checked against the internal load-test replay (~9 webhooks/burst) mentioned in Slack before merge.'
+  },
+  page: {
+    label: 'added _maybe_page() call',
+    single: {
+      source: 'commit',
+      pill: 'blame · rate_limiter.py',
+      text: 'no message on this line — the surrounding commit is titled "webhook tuning", nothing more'
+    },
+    frags: [
+      {src:'slack', pillClass:'slack', pillLabel:'Slack · #incidents, Feb 19',
+        html:'<b>Incident retro (Feb 19):</b> "we were silently dropping 20% of Acme\'s webhooks for 40 minutes before anyone noticed — no alert fired because rate-limit rejections aren\'t paged"'},
+      {src:'ticket', pillClass:'ticket', pillLabel:'Linear · ENG-1911',
+        html:'<b>Ticket ENG-1911 (follow-up to the retro):</b> "page on-call when a webhook key is repeatedly rejected, not just log it"'},
+      {src:'commit', pillClass:'commit', pillLabel:'PR #482 review thread',
+        html:'<b>Reviewer comment on this PR:</b> "should this page for every key or just webhook: keys? don\'t want interactive 429s waking anyone up" → resolved: webhook-only, see _maybe_page implementation'},
+    ],
+    narrative: 'This call exists because of a specific outage: a Feb 19 incident where webhook rejections were silent for 40 minutes with no page. ENG-1911 was opened as the direct follow-up, and the PR review thread clarifies it was deliberately scoped to webhook keys only, so interactive 429s stay quiet. None of that is visible from the diff or the commit message alone.'
+  }
+};
+
+let mode = 'single';
+let selected = null;
+
+function renderDiff(){
+  const el = document.getElementById('diff');
+  el.innerHTML = '<div class="file">rate_limiter.py — lines 478–489</div>';
+  DIFF.forEach(row => {
+    const div = document.createElement('div');
+    div.className = 'row ' + row.cls + (row.click ? '' : '');
+    if (row.id) div.dataset.id = row.id;
+    if (row.click) div.style.cursor = 'pointer';
+    if (selected === row.id) div.classList.add('selected');
+    div.innerHTML = '<span class="num">' + row.n + '</span><span>' + escapeHtml(row.t) + '</span>';
+    if (row.click) {
+      div.addEventListener('click', () => selectLine(row.id));
+    }
+    el.appendChild(div);
+  });
+}
+
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function selectLine(id){
+  selected = id;
+  renderDiff();
+  renderAnswer();
+}
+
+function renderAnswer(){
+  const el = document.getElementById('answer');
+  if (!selected) {
+    el.innerHTML = '<div class="placeholder">Click a highlighted line on the left to ask why it changed.</div>';
+    return;
+  }
+  const ctx = CONTEXT[selected];
+  el.innerHTML = '<div class="searching"><span class="spinner"></span>' +
+    (mode === 'single' ? 'checking blame on this line…' : 'reconciling Slack, tickets, prior PRs, and docs…') +
+    '</div>';
+
+  setTimeout(() => {
+    if (mode === 'single') {
+      renderSingle(ctx);
+    } else {
+      renderShared(ctx);
+    }
+  }, mode === 'single' ? 380 : 650);
+}
+
+function renderSingle(ctx){
+  const el = document.getElementById('answer');
+  el.innerHTML =
+    '<div class="sources"><span class="src-pill ' + ctx.single.source + '">' + ctx.single.pill + '</span></div>' +
+    '<div class="single-frag">' + escapeHtml(ctx.single.text) + '</div>' +
+    '<div class="single-note">⚠ this is the only fragment this tool can see — it doesn\'t know about the ticket, the runbook, or the incident that actually motivated the change.</div>';
+}
+
+function renderShared(ctx){
+  const el = document.getElementById('answer');
+  let pillsHtml = ctx.frags.map((f,i) =>
+    '<span class="src-pill ' + f.pillClass + '" style="animation-delay:' + (i*0.12) + 's">' + f.pillLabel + '</span>'
+  ).join('');
+  let fragsHtml = ctx.frags.map(f => '<div class="frag">' + f.html + '</div>').join('');
+  el.innerHTML =
+    '<div class="sources">' + pillsHtml + '</div>' +
+    '<div class="narrative">' +
+      '<p>' + ctx.narrative + '</p>' +
+      fragsHtml +
+      '<div class="skill"><b>Distilled skill saved for next time</b>Next agent that touches a rate limiter in this repo will get "webhook lanes need separate window/cap/paging logic — see ENG-1904, ENG-1911" injected automatically, no re-digging required.</div>' +
+    '</div>';
+}
+
+document.getElementById('btn-single').addEventListener('click', () => setMode('single'));
+document.getElementById('btn-shared').addEventListener('click', () => setMode('shared'));
+
+function setMode(m){
+  mode = m;
+  document.getElementById('btn-single').classList.toggle('active', m === 'single');
+  document.getElementById('btn-shared').classList.toggle('active', m === 'shared');
+  document.getElementById('mode-tag').textContent = m === 'single' ? 'single tool' : 'shared memory';
+  renderAnswer();
+}
+
+renderDiff();
+</script>
