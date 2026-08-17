@@ -1,291 +1,528 @@
-<title>Loomwork — a shared memory layer for agents</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Loom — the context an agent didn't have</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  :root{
-    --bg:#0f1115; --panel:#161923; --panel2:#1c202c; --line:#2a2f3d;
-    --text:#e7e9ee; --sub:#9aa1b2; --accent:#7cc4ff; --accent2:#ffb86b;
-    --good:#7ee0a8; --bad:#ff8f8f; --mono:'SF Mono',Consolas,Menlo,monospace;
+  :root {
+    --bg: #0f1115;
+    --panel: #161920;
+    --panel-2: #1c2029;
+    --border: #2a2f3a;
+    --text: #e7e9ee;
+    --muted: #8b93a3;
+    --accent: #6fd3a5;
+    --accent-dim: #2c4a3d;
+    --warn: #e0b15c;
+    --link: #7aa7ff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   }
-  *{box-sizing:border-box;}
-  body{
-    margin:0; background:var(--bg); color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    line-height:1.5;
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 20% -10%, #1a2030 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
-  header{padding:32px 24px 8px; text-align:center;}
-  header h1{margin:0 0 6px; font-size:26px; letter-spacing:-0.02em;}
-  header p{margin:0; color:var(--sub); font-size:15px; max-width:640px; margin:0 auto;}
-  .wrap{max-width:1100px; margin:0 auto; padding:24px;}
+  header {
+    padding: 28px 36px 10px;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 680px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.1fr 1.4fr;
+    gap: 18px;
+    padding: 18px 36px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .diff {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .diff-file {
+    padding: 8px 16px;
+    color: var(--muted);
+    font-size: 12px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .diff-line {
+    padding: 2px 16px 2px 12px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    white-space: pre;
+    display: flex;
+    gap: 10px;
+  }
+  .diff-line .ln { color: #4a5060; width: 22px; flex-shrink: 0; text-align: right; user-select: none; }
+  .diff-line.add { background: rgba(111,211,165,0.06); }
+  .diff-line.add .code { color: #b7e9cf; }
+  .diff-line.ctx .code { color: #9096a6; }
+  .diff-line:hover { border-left-color: var(--accent); background: rgba(111,211,165,0.1); }
+  .diff-line.selected { border-left-color: var(--accent); background: rgba(111,211,165,0.16); }
+  .diff-line .hint {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--accent);
+    opacity: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .diff-line:hover .hint, .diff-line.selected .hint { opacity: 0.8; }
 
-  .modebar{display:flex; justify-content:center; gap:10px; margin:22px 0 26px;}
-  .modebar button{
-    background:var(--panel); border:1px solid var(--line); color:var(--sub);
-    padding:9px 18px; border-radius:20px; font-size:13.5px; cursor:pointer;
-    transition:all .15s;
+  .sources {
+    padding: 14px 16px 4px;
   }
-  .modebar button.active{background:var(--accent); color:#0b1420; border-color:var(--accent); font-weight:600;}
-  .modebar button:hover:not(.active){border-color:var(--accent); color:var(--text);}
+  .source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 4px 9px;
+    border-radius: 999px;
+    margin: 0 6px 8px 0;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #3d4453; }
+  .dot.on { background: var(--accent); }
 
-  .grid{display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start;}
-  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+  .result-body { padding: 4px 16px 18px; min-height: 220px; }
+  .placeholder {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 30px 4px;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .loading-line {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
+    padding: 3px 0;
+    opacity: 0;
+    animation: fadeIn 0.25s forwards;
+  }
+  @keyframes fadeIn { to { opacity: 1; } }
+  .loading-line .ok { color: var(--accent); }
 
-  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
-  .card h3{
-    margin:0; padding:12px 16px; font-size:12.5px; text-transform:uppercase;
-    letter-spacing:.08em; color:var(--sub); border-bottom:1px solid var(--line);
-    display:flex; justify-content:space-between; align-items:center;
+  .verdict {
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--panel-2);
   }
-  .card h3 span.tag{
-    background:var(--panel2); color:var(--accent); padding:2px 8px; border-radius:6px;
-    font-size:10.5px; text-transform:none; letter-spacing:0;
+  .verdict h3 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .verdict p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.6; color: #d7dae1; }
+  .cite {
+    font-size: 11px;
+    color: var(--link);
+    background: rgba(122,167,255,0.08);
+    border: 1px solid rgba(122,167,255,0.25);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 4px;
+    display: inline-block;
+    margin-bottom: 4px;
+  }
+  .badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid;
+  }
+  .badge.fresh { color: var(--warn); border-color: rgba(224,177,92,0.4); background: rgba(224,177,92,0.08); }
+  .badge.cached { color: var(--accent); border-color: rgba(111,211,165,0.4); background: rgba(111,211,165,0.1); }
+
+  .ask-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .ask-row input {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 9px 11px;
+    font-size: 13px;
+  }
+  .ask-row input:focus { outline: 1px solid var(--accent); }
+  .ask-row button, .diff-file button {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(111,211,165,0.4);
+    padding: 9px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .ask-row button:hover { background: rgba(111,211,165,0.25); }
+  .ask-answer {
+    margin: 0 16px 16px;
+    font-size: 13px;
+    color: #d7dae1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    line-height: 1.6;
   }
 
-  .diff{font-family:var(--mono); font-size:13px;}
-  .diff .file{padding:10px 16px; color:var(--sub); border-bottom:1px solid var(--line); font-size:12.5px;}
-  .diff .row{
-    display:flex; padding:4px 16px; cursor:pointer; border-left:3px solid transparent;
-    white-space:pre;
+  .skills {
+    grid-column: 1 / -1;
+    margin-top: 4px;
   }
-  .diff .row:hover{background:var(--panel2);}
-  .diff .row.selected{background:#213043; border-left-color:var(--accent);}
-  .diff .row .num{width:28px; color:#565d70; user-select:none; flex-shrink:0;}
-  .diff .row.add{color:var(--good);}
-  .diff .row.add .num{color:#4c9c6f;}
-  .diff .row.ctx{color:#c3c7d1;}
-  .diff .row.hint{
-    margin-left:44px; margin-top:-2px; margin-bottom:4px; font-size:11px;
-    color:var(--accent2); opacity:.85;
+  .skills .panel-head { border-bottom: 1px solid var(--border); }
+  .skill-list { padding: 10px 16px 16px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .skill-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    width: 240px;
+    font-size: 12px;
+    color: var(--muted);
   }
+  .skill-card strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 12.5px; }
+  .skill-empty { color: var(--muted); font-size: 12.5px; padding: 6px 0 2px; }
 
-  .answer{min-height:340px; padding:16px; font-size:14px;}
-  .placeholder{color:var(--sub); font-size:13.5px; padding:20px 4px; text-align:center;}
-  .sources{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px;}
-  .src-pill{
-    font-size:11px; padding:4px 9px; border-radius:20px; border:1px solid var(--line);
-    color:var(--sub); background:var(--panel2); opacity:0; transform:translateY(4px);
-    animation:pop .35s forwards;
+  footer {
+    text-align: center;
+    color: #5b6272;
+    font-size: 12px;
+    padding: 22px 16px 30px;
+    border-top: 1px solid var(--border);
+    margin-top: 18px;
   }
-  @keyframes pop{to{opacity:1; transform:translateY(0);}}
-  .src-pill.slack{color:#c9b8ff; border-color:#4b3f7a;}
-  .src-pill.ticket{color:#ffcf8a; border-color:#7a5f3f;}
-  .src-pill.doc{color:#8ad1ff; border-color:#3f5e7a;}
-  .src-pill.commit{color:#8ae0a8; border-color:#3f7a56;}
-
-  .narrative{opacity:0; animation:fadein .5s forwards .3s;}
-  @keyframes fadein{to{opacity:1;}}
-  .narrative p{margin:0 0 10px;}
-  .narrative .frag{
-    background:var(--panel2); border-left:3px solid var(--accent); border-radius:0 6px 6px 0;
-    padding:8px 12px; margin:8px 0; font-size:13px; color:#d3d7e0;
-  }
-  .narrative .frag b{color:var(--accent);}
-
-  .single-frag{
-    background:var(--panel2); border-left:3px solid var(--bad); border-radius:0 6px 6px 0;
-    padding:10px 14px; font-size:13.5px; color:#d3d7e0; opacity:0; animation:fadein .4s forwards .3s;
-  }
-  .single-note{color:var(--bad); font-size:12.5px; margin-top:12px; opacity:0; animation:fadein .4s forwards .6s;}
-
-  .skill{
-    margin-top:16px; padding:12px 14px; background:#182417; border:1px solid #2c4a2c;
-    border-radius:8px; font-size:12.5px; color:var(--good); opacity:0; animation:fadein .4s forwards .9s;
-  }
-  .skill b{display:block; color:#a7f0c1; margin-bottom:3px; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em;}
-
-  .spinner{
-    display:inline-block; width:12px; height:12px; border:2px solid var(--line);
-    border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite;
-    margin-right:8px; vertical-align:-2px;
-  }
-  @keyframes spin{to{transform:rotate(360deg);}}
-  .searching{color:var(--sub); font-size:13.5px; padding:10px 4px;}
-
-  footer{
-    text-align:center; color:var(--sub); font-size:12px; padding:40px 20px 30px;
-    border-top:1px solid var(--line); margin-top:40px;
-  }
+  footer a { color: #7c869c; }
 </style>
+</head>
+<body>
 
 <header>
-  <h1>Loomwork</h1>
-  <p>A toy demo of a shared memory layer for coding agents. Pick a changed line in the diff below and ask why it's there — then compare what one tool sees versus what a team-wide memory layer sees.</p>
+  <h1>Loom — reconciled context for the line you're staring at</h1>
+  <p>Most tools hand an agent one fragment: a diff, a thread, a ticket. Loom pulls every fragment that touches a given line — issue, chat, standup note, prior PR — and reconciles them into one answer, then keeps the reconciled answer as a reusable skill. Click a highlighted line below.</p>
 </header>
 
-<div class="wrap">
-  <div class="modebar">
-    <button id="btn-single" class="active">Single tool (one thread)</button>
-    <button id="btn-shared">Shared memory (reconciled)</button>
-  </div>
+<main>
+  <section class="panel">
+    <div class="panel-head"><span>pull_request #482 — diff</span><span id="fileTag">payments/retry.py</span></div>
+    <div class="diff" id="diff"></div>
+  </section>
 
-  <div class="grid">
-    <div class="card">
-      <h3>pull_request #482 <span class="tag" id="diff-tag">rate_limiter.py</span></h3>
-      <div class="diff" id="diff"></div>
+  <section class="panel" id="resultPanel">
+    <div class="panel-head">
+      <span>Reconciled context</span>
+      <span id="statusBadge"></span>
     </div>
-
-    <div class="card">
-      <h3>Why this line? <span class="tag" id="mode-tag">single tool</span></h3>
-      <div class="answer" id="answer">
-        <div class="placeholder">Click a highlighted line on the left to ask why it changed.</div>
-      </div>
+    <div class="sources" id="sourceChips"></div>
+    <div class="result-body" id="resultBody">
+      <div class="placeholder">Select a line on the left. Loom will gather everything that explains it.</div>
     </div>
-  </div>
-</div>
+    <div class="ask-row">
+      <input id="askInput" type="text" placeholder="Ask a follow-up, e.g. 'why not just increase the timeout instead?'" disabled>
+      <button id="askBtn" disabled>Ask</button>
+    </div>
+    <div id="askAnswer"></div>
+  </section>
 
-<footer>Independent demo built by Aarush Kandukoori, inspired by Glen (YC S26). Not affiliated with Glen.</footer>
+  <section class="panel skills">
+    <div class="panel-head"><span>Team skills distilled so far</span><span id="skillCount">0</span></div>
+    <div class="skill-list" id="skillList">
+      <div class="skill-empty">Nothing distilled yet — resolve a line to teach Loom something reusable.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Glen (YC S26). Not affiliated with Glen.
+</footer>
 
 <script>
-const DIFF = [
-  {n:478, t:'    def check(self, key: str) -> bool:', cls:'ctx'},
-  {n:479, t:'        now = time.monotonic()', cls:'ctx'},
-  {n:480, t:'-       window = 60', cls:'del', click:false},
-  {n:481, t:'+       window = 90 if key.startswith("webhook:") else 60', cls:'add', click:true, id:'window'},
-  {n:482, t:'        bucket = self._buckets.setdefault(key, [])', cls:'ctx'},
-  {n:483, t:'        bucket[:] = [t for t in bucket if now - t < window]', cls:'ctx'},
-  {n:484, t:'-       if len(bucket) >= 30:', cls:'del', click:false},
-  {n:485, t:'+       if len(bucket) >= (12 if key.startswith("webhook:") else 30):', cls:'add', click:true, id:'limit'},
-  {n:486, t:'            return False', cls:'ctx'},
-  {n:487, t:'+       self._maybe_page(key, len(bucket))', cls:'add', click:true, id:'page'},
-  {n:488, t:'        bucket.append(now)', cls:'ctx'},
-  {n:489, t:'        return True', cls:'ctx'},
-];
+(function () {
+  const diffLines = [
+    { ln: 41, type: 'ctx', code: 'def process_refund(charge_id, amount):' },
+    { ln: 42, type: 'ctx', code: '    charge = ledger.fetch(charge_id)' },
+    { ln: 43, type: 'add', code: '    for attempt in range(5):', id: 'retry-count' },
+    { ln: 44, type: 'add', code: '        delay = min(2 ** attempt, 30)', id: 'backoff-cap' },
+    { ln: 45, type: 'add', code: '        if attempt > 0 and charge.provider == "stripe_eu":', id: 'eu-branch' },
+    { ln: 46, type: 'add', code: '            time.sleep(delay + jitter(0.4))', id: 'jitter' },
+    { ln: 47, type: 'ctx', code: '        result = gateway.send(charge, amount)' },
+    { ln: 48, type: 'ctx', code: '        if result.ok:' },
+    { ln: 49, type: 'ctx', code: '            return result' },
+  ];
 
-const CONTEXT = {
-  window: {
-    label: 'webhook window = 90s',
-    single: {
-      source: 'slack',
-      pill: 'Slack · #incidents',
-      text: '"can we just bump the webhook window, partner retries are getting throttled" — Priya, 11:42am'
+  const knowledge = {
+    'retry-count': {
+      question: 'Why 5 attempts, specifically?',
+      sources: [
+        { tag: 'GH-482', name: 'Issue #482', on: true },
+        { tag: 'SLK', name: 'Slack #payments-oncall', on: true },
+        { tag: 'PPR', name: 'PR #401 (reverted)', on: true },
+        { tag: 'MTG', name: 'Standup notes, Mar 3', on: false },
+      ],
+      steps: [
+        'reading GH-482 — refund gateway timeout report',
+        'scanning #payments-oncall for related incident chatter',
+        'diffing against PR #401, which tried a different retry count',
+        'reconciling into one explanation'
+      ],
+      verdict: {
+        title: 'Not a guess — it\'s the second attempt at this fix',
+        body: '5 was chosen after PR #401 shipped with 3 attempts and still lost ~2% of EU refunds during a gateway incident (GH-482). #payments-oncall traced those losses to the gateway needing ~4 tries to recover under load. 5 gives one attempt of headroom past the observed worst case, and PR #401 was reverted specifically because 3 wasn\'t enough — the count is load-bearing, not arbitrary.',
+        cites: ['GH-482', 'SLK', 'PPR']
+      },
+      skillName: 'Explaining retry-count choices in payments/retry.py',
+      answers: {
+        default: 'The count traces back to GH-482: 3 attempts (PR #401) wasn\'t enough during a real incident, and oncall chatter showed the gateway needed ~4 tries to recover. 5 leaves margin above that observed floor.',
+        timeout: 'A longer single timeout was discussed in #payments-oncall and rejected — the gateway holds a connection slot per in-flight request, so one long wait blocks capacity that retries free up between attempts.',
+        lower: 'Dropping below 5 reintroduces the exact failure PR #401 had: it covers the median case but not the load-spike case that caused the EU refund losses in GH-482.'
+      }
     },
-    frags: [
-      {src:'slack', pillClass:'slack', pillLabel:'Slack · #incidents, Mar 3',
-        html:'<b>Priya (on-call):</b> "webhook retries from Acme are getting throttled at 60s, they back off exponentially so bursts land ~90s apart"'},
-      {src:'ticket', pillClass:'ticket', pillLabel:'Linear · ENG-1904',
-        html:'<b>Ticket ENG-1904:</b> "Increase webhook rate window to cover partner retry backoff (90s median across top 5 integrations)"'},
-      {src:'commit', pillClass:'commit', pillLabel:'prior PR #411',
-        html:'<b>PR #411 (2 months ago):</b> the original 60s window was chosen for interactive API calls, not webhooks — webhooks were added to the same limiter later without revisiting the window'},
-    ],
-    narrative: 'The window is widened specifically for <code>webhook:</code> keys because partner retry backoff (median ~90s, per ENG-1904) was getting throttled by a limit that was originally tuned for interactive requests, not webhooks — a distinction that only shows up once you connect the incident thread to the ticket to the original PR.'
-  },
-  limit: {
-    label: 'webhook cap = 12',
-    single: {
-      source: 'ticket',
-      pill: 'Linear · ENG-1904',
-      text: '"reduce burst cap for webhook lanes so a single noisy partner cannot starve the shared bucket"'
+    'backoff-cap': {
+      question: 'Why cap backoff at 30s?',
+      sources: [
+        { tag: 'GH-482', name: 'Issue #482', on: true },
+        { tag: 'SLK', name: 'Slack #payments-oncall', on: true },
+        { tag: 'DOC', name: 'Gateway SLA doc', on: true },
+        { tag: 'PPR', name: 'PR #401 (reverted)', on: false },
+      ],
+      steps: [
+        'reading GH-482 for timing constraints',
+        'checking the gateway SLA doc for hard limits',
+        'cross-referencing #payments-oncall for the number\'s origin',
+        'reconciling into one explanation'
+      ],
+      verdict: {
+        title: 'The cap matches an external hard limit, not a preference',
+        body: 'The gateway SLA doc states requests idle past 30s get dropped by the provider\'s own load balancer, not just delayed. Uncapped exponential backoff would hit ~32s on attempt 5, right past that wall. The cap exists so the retry logic never trips a limit that isn\'t Loom\'s own team\'s to change.',
+        cites: ['DOC', 'GH-482']
+      },
+      skillName: 'Explaining timing constants tied to the gateway SLA',
+      answers: {
+        default: 'It\'s not tunable for taste — the gateway SLA doc says idle connections past 30s get dropped by the provider\'s load balancer, so the cap just stays under that wall.',
+        higher: 'Going higher risks tripping the provider\'s own 30s idle-drop, per the SLA doc — that failure looks identical to a timeout from our side, which is what made GH-482 hard to diagnose the first time.',
+      }
     },
-    frags: [
-      {src:'ticket', pillClass:'ticket', pillLabel:'Linear · ENG-1904',
-        html:'<b>Ticket ENG-1904:</b> lower the webhook burst cap so one noisy partner cannot starve the shared bucket used by everything else'},
-      {src:'doc', pillClass:'doc', pillLabel:'Runbook · rate-limits.md',
-        html:'<b>Runbook (rate-limits.md):</b> "capacity budget: webhooks get 40% of a lane\'s burst allowance; interactive traffic gets the rest" — 12 is 40% of the 30 general cap'},
-      {src:'slack', pillClass:'slack', pillLabel:'Slack · #eng-infra, Mar 3',
-        html:'<b>Dan:</b> "just make sure 12 still clears our own load test replay, it sends ~9 webhooks in a burst"'},
-    ],
-    narrative: 'The 12 isn\'t arbitrary — it\'s 40% of the existing 30-request general cap, matching the capacity split documented in the team\'s rate-limit runbook, and it was sanity-checked against the internal load-test replay (~9 webhooks/burst) mentioned in Slack before merge.'
-  },
-  page: {
-    label: 'added _maybe_page() call',
-    single: {
-      source: 'commit',
-      pill: 'blame · rate_limiter.py',
-      text: 'no message on this line — the surrounding commit is titled "webhook tuning", nothing more'
+    'eu-branch': {
+      question: 'Why single out stripe_eu here?',
+      sources: [
+        { tag: 'GH-482', name: 'Issue #482', on: true },
+        { tag: 'SLK', name: 'Slack #payments-oncall', on: true },
+        { tag: 'MTG', name: 'Standup notes, Mar 3', on: true },
+        { tag: 'PPR', name: 'PR #401 (reverted)', on: false },
+      ],
+      steps: [
+        'reading GH-482 — losses were EU-only',
+        'scanning standup notes from Mar 3 for the root cause writeup',
+        'checking #payments-oncall for why other providers were excluded',
+        'reconciling into one explanation'
+      ],
+      verdict: {
+        title: 'Scoped to EU because the failure was EU-only',
+        body: 'Standup notes from Mar 3 pin the root cause to stripe_eu\'s regional load balancer, which the US and APAC gateways don\'t share. Jitter/backoff was added only on that branch so the fix doesn\'t add latency to the 90% of refunds that were never actually failing.',
+        cites: ['MTG', 'GH-482']
+      },
+      skillName: 'Explaining provider-specific branches in payments code',
+      answers: {
+        default: 'Standup notes from Mar 3 traced the failure to stripe_eu\'s regional load balancer specifically — US and APAC don\'t share that infra, so branching avoided slowing down refunds that were never broken.',
+      }
     },
-    frags: [
-      {src:'slack', pillClass:'slack', pillLabel:'Slack · #incidents, Feb 19',
-        html:'<b>Incident retro (Feb 19):</b> "we were silently dropping 20% of Acme\'s webhooks for 40 minutes before anyone noticed — no alert fired because rate-limit rejections aren\'t paged"'},
-      {src:'ticket', pillClass:'ticket', pillLabel:'Linear · ENG-1911',
-        html:'<b>Ticket ENG-1911 (follow-up to the retro):</b> "page on-call when a webhook key is repeatedly rejected, not just log it"'},
-      {src:'commit', pillClass:'commit', pillLabel:'PR #482 review thread',
-        html:'<b>Reviewer comment on this PR:</b> "should this page for every key or just webhook: keys? don\'t want interactive 429s waking anyone up" → resolved: webhook-only, see _maybe_page implementation'},
-    ],
-    narrative: 'This call exists because of a specific outage: a Feb 19 incident where webhook rejections were silent for 40 minutes with no page. ENG-1911 was opened as the direct follow-up, and the PR review thread clarifies it was deliberately scoped to webhook keys only, so interactive 429s stay quiet. None of that is visible from the diff or the commit message alone.'
-  }
-};
-
-let mode = 'single';
-let selected = null;
-
-function renderDiff(){
-  const el = document.getElementById('diff');
-  el.innerHTML = '<div class="file">rate_limiter.py — lines 478–489</div>';
-  DIFF.forEach(row => {
-    const div = document.createElement('div');
-    div.className = 'row ' + row.cls + (row.click ? '' : '');
-    if (row.id) div.dataset.id = row.id;
-    if (row.click) div.style.cursor = 'pointer';
-    if (selected === row.id) div.classList.add('selected');
-    div.innerHTML = '<span class="num">' + row.n + '</span><span>' + escapeHtml(row.t) + '</span>';
-    if (row.click) {
-      div.addEventListener('click', () => selectLine(row.id));
+    'jitter': {
+      question: 'Why add jitter on top of backoff?',
+      sources: [
+        { tag: 'SLK', name: 'Slack #payments-oncall', on: true },
+        { tag: 'GH-482', name: 'Issue #482', on: true },
+        { tag: 'DOC', name: 'Gateway SLA doc', on: false },
+        { tag: 'PPR', name: 'PR #401 (reverted)', on: true },
+      ],
+      steps: [
+        'reading #payments-oncall for the incident timeline',
+        'checking whether PR #401 already tried plain backoff',
+        'reconciling into one explanation'
+      ],
+      verdict: {
+        title: 'Jitter exists because plain backoff caused a second failure mode',
+        body: 'PR #401 used fixed exponential backoff with no jitter. #payments-oncall noted that during the incident, thousands of refunds retried in lockstep and re-created the same load spike a few seconds later. Jitter spreads those retries out so recovery doesn\'t get re-triggered by the fix itself.',
+        cites: ['SLK', 'PPR']
+      },
+      skillName: 'Explaining jitter usage in retry logic',
+      answers: {
+        default: 'Plain backoff (PR #401) had every failed request retry on the same clock, which re-created the load spike a few seconds later — jitter spreads that out.',
+      }
     }
-    el.appendChild(div);
+  };
+
+  const diffEl = document.getElementById('diff');
+  const sourceChips = document.getElementById('sourceChips');
+  const resultBody = document.getElementById('resultBody');
+  const statusBadge = document.getElementById('statusBadge');
+  const askInput = document.getElementById('askInput');
+  const askBtn = document.getElementById('askBtn');
+  const askAnswer = document.getElementById('askAnswer');
+  const skillList = document.getElementById('skillList');
+  const skillCount = document.getElementById('skillCount');
+
+  const resolvedCache = {};
+  const skillsSeen = new Set();
+  let currentEntry = null;
+
+  diffEl.innerHTML = '<div class="diff-file">payments/retry.py</div>' + diffLines.map(l => {
+    const clickable = !!l.id;
+    return `<div class="diff-line ${l.type} ${clickable ? 'clickable' : ''}" ${clickable ? `data-id="${l.id}"` : ''}>
+      <span class="ln">${l.ln}</span><span class="code">${escapeHtml(l.code)}</span>
+      ${clickable ? '<span class="hint">explain →</span>' : ''}
+    </div>`;
+  }).join('');
+
+  diffEl.querySelectorAll('.diff-line.clickable').forEach(el => {
+    el.addEventListener('click', () => selectLine(el.dataset.id, el));
   });
-}
 
-function escapeHtml(s){
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function selectLine(id){
-  selected = id;
-  renderDiff();
-  renderAnswer();
-}
-
-function renderAnswer(){
-  const el = document.getElementById('answer');
-  if (!selected) {
-    el.innerHTML = '<div class="placeholder">Click a highlighted line on the left to ask why it changed.</div>';
-    return;
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-  const ctx = CONTEXT[selected];
-  el.innerHTML = '<div class="searching"><span class="spinner"></span>' +
-    (mode === 'single' ? 'checking blame on this line…' : 'reconciling Slack, tickets, prior PRs, and docs…') +
-    '</div>';
 
-  setTimeout(() => {
-    if (mode === 'single') {
-      renderSingle(ctx);
-    } else {
-      renderShared(ctx);
+  function selectLine(id, el) {
+    diffEl.querySelectorAll('.diff-line').forEach(d => d.classList.remove('selected'));
+    el.classList.add('selected');
+    currentEntry = knowledge[id];
+    askInput.disabled = false;
+    askBtn.disabled = false;
+    askAnswer.innerHTML = '';
+    askInput.value = '';
+
+    renderChips(currentEntry.sources, false);
+
+    if (resolvedCache[id]) {
+      statusBadge.innerHTML = '<span class="badge cached">reused skill · instant</span>';
+      renderChips(currentEntry.sources, true);
+      renderVerdict(currentEntry);
+      return;
     }
-  }, mode === 'single' ? 380 : 650);
-}
 
-function renderSingle(ctx){
-  const el = document.getElementById('answer');
-  el.innerHTML =
-    '<div class="sources"><span class="src-pill ' + ctx.single.source + '">' + ctx.single.pill + '</span></div>' +
-    '<div class="single-frag">' + escapeHtml(ctx.single.text) + '</div>' +
-    '<div class="single-note">⚠ this is the only fragment this tool can see — it doesn\'t know about the ticket, the runbook, or the incident that actually motivated the change.</div>';
-}
+    statusBadge.innerHTML = '<span class="badge fresh">gathering…</span>';
+    resultBody.innerHTML = '';
+    runGathering(currentEntry, id);
+  }
 
-function renderShared(ctx){
-  const el = document.getElementById('answer');
-  let pillsHtml = ctx.frags.map((f,i) =>
-    '<span class="src-pill ' + f.pillClass + '" style="animation-delay:' + (i*0.12) + 's">' + f.pillLabel + '</span>'
-  ).join('');
-  let fragsHtml = ctx.frags.map(f => '<div class="frag">' + f.html + '</div>').join('');
-  el.innerHTML =
-    '<div class="sources">' + pillsHtml + '</div>' +
-    '<div class="narrative">' +
-      '<p>' + ctx.narrative + '</p>' +
-      fragsHtml +
-      '<div class="skill"><b>Distilled skill saved for next time</b>Next agent that touches a rate limiter in this repo will get "webhook lanes need separate window/cap/paging logic — see ENG-1904, ENG-1911" injected automatically, no re-digging required.</div>' +
-    '</div>';
-}
+  function renderChips(sources, allOn) {
+    sourceChips.innerHTML = sources.map(s =>
+      `<span class="source-chip"><span class="dot ${allOn && s.on ? 'on' : ''}" data-tag="${s.tag}"></span>${s.name}</span>`
+    ).join('');
+  }
 
-document.getElementById('btn-single').addEventListener('click', () => setMode('single'));
-document.getElementById('btn-shared').addEventListener('click', () => setMode('shared'));
+  function runGathering(entry, id) {
+    let i = 0;
+    const onSources = entry.sources.filter(s => s.on).map(s => s.tag);
+    function step() {
+      if (i >= entry.steps.length) {
+        statusBadge.innerHTML = '<span class="badge fresh">reconciled just now</span>';
+        renderVerdict(entry);
+        resolvedCache[id] = true;
+        addSkill(entry);
+        return;
+      }
+      const line = document.createElement('div');
+      line.className = 'loading-line';
+      line.innerHTML = `<span class="ok">✓</span> ${entry.steps[i]}`;
+      resultBody.appendChild(line);
+      const tag = onSources[i];
+      if (tag) {
+        const dot = sourceChips.querySelector(`.dot[data-tag="${tag}"]`);
+        if (dot) dot.classList.add('on');
+      }
+      i++;
+      setTimeout(step, 260);
+    }
+    step();
+  }
 
-function setMode(m){
-  mode = m;
-  document.getElementById('btn-single').classList.toggle('active', m === 'single');
-  document.getElementById('btn-shared').classList.toggle('active', m === 'shared');
-  document.getElementById('mode-tag').textContent = m === 'single' ? 'single tool' : 'shared memory';
-  renderAnswer();
-}
+  function renderVerdict(entry) {
+    resultBody.innerHTML = `
+      <div class="verdict">
+        <h3>${escapeHtml(entry.verdict.title)}</h3>
+        <p>${escapeHtml(entry.verdict.body)}</p>
+        <div>${entry.verdict.cites.map(c => `<span class="cite">${c}</span>`).join('')}</div>
+      </div>
+    `;
+  }
 
-renderDiff();
+  function addSkill(entry) {
+    if (skillsSeen.has(entry.skillName)) return;
+    skillsSeen.add(entry.skillName);
+    if (skillList.querySelector('.skill-empty')) skillList.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'skill-card';
+    card.innerHTML = `<strong>${escapeHtml(entry.skillName)}</strong>Learned from this resolution. The next agent to touch a similar line reuses it instantly instead of re-gathering.`;
+    skillList.appendChild(card);
+    skillCount.textContent = skillsSeen.size;
+  }
+
+  askBtn.addEventListener('click', handleAsk);
+  askInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleAsk(); });
+
+  function handleAsk() {
+    if (!currentEntry) return;
+    const q = askInput.value.trim().toLowerCase();
+    if (!q) return;
+    let answer = currentEntry.answers.default;
+    for (const key of Object.keys(currentEntry.answers)) {
+      if (key !== 'default' && q.includes(key)) { answer = currentEntry.answers[key]; break; }
+    }
+    askAnswer.innerHTML = `<div class="ask-answer"><strong style="color:var(--accent)">Loom:</strong> ${escapeHtml(answer)}</div>`;
+  }
+})();
 </script>
+
+</body>
+</html>
