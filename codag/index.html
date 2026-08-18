@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Signal Sieve — tool-output compression demo</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel2:#0e141c; --border:#1f2a37;
+    --text:#dbe4ee; --dim:#7f92a8; --accent:#4fd1a5; --accent2:#f5a623;
+    --danger:#ef6461; --mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    padding:32px 20px 60px;
+  }
+  .wrap{max-width:980px; margin:0 auto;}
+  header{margin-bottom:24px;}
+  h1{font-size:1.5rem; margin:0 0 6px;}
+  h1 span{color:var(--accent);}
+  .sub{color:var(--dim); font-size:.95rem; max-width:640px; line-height:1.5;}
+  .controls{
+    display:flex; gap:10px; flex-wrap:wrap; margin:20px 0 16px; align-items:center;
+  }
+  select, button{
+    background:var(--panel); color:var(--text); border:1px solid var(--border);
+    padding:9px 14px; border-radius:8px; font-size:.9rem; cursor:pointer;
+    font-family:inherit;
+  }
+  select:hover, button:hover{border-color:var(--accent);}
+  button.primary{
+    background:var(--accent); color:#04120d; border-color:var(--accent); font-weight:600;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button:disabled{opacity:.4; cursor:default;}
+  .stats{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:18px 0;
+  }
+  .stat{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px;
+  }
+  .stat .label{font-size:.72rem; color:var(--dim); text-transform:uppercase; letter-spacing:.04em;}
+  .stat .val{font-size:1.35rem; font-weight:700; margin-top:2px;}
+  .stat .val.accent{color:var(--accent);}
+  .stat .val.warn{color:var(--accent2);}
+  .panes{
+    display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px;
+  }
+  @media (max-width:760px){ .panes{grid-template-columns:1fr;} .stats{grid-template-columns:repeat(2,1fr);} }
+  .pane{
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    overflow:hidden; display:flex; flex-direction:column; min-height:420px;
+  }
+  .pane h2{
+    font-size:.78rem; margin:0; padding:10px 14px; background:var(--panel);
+    border-bottom:1px solid var(--border); color:var(--dim); text-transform:uppercase;
+    letter-spacing:.05em; display:flex; justify-content:space-between; align-items:center;
+  }
+  .pane h2 b{color:var(--text); font-weight:600; text-transform:none; letter-spacing:0;}
+  .code{
+    font-family:var(--mono); font-size:.78rem; line-height:1.65; padding:10px 0;
+    overflow-y:auto; flex:1; white-space:pre;
+  }
+  .line{padding:0 14px; display:flex; gap:8px; cursor:default;}
+  .line .ln{color:#3a4b5c; width:28px; flex:none; text-align:right; user-select:none;}
+  .line .content{white-space:pre-wrap; word-break:break-word;}
+  .line.kept{color:var(--text);}
+  .line.kept.fail{color:var(--danger);}
+  .line.kept.signal{color:var(--accent2);}
+  .line.dropped{color:#324356;}
+  .fold{
+    margin:2px 14px; padding:5px 10px; background:#132436; border:1px dashed #24425c;
+    border-radius:6px; color:#6fa3c9; font-size:.74rem; cursor:pointer; user-select:none;
+  }
+  .fold:hover{background:#173049; color:#93c4e8;}
+  .fold.open{display:none;}
+  .badge{
+    font-size:.68rem; padding:2px 7px; border-radius:20px; border:1px solid var(--border);
+    color:var(--dim); font-family:var(--mono);
+  }
+  .badge.bypass{color:var(--accent2); border-color:#5a4420;}
+  .badge.compressed{color:var(--accent); border-color:#204a3a;}
+  .legend{display:flex; gap:16px; margin:14px 2px 4px; font-size:.75rem; color:var(--dim); flex-wrap:wrap;}
+  .legend .dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px;}
+  .note{
+    margin-top:18px; padding:14px 16px; background:var(--panel); border:1px solid var(--border);
+    border-radius:10px; font-size:.85rem; color:var(--dim); line-height:1.55;
+  }
+  .note b{color:var(--text);}
+  footer{
+    margin-top:36px; padding-top:16px; border-top:1px solid var(--border);
+    color:var(--dim); font-size:.78rem; text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Signal <span>Sieve</span></h1>
+    <div class="sub">
+      A toy proxy that sits between a coding agent and its tool output. Big, noisy
+      results (test runs, grep hits, file listings) get sieved down to the lines that
+      actually carry signal — everything else stays on disk, addressable by line range,
+      not deleted. Diffs and source stay untouched, always. Pick a sample tool result below.
+    </div>
+  </header>
+
+  <div class="controls">
+    <select id="sampleSelect"></select>
+    <button id="runBtn" class="primary">Run through sieve →</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--danger)"></i>failure / error line</span>
+    <span><i class="dot" style="background:var(--accent2)"></i>signal line (match / summary)</span>
+    <span><i class="dot" style="background:#324356"></i>dropped — retrievable on demand</span>
+  </div>
+
+  <div class="panes">
+    <div class="pane">
+      <h2>Raw tool output <span class="badge" id="rawBadge"></span></h2>
+      <div class="code" id="rawCode"></div>
+    </div>
+    <div class="pane">
+      <h2>What the agent actually sees <span class="badge" id="outBadge"></span></h2>
+      <div class="code" id="outCode"></div>
+    </div>
+  </div>
+
+  <div class="note" id="note"></div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Codag (YC S26). Not affiliated with Codag.</footer>
+</div>
+
+<script>
+(function(){
+
+// ---------- synthetic sample data ----------
+
+function genTestOutput(){
+  const suites = ["auth","billing","ingest","scheduler","webhooks","search"];
+  const lines = [];
+  let passCount = 0, failCount = 0;
+  suites.forEach(suite=>{
+    const n = 14 + Math.floor(Math.random()*10);
+    for(let i=0;i<n;i++){
+      const testName = suite+"_test_"+(i+1);
+      const willFail = Math.random() < 0.06;
+      if(willFail){
+        failCount++;
+        lines.push({t:"fail", text:`FAIL  ${suite}::${testName}`});
+        lines.push({t:"signal", text:`  AssertionError: expected 200 got 500 at ${suite}/handler.py:${40+i}`});
+        lines.push({t:"noise", text:`  --- stack ---`});
+        for(let s=0;s<6;s++) lines.push({t:"noise", text:`    at ${suite}.internal.step${s}(${suite}/internal.py:${100+s})`});
+      } else {
+        passCount++;
+        lines.push({t:"noise", text:`PASS  ${suite}::${testName}  (${(Math.random()*40+2).toFixed(1)}ms)`});
+      }
+    }
+  });
+  lines.push({t:"signal", text:`\n${passCount} passed, ${failCount} failed, ${passCount+failCount} total`});
+  return {label:"test run — 6 suites", kind:"test", lines};
+}
+
+function genGrepOutput(){
+  const files = ["src/api/router.ts","src/api/auth.ts","src/db/pool.ts","src/workers/queue.ts",
+                  "src/cache/redis.ts","tests/api.spec.ts","src/api/middleware.ts","src/utils/log.ts"];
+  const lines = [];
+  let matches = 0;
+  files.forEach(f=>{
+    const n = 10 + Math.floor(Math.random()*20);
+    for(let i=0;i<n;i++){
+      const isMatch = Math.random() < 0.12;
+      if(isMatch){
+        matches++;
+        lines.push({t:"signal", text:`${f}:${20+i}: connection.timeout = ${1000+ i*50}`});
+      } else {
+        lines.push({t:"noise", text:`${f}:${20+i}: ${randomCodeLine()}`});
+      }
+    }
+  });
+  lines.push({t:"signal", text:`\n${matches} matches across ${files.length} files`});
+  return {label:"grep -rn 'connection.timeout'", kind:"search", lines};
+}
+
+function randomCodeLine(){
+  const opts = [
+    "const result = await fetchUser(id);",
+    "if (!result) return null;",
+    "logger.debug('processing request');",
+    "return res.status(200).json(payload);",
+    "export function handle(req, res) {",
+    "  const start = performance.now();",
+    "await pool.query(sql, params);",
+    "}"
+  ];
+  return opts[Math.floor(Math.random()*opts.length)];
+}
+
+function genDiffOutput(){
+  const lines = [
+    {t:"noise", text:"diff --git a/src/api/auth.ts b/src/api/auth.ts"},
+    {t:"noise", text:"index a1b2c3d..e4f5g6h 100644"},
+    {t:"noise", text:"--- a/src/api/auth.ts"},
+    {t:"noise", text:"+++ b/src/api/auth.ts"},
+    {t:"noise", text:"@@ -18,7 +18,7 @@ export function verifyToken(token: string) {"},
+    {t:"noise", text:"-  const decoded = jwt.decode(token);"},
+    {t:"noise", text:"+  const decoded = jwt.verify(token, SECRET, { algorithms: ['HS256'] });"},
+    {t:"noise", text:"   if (!decoded) throw new AuthError('invalid token');"},
+    {t:"noise", text:"   return decoded;"},
+    {t:"noise", text:" }"}
+  ];
+  return {label:"git diff (source change)", kind:"diff", lines};
+}
+
+const SAMPLES = {
+  test: genTestOutput,
+  search: genGrepOutput,
+  diff: genDiffOutput
+};
+
+// ---------- UI wiring ----------
+
+const sampleSelect = document.getElementById('sampleSelect');
+const runBtn = document.getElementById('runBtn');
+const resetBtn = document.getElementById('resetBtn');
+const statsEl = document.getElementById('stats');
+const rawCode = document.getElementById('rawCode');
+const outCode = document.getElementById('outCode');
+const rawBadge = document.getElementById('rawBadge');
+const outBadge = document.getElementById('outBadge');
+const noteEl = document.getElementById('note');
+
+[["test","Test run (pytest, 6 suites)"],
+ ["search","Repo-wide grep (8 files)"],
+ ["diff","git diff (single file)"]].forEach(([v,l])=>{
+  const o = document.createElement('option');
+  o.value = v; o.textContent = l;
+  sampleSelect.appendChild(o);
+});
+
+let current = null;
+
+function bytesOf(lines){
+  return lines.reduce((n,l)=>n + l.text.length + 1, 0);
+}
+
+function renderRaw(sample){
+  rawCode.innerHTML = '';
+  sample.lines.forEach((l,i)=>{
+    const div = document.createElement('div');
+    div.className = 'line';
+    const cls = l.t === 'fail' ? 'fail' : (l.t === 'signal' ? 'signal' : '');
+    div.innerHTML = `<span class="ln">${i+1}</span><span class="content ${cls}">${escapeHtml(l.text)}</span>`;
+    rawCode.appendChild(div);
+  });
+  rawBadge.textContent = sample.lines.length + ' lines · ' + bytesOf(sample.lines) + ' B';
+  rawBadge.className = 'badge';
+}
+
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderReset(){
+  outCode.innerHTML = '<div class="line" style="color:#3a4b5c;padding:14px;">— click "Run through sieve" to compress —</div>';
+  outBadge.textContent = '';
+  statsEl.innerHTML = '';
+  noteEl.textContent = '';
+}
+
+function loadSample(kind){
+  current = SAMPLES[kind]();
+  renderRaw(current);
+  renderReset();
+}
+
+function runSieve(sample){
+  if(sample.kind === 'diff'){
+    // diffs / source always bypass compression untouched
+    outCode.innerHTML = '';
+    sample.lines.forEach((l,i)=>{
+      const div = document.createElement('div');
+      div.className = 'line kept';
+      div.innerHTML = `<span class="ln">${i+1}</span><span class="content">${escapeHtml(l.text)}</span>`;
+      outCode.appendChild(div);
+    });
+    outBadge.textContent = sample.lines.length + ' lines · ' + bytesOf(sample.lines) + ' B';
+    outBadge.className = 'badge bypass';
+    statsEl.innerHTML = statCards(bytesOf(sample.lines), bytesOf(sample.lines), sample.lines.length, sample.lines.length, 0);
+    noteEl.innerHTML = `<b>Bypassed.</b> Structured/source content — diffs, code, config — is classified and passed through unchanged. Nothing here is a signal-vs-noise call the sieve should be making.`;
+    return;
+  }
+
+  outCode.innerHTML = '';
+  let keptBytes = 0, keptCount = 0, run = [];
+
+  function flushRun(){
+    if(run.length === 0) return;
+    const fold = document.createElement('div');
+    fold.className = 'fold';
+    fold.textContent = `▸ ${run.length} lines omitted — kept on disk, click to fetch by line range`;
+    fold.addEventListener('click', ()=>{
+      fold.classList.add('open');
+      run.forEach(({l,i})=>{
+        const div = document.createElement('div');
+        div.className = 'line dropped';
+        div.style.opacity = '0.75';
+        div.innerHTML = `<span class="ln">${i+1}</span><span class="content">${escapeHtml(l.text)}</span>`;
+        fold.after(div);
+      });
+      const revert = document.createElement('div');
+      revert.className = 'fold';
+      revert.style.marginTop='2px';
+      revert.textContent = '▾ fold back';
+      revert.addEventListener('click', ()=>{
+        let n = fold.nextSibling;
+        while(n && n !== revert){ const nn=n.nextSibling; n.remove(); n=nn; }
+        revert.remove();
+        fold.classList.remove('open');
+      });
+      fold.after(revert);
+    });
+    outCode.appendChild(fold);
+    run = [];
+  }
+
+  sample.lines.forEach((l,i)=>{
+    if(l.t === 'noise'){
+      run.push({l,i});
+    } else {
+      flushRun();
+      keptBytes += l.text.length + 1;
+      keptCount++;
+      const div = document.createElement('div');
+      div.className = 'line kept ' + l.t;
+      div.innerHTML = `<span class="ln">${i+1}</span><span class="content">${escapeHtml(l.text)}</span>`;
+      outCode.appendChild(div);
+    }
+  });
+  flushRun();
+
+  const rawBytes = bytesOf(sample.lines);
+  const rawLines = sample.lines.length;
+  outBadge.textContent = keptCount + ' lines shown · ' + keptBytes + ' B';
+  outBadge.className = 'badge compressed';
+  statsEl.innerHTML = statCards(rawBytes, keptBytes, rawLines, keptCount, rawLines - keptCount);
+
+  const pct = Math.round((1 - keptBytes/rawBytes) * 100);
+  noteEl.innerHTML = `<b>${pct}% smaller.</b> The agent's context only fills with failures and matches — not
+    ${rawLines - keptCount} lines of passing/noise output it never needed. Every omitted line is still
+    sitting on disk, addressable by line range, so if the agent later needs surrounding context it can
+    ask for exactly that slice instead of re-running the command.`;
+}
+
+function statCards(rawBytes, keptBytes, rawLines, keptLines, droppedLines){
+  const pct = Math.max(0, Math.round((1 - keptBytes/rawBytes) * 100));
+  return `
+    <div class="stat"><div class="label">Raw size</div><div class="val">${rawBytes.toLocaleString()} B</div></div>
+    <div class="stat"><div class="label">Sent to agent</div><div class="val accent">${keptBytes.toLocaleString()} B</div></div>
+    <div class="stat"><div class="label">Reduction</div><div class="val warn">${pct}%</div></div>
+    <div class="stat"><div class="label">Lines kept / dropped</div><div class="val">${keptLines} / ${droppedLines}</div></div>
+  `;
+}
+
+runBtn.addEventListener('click', ()=>{
+  if(!current) return;
+  runSieve(current);
+});
+resetBtn.addEventListener('click', ()=>{
+  loadSample(sampleSelect.value);
+});
+sampleSelect.addEventListener('change', ()=>{
+  loadSample(sampleSelect.value);
+});
+
+loadSample('test');
+
+})();
+</script>
+</body>
+</html>
