@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel Mesh — Kernel-Level Fleet Defense (Demo)</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#111823;
+    --panel2:#0e141d;
+    --border:#1f2b3a;
+    --text:#dde7f0;
+    --dim:#7c8ea3;
+    --accent:#3fd0c9;
+    --accent2:#f2b84b;
+    --danger:#ff5d6c;
+    --safe:#4ade80;
+    --mono: "SF Mono", "Fira Code", Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 20% -10%, #142230 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 36px 14px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:1.6rem;
+    letter-spacing:0.5px;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0;
+    color:var(--dim);
+    max-width:720px;
+    line-height:1.5;
+    font-size:0.95rem;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns: 340px 1fr;
+    gap:20px;
+    padding:24px 36px 12px;
+  }
+  @media (max-width: 980px){
+    main{grid-template-columns: 1fr;}
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:18px;
+  }
+  .panel h2{
+    margin:0 0 12px;
+    font-size:0.95rem;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--dim);
+  }
+  .fleet-grid{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .device{
+    aspect-ratio:1;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--panel2);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    font-size:0.65rem;
+    color:var(--dim);
+    transition:all 0.35s ease;
+    position:relative;
+  }
+  .device .dot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--dim);
+    margin-bottom:6px;
+    transition:all 0.35s ease;
+  }
+  .device.vulnerable .dot{background:var(--accent2); box-shadow:0 0 10px var(--accent2);}
+  .device.compromised .dot{background:var(--danger); box-shadow:0 0 10px var(--danger);}
+  .device.compromised{border-color:var(--danger); animation:pulse 1s infinite;}
+  .device.protected .dot{background:var(--safe); box-shadow:0 0 10px var(--safe);}
+  @keyframes pulse{
+    0%,100%{box-shadow:0 0 0 rgba(255,93,108,0);}
+    50%{box-shadow:0 0 14px rgba(255,93,108,0.5);}
+  }
+  .fleet-legend{
+    display:flex; gap:14px; flex-wrap:wrap;
+    font-size:0.72rem; color:var(--dim);
+  }
+  .fleet-legend span{display:flex; align-items:center; gap:5px;}
+  .legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .btn{
+    background:var(--accent);
+    color:#04211f;
+    border:none;
+    padding:11px 16px;
+    border-radius:7px;
+    font-weight:600;
+    cursor:pointer;
+    font-size:0.85rem;
+    width:100%;
+    margin-top:6px;
+    transition:transform 0.1s ease, opacity 0.2s;
+  }
+  .btn:hover{opacity:0.9;}
+  .btn:active{transform:scale(0.98);}
+  .btn.secondary{
+    background:transparent;
+    color:var(--accent2);
+    border:1px solid var(--accent2);
+  }
+  .btn.danger{
+    background:var(--danger);
+    color:#2b0508;
+  }
+  .btn:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+  }
+  .stat-row{
+    display:flex; justify-content:space-between;
+    font-size:0.8rem;
+    padding:6px 0;
+    border-bottom:1px dashed var(--border);
+    color:var(--dim);
+  }
+  .stat-row b{color:var(--text); font-weight:600;}
+  .findings{
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .finding{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px;
+  }
+  .finding-head{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    gap:10px; margin-bottom:6px;
+  }
+  .finding-id{font-family:var(--mono); font-size:0.75rem; color:var(--dim);}
+  .sev{
+    font-size:0.68rem;
+    padding:3px 8px;
+    border-radius:20px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    white-space:nowrap;
+  }
+  .sev.critical{background:rgba(255,93,108,0.15); color:var(--danger);}
+  .sev.high{background:rgba(242,184,75,0.15); color:var(--accent2);}
+  .finding-desc{font-size:0.85rem; line-height:1.5; color:var(--text); margin:6px 0 10px;}
+  .finding-actions{display:flex; gap:8px;}
+  .finding-actions .btn{margin-top:0; width:auto; flex:1; padding:8px 10px; font-size:0.78rem;}
+  .fix-block{
+    margin-top:10px;
+    background:#060a0f;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:10px 12px;
+    font-family:var(--mono);
+    font-size:0.75rem;
+    color:var(--safe);
+    white-space:pre-wrap;
+    line-height:1.5;
+    display:none;
+  }
+  .fix-block.show{display:block;}
+  .finding.deployed{border-color:var(--safe);}
+  .badge-deployed{
+    font-size:0.68rem;
+    color:var(--safe);
+    font-weight:700;
+    letter-spacing:0.5px;
+    display:none;
+  }
+  .badge-deployed.show{display:inline;}
+  .console{
+    background:#060a0f;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px;
+    font-family:var(--mono);
+    font-size:0.78rem;
+    height:220px;
+    overflow-y:auto;
+    line-height:1.6;
+  }
+  .console .line{white-space:pre-wrap; word-break:break-word;}
+  .console .allow{color:var(--danger);}
+  .console .block{color:var(--safe);}
+  .console .info{color:var(--dim);}
+  .policy-box{
+    display:flex; flex-direction:column; gap:10px;
+    margin-top:6px;
+  }
+  .policy-box textarea{
+    width:100%;
+    min-height:64px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:7px;
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:0.8rem;
+    padding:10px;
+    resize:vertical;
+  }
+  .compiled{
+    font-family:var(--mono);
+    font-size:0.75rem;
+    color:var(--accent);
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:7px;
+    padding:10px;
+    display:none;
+    white-space:pre-wrap;
+  }
+  .compiled.show{display:block;}
+  footer{
+    text-align:center;
+    padding:18px;
+    color:var(--dim);
+    font-size:0.75rem;
+    border-top:1px solid var(--border);
+  }
+  .empty{
+    color:var(--dim);
+    font-size:0.85rem;
+    text-align:center;
+    padding:24px 0;
+  }
+  .top-actions{display:flex; gap:10px; margin-bottom:16px;}
+  .top-actions .btn{margin-top:0;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sentinel <span>Mesh</span></h1>
+  <p>A toy simulation of kernel-layer fleet defense: scan a synthetic device fleet for OS vulnerabilities,
+  let an AI draft an inspectable kernel-enforced fix, approve it, then watch simulated exploit attempts
+  get shut down fleet-wide with <code>-EPERM</code>. Everything here is fake data generated in your browser —
+  no backend, no network calls.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Device Fleet (16 nodes)</h2>
+    <div class="fleet-grid" id="fleetGrid"></div>
+    <div class="fleet-legend">
+      <span><i class="legend-dot" style="background:#4ade80"></i>protected</span>
+      <span><i class="legend-dot" style="background:#f2b84b"></i>vulnerable</span>
+      <span><i class="legend-dot" style="background:#ff5d6c"></i>compromised</span>
+      <span><i class="legend-dot" style="background:#7c8ea3"></i>unscanned</span>
+    </div>
+    <hr style="border-color:var(--border); margin:14px 0;">
+    <div class="stat-row"><span>Nodes protected</span><b id="statProtected">0 / 16</b></div>
+    <div class="stat-row"><span>Open findings</span><b id="statOpen">0</b></div>
+    <div class="stat-row"><span>Simulated intrusion attempts blocked</span><b id="statBlocked">0</b></div>
+    <button class="btn" id="scanBtn" onclick="scanFleet()">Scan Fleet for Vulnerabilities</button>
+    <button class="btn danger" id="attackBtn" onclick="launchAttackWave()" disabled>Launch Attack Wave</button>
+    <button class="btn secondary" id="resetBtn" onclick="resetDemo()">Reset Demo</button>
+  </div>
+
+  <div class="panel">
+    <h2>Findings &amp; AI-Drafted Fixes</h2>
+    <div class="findings" id="findingsList">
+      <div class="empty">Run a fleet scan to surface vulnerabilities.</div>
+    </div>
+
+    <h2 style="margin-top:22px;">English → Kernel Policy Compiler</h2>
+    <div class="policy-box">
+      <textarea id="policyInput" placeholder="e.g. block any process from spawning a shell if it was started by the web server user">block any process from spawning a shell if it was started by the web server user</textarea>
+      <button class="btn secondary" onclick="compilePolicy()">Compile to BPF Rule</button>
+      <div class="compiled" id="compiledOut"></div>
+    </div>
+
+    <h2 style="margin-top:22px;">Live Kernel Event Console</h2>
+    <div class="console" id="console">
+      <div class="line info">$ waiting for fleet scan or attack simulation...</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Palisade (YC S26). Not affiliated with Palisade.
+</footer>
+
+<script>
+// ---------- synthetic data ----------
+const DEVICE_COUNT = 16;
+const FINDING_TEMPLATES = [
+  {
+    id: "SM-2026-0117",
+    sev: "critical",
+    title: "Privilege escalation via /proc/self/mem symlink race",
+    desc: "A local unprivileged process can race a symlink swap on /proc/self/mem to obtain a writable mapping into kernel-owned pages, enabling arbitrary code execution as root.",
+    fix: "lsm_rule ALLOW_MEM_WRITE\n  match: path == \"/proc/self/mem\" && caller.uid != 0\n  action: DENY -EPERM\n  scope: fleet-wide\n  status: pending review"
+  },
+  {
+    id: "SM-2026-0118",
+    sev: "high",
+    title: "Unauthenticated container escape via mismatched cgroup namespace",
+    desc: "Containers sharing a host PID namespace can traverse into sibling cgroups and signal host processes, bypassing isolation boundaries.",
+    fix: "lsm_rule DENY_CROSS_CGROUP_SIGNAL\n  match: syscall == \"kill\" && caller.ns != target.ns\n  action: DENY -EPERM\n  scope: fleet-wide\n  status: pending review"
+  },
+  {
+    id: "SM-2026-0119",
+    sev: "critical",
+    title: "Remote code execution via crafted netlink socket message",
+    desc: "A malformed netlink message triggers an out-of-bounds write in a rarely-audited kernel module, allowing remote attackers to execute code with kernel privileges.",
+    fix: "lsm_rule VALIDATE_NETLINK_LEN\n  match: socket.family == AF_NETLINK && msg.len > bound\n  action: DENY -EPERM\n  scope: fleet-wide\n  status: pending review"
+  },
+  {
+    id: "SM-2026-0120",
+    sev: "high",
+    title: "Memory corruption in eBPF verifier bypass path",
+    desc: "A specially crafted eBPF program can trick the verifier into accepting an out-of-bounds pointer arithmetic chain, corrupting adjacent kernel memory.",
+    fix: "lsm_rule RESTRICT_BPF_LOAD\n  match: syscall == \"bpf\" && caller.uid != 0 && prog.complexity > threshold\n  action: DENY -EPERM\n  scope: fleet-wide\n  status: pending review"
+  }
+];
+
+const EXPLOIT_LOG_TEMPLATES = [
+  "execve(\"/tmp/.hidden/payload\", uid=1001) from node-{n}",
+  "write(/proc/self/mem, offset=0x7ffe1000) from node-{n}",
+  "bpf(BPF_PROG_LOAD, complexity=9182) from node-{n}",
+  "kill(pid=1, sig=SIGKILL, cross-ns) from node-{n}",
+  "connect(AF_NETLINK, len=65535) from node-{n}"
+];
+
+// ---------- state ----------
+let devices = [];
+let findings = [];
+let blockedCount = 0;
+let scanned = false;
+
+// ---------- init ----------
+function buildFleet(){
+  const grid = document.getElementById("fleetGrid");
+  grid.innerHTML = "";
+  devices = [];
+  for(let i=0;i<DEVICE_COUNT;i++){
+    devices.push({id:i, state:"unscanned"});
+    const el = document.createElement("div");
+    el.className = "device unscanned";
+    el.id = "device-"+i;
+    el.innerHTML = '<div class="dot"></div><div>node-'+String(i).padStart(2,"0")+'</div>';
+    grid.appendChild(el);
+  }
+}
+
+function setDeviceState(i, state){
+  devices[i].state = state;
+  const el = document.getElementById("device-"+i);
+  el.className = "device " + state;
+}
+
+function logLine(text, cls){
+  const c = document.getElementById("console");
+  const line = document.createElement("div");
+  line.className = "line " + (cls || "info");
+  line.textContent = text;
+  c.appendChild(line);
+  c.scrollTop = c.scrollHeight;
+}
+
+function clearConsolePlaceholder(){
+  const c = document.getElementById("console");
+  if(c.children.length === 1 && c.children[0].textContent.includes("waiting for fleet scan")){
+    c.innerHTML = "";
+  }
+}
+
+// ---------- scan ----------
+function scanFleet(){
+  if(scanned) return;
+  scanned = true;
+  clearConsolePlaceholder();
+  document.getElementById("scanBtn").disabled = true;
+  logLine("$ sentinel-mesh scan --fleet production --deep", "info");
+
+  // mark ~9 devices vulnerable, rest protected-by-default-hardening
+  const vulnerableIdx = [];
+  for(let i=0;i<DEVICE_COUNT;i++){
+    if(Math.random() < 0.55){
+      vulnerableIdx.push(i);
+    }
+  }
+  if(vulnerableIdx.length === 0) vulnerableIdx.push(0,1,2);
+
+  vulnerableIdx.forEach((idx, k)=>{
+    setTimeout(()=>{
+      setDeviceState(idx, "vulnerable");
+      logLine("  [scan] node-"+String(idx).padStart(2,"0")+": kernel signature matched known-vulnerable pattern", "allow");
+    }, 120*k);
+  });
+
+  setTimeout(()=>{
+    // pick 3 findings
+    findings = FINDING_TEMPLATES.slice(0, 3).map(f => ({...f, deployed:false, affected: vulnerableIdx}));
+    renderFindings();
+    updateStats();
+    logLine("$ scan complete — "+findings.length+" distinct vulnerability classes found across "+vulnerableIdx.length+" nodes", "info");
+    document.getElementById("attackBtn").disabled = false;
+  }, 120*vulnerableIdx.length + 200);
+}
+
+function renderFindings(){
+  const list = document.getElementById("findingsList");
+  if(findings.length === 0){
+    list.innerHTML = '<div class="empty">Run a fleet scan to surface vulnerabilities.</div>';
+    return;
+  }
+  list.innerHTML = "";
+  findings.forEach((f, idx)=>{
+    const div = document.createElement("div");
+    div.className = "finding" + (f.deployed ? " deployed" : "");
+    div.id = "finding-"+idx;
+    div.innerHTML = `
+      <div class="finding-head">
+        <div>
+          <div class="finding-id">${f.id}</div>
+          <div style="font-weight:600; margin-top:2px;">${f.title}</div>
+        </div>
+        <span class="sev ${f.sev}">${f.sev}</span>
+      </div>
+      <div class="finding-desc">${f.desc}</div>
+      <div class="finding-actions">
+        <button class="btn secondary" onclick="generateFix(${idx})">Generate AI Fix</button>
+        <button class="btn" id="deploy-${idx}" onclick="deployFix(${idx})" disabled>Approve &amp; Deploy</button>
+      </div>
+      <div class="fix-block" id="fix-${idx}">${f.fix}</div>
+      <span class="badge-deployed" id="badge-${idx}">✓ DEPLOYED FLEET-WIDE</span>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function generateFix(idx){
+  const block = document.getElementById("fix-"+idx);
+  block.classList.add("show");
+  document.getElementById("deploy-"+idx).disabled = false;
+  logLine("  [ai] drafted maintainer-style kernel rule for "+findings[idx].id+" — awaiting human approval", "info");
+}
+
+function deployFix(idx){
+  const f = findings[idx];
+  if(f.deployed) return;
+  f.deployed = true;
+  document.getElementById("finding-"+idx).classList.add("deployed");
+  document.getElementById("badge-"+idx).classList.add("show");
+  document.getElementById("deploy-"+idx).disabled = true;
+  logLine("$ deploy "+f.id+" --scope fleet-wide --confirm", "info");
+  f.affected.forEach((idx2, k)=>{
+    setTimeout(()=>{
+      if(devices[idx2].state !== "compromised"){
+        setDeviceState(idx2, "protected");
+      }
+      logLine("  [enforce] node-"+String(idx2).padStart(2,"0")+": rule "+f.id+" loaded into LSM-BPF hook", "block");
+    }, 90*k);
+  });
+  setTimeout(updateStats, 90*f.affected.length + 50);
+}
+
+// ---------- attack simulation ----------
+function launchAttackWave(){
+  clearConsolePlaceholder();
+  logLine("$ redteam-sim --wave 1 --targets all --techniques known-cves", "info");
+  const attackers = [];
+  for(let i=0;i<DEVICE_COUNT;i++) attackers.push(i);
+
+  attackers.forEach((idx, k)=>{
+    setTimeout(()=>{
+      const template = EXPLOIT_LOG_TEMPLATES[Math.floor(Math.random()*EXPLOIT_LOG_TEMPLATES.length)];
+      const text = template.replace("{n}", String(idx).padStart(2,"0"));
+      const isProtected = devices[idx].state === "protected";
+      if(isProtected){
+        logLine("  [blocked] "+text+"  -> -EPERM (rule match)", "block");
+        blockedCount++;
+      } else if(devices[idx].state === "vulnerable"){
+        logLine("  [!] "+text+"  -> ALLOWED, payload executed", "allow");
+        setDeviceState(idx, "compromised");
+      } else {
+        logLine("  [skip] node-"+String(idx).padStart(2,"0")+" unscanned, no policy loaded", "info");
+      }
+      updateStats();
+    }, 110*k);
+  });
+
+  setTimeout(()=>{
+    logLine("$ wave complete", "info");
+    const compromised = devices.filter(d=>d.state==="compromised").length;
+    if(compromised > 0){
+      logLine("  "+compromised+" node(s) compromised — approve outstanding fixes above and re-run the wave", "allow");
+    } else {
+      logLine("  0 nodes compromised — all deployed rules held under load", "block");
+    }
+  }, 110*attackers.length + 150);
+}
+
+// ---------- policy compiler ----------
+function compilePolicy(){
+  const input = document.getElementById("policyInput").value.trim();
+  const out = document.getElementById("compiledOut");
+  out.classList.add("show");
+  if(input.length === 0){
+    out.textContent = "// enter a plain-English rule above";
+    return;
+  }
+  // toy heuristic "compiler" — pattern matches a few keywords into a fake BPF rule
+  const lower = input.toLowerCase();
+  let match = "syscall == \"execve\"";
+  let extra = "";
+  if(lower.includes("shell")) match = "syscall == \"execve\" && target.binary in [\"/bin/sh\",\"/bin/bash\"]";
+  if(lower.includes("web server") || lower.includes("nginx") || lower.includes("apache")) extra = " && caller.uid == svc(\"webserver\")";
+  if(lower.includes("network") || lower.includes("socket")) match = "socket.family == AF_INET && direction == \"outbound\"";
+  if(lower.includes("root") || lower.includes("privilege")) extra += " && target.uid == 0";
+  if(lower.includes("file") || lower.includes("write")) match = "syscall == \"openat\" && flags & O_WRONLY";
+
+  out.textContent =
+`lsm_rule CUSTOM_${Math.floor(Math.random()*9000+1000)}
+  source: "${input}"
+  match: ${match}${extra}
+  action: DENY -EPERM
+  scope: fleet-wide
+  status: compiled, awaiting approval`;
+
+  logLine('  [compiler] English policy compiled to kernel rule ("'+input.slice(0,48)+(input.length>48?"…":"")+'")', "info");
+}
+
+// ---------- stats ----------
+function updateStats(){
+  const protectedCount = devices.filter(d=>d.state==="protected").length;
+  const openFindings = findings.filter(f=>!f.deployed).length;
+  document.getElementById("statProtected").textContent = protectedCount + " / " + DEVICE_COUNT;
+  document.getElementById("statOpen").textContent = openFindings;
+  document.getElementById("statBlocked").textContent = blockedCount;
+}
+
+// ---------- reset ----------
+function resetDemo(){
+  scanned = false;
+  findings = [];
+  blockedCount = 0;
+  document.getElementById("scanBtn").disabled = false;
+  document.getElementById("attackBtn").disabled = true;
+  buildFleet();
+  renderFindings();
+  updateStats();
+  document.getElementById("console").innerHTML = '<div class="line info">$ waiting for fleet scan or attack simulation...</div>';
+  document.getElementById("compiledOut").classList.remove("show");
+}
+
+// ---------- boot ----------
+buildFleet();
+updateStats();
+</script>
+
+</body>
+</html>
