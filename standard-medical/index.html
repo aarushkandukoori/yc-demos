@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Earned Autonomy — Clinical AI Sandbox Demo</title>
+<style>
+  :root{
+    --bg:#0f1416;
+    --panel:#161d20;
+    --panel2:#1c2427;
+    --border:#2a3438;
+    --text:#e8edee;
+    --muted:#8ea0a6;
+    --accent:#4fb3a9;
+    --accent2:#e0a94f;
+    --danger:#d9695f;
+    --good:#5fbf7a;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #1a2226 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    padding:32px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{margin-bottom:28px;}
+  h1{font-size:1.7rem;margin:0 0 6px;font-weight:650;letter-spacing:-0.02em;}
+  .sub{color:var(--muted);font-size:0.95rem;max-width:680px;line-height:1.5;}
+  .badge{
+    display:inline-block;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;
+    background:var(--panel2);border:1px solid var(--border);color:var(--accent);
+    padding:3px 8px;border-radius:20px;margin-bottom:12px;
+  }
+  .layout{display:grid;grid-template-columns:1.5fr 1fr;gap:20px;}
+  @media (max-width:920px){.layout{grid-template-columns:1fr;}}
+  .card{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:20px;
+  }
+  .card h2{margin:0 0 14px;font-size:1.05rem;font-weight:600;}
+  .case{
+    background:var(--panel2);border:1px solid var(--border);border-radius:8px;
+    padding:16px;margin-bottom:14px;position:relative;
+  }
+  .case-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
+  .case-title{font-weight:600;font-size:0.98rem;}
+  .case-tag{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;}
+  .case-detail{font-size:0.86rem;color:var(--muted);line-height:1.5;margin-bottom:10px;}
+  .ai-box{
+    background:#10171a;border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:12px;
+  }
+  .ai-line{display:flex;justify-content:space-between;font-size:0.82rem;color:var(--muted);margin-bottom:4px;}
+  .ai-rec{font-size:0.9rem;color:var(--text);}
+  .conf{font-weight:600;}
+  .conf.high{color:var(--good);}
+  .conf.mid{color:var(--accent2);}
+  .conf.low{color:var(--danger);}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;}
+  button{
+    font-family:inherit;font-size:0.84rem;font-weight:600;border-radius:6px;padding:8px 12px;
+    border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;
+    transition:filter 0.15s, transform 0.1s;
+  }
+  button:hover{filter:brightness(1.2);}
+  button:active{transform:scale(0.97);}
+  button.approve{background:#1d3b2c;border-color:#2c5c40;color:var(--good);}
+  button.override{background:#3b2323;border-color:#5c2c2c;color:var(--danger);}
+  button.escalate{background:#2c2f1d;border-color:#4d512c;color:var(--accent2);}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  .auto-pill{
+    display:inline-flex;align-items:center;gap:6px;background:#122522;border:1px solid #1f4a41;
+    color:var(--accent);font-size:0.78rem;padding:4px 10px;border-radius:20px;font-weight:600;
+  }
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+  .empty{color:var(--muted);font-size:0.88rem;padding:20px 0;text-align:center;}
+
+  .track{margin-bottom:22px;}
+  .track:last-child{margin-bottom:0;}
+  .track-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .track-name{font-size:0.9rem;font-weight:600;}
+  .track-level{font-size:0.76rem;color:var(--muted);}
+  .bar-outer{
+    height:10px;border-radius:6px;background:#0c1213;border:1px solid var(--border);overflow:hidden;
+    position:relative;
+  }
+  .bar-inner{
+    height:100%;background:linear-gradient(90deg,var(--accent),#7fd6ca);
+    transition:width 0.5s ease;
+  }
+  .gates{display:flex;gap:3px;margin-top:6px;}
+  .gate{flex:1;height:4px;border-radius:2px;background:var(--border);}
+  .gate.hit{background:var(--accent);}
+  .level-note{font-size:0.76rem;color:var(--muted);margin-top:6px;line-height:1.4;}
+  .revoke-note{font-size:0.76rem;color:var(--danger);margin-top:6px;}
+
+  .log{max-height:220px;overflow-y:auto;font-size:0.8rem;}
+  .log-entry{padding:7px 0;border-bottom:1px solid var(--border);color:var(--muted);}
+  .log-entry b{color:var(--text);}
+  .log-entry.approve{color:var(--good);}
+  .log-entry.override{color:var(--danger);}
+
+  footer{
+    margin-top:40px;padding-top:18px;border-top:1px solid var(--border);
+    color:var(--muted);font-size:0.78rem;text-align:center;
+  }
+  .reset-btn{
+    background:var(--panel2);font-size:0.78rem;padding:6px 10px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge">toy sandbox &middot; synthetic patients only</div>
+    <h1>Earned Autonomy Console</h1>
+    <p class="sub">A miniature version of a clinical trust ladder. The AI starts every task type fully supervised.
+    Each physician approval nudges it toward more independence; each override sets it back. Cross a gate and the AI
+    starts clearing routine cases on its own &mdash; unusual cases still always land on your desk.</p>
+  </header>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Incoming queue</h2>
+      <div id="queue"></div>
+      <div class="empty" id="emptyMsg" style="display:none;">Queue clear. Click "Send next case" to continue.</div>
+      <div class="btns" style="margin-top:6px;">
+        <button id="nextBtn" onclick="spawnCase()">Send next case &rarr;</button>
+        <button class="reset-btn" onclick="resetAll()">Reset simulation</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:20px;">
+        <h2>Autonomy by task type</h2>
+        <div id="tracks"></div>
+      </div>
+      <div class="card">
+        <h2>Decision log</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Standard Medical (YC S26). Not affiliated with Standard Medical.</footer>
+</div>
+
+<script>
+/* ---------- synthetic data ---------- */
+const TASK_TYPES = {
+  renewal: { label: "Prescription renewal", gatesNeeded: [3, 6] },
+  labs: { label: "Routine lab review", gatesNeeded: [3, 6] }
+};
+
+const RENEWAL_CASES = [
+  { name: "R. Nguyen, 41", detail: "Lisinopril 10mg, refill #4, BP logs stable 118-124/76-80 over 90 days.", ai: "Approve refill, no dose change", confidence: 0.94, unusual: false },
+  { name: "T. Okafor, 58", detail: "Atorvastatin 20mg, refill #7, latest lipid panel within target range.", ai: "Approve refill, no dose change", confidence: 0.96, unusual: false },
+  { name: "S. Patel, 33", detail: "Sertraline 50mg, refill #2, patient-reported mood stable, no new symptoms.", ai: "Approve refill, no dose change", confidence: 0.9, unusual: false },
+  { name: "M. Delgado, 67", detail: "Metformin 500mg, refill #9, A1c improved from 7.2 to 6.6.", ai: "Approve refill, no dose change", confidence: 0.95, unusual: false },
+  { name: "J. Kowalski, 52", detail: "Warfarin 5mg, refill request, INR reading 4.1 (target 2-3), new bruising reported.", ai: "Escalate: INR out of range, bleeding risk", confidence: 0.4, unusual: true },
+  { name: "A. Chen, 29", detail: "Amoxicillin refill request for a condition last treated 8 months ago, no recent visit.", ai: "Escalate: refill request outside normal renewal pattern", confidence: 0.38, unusual: true },
+  { name: "L. Fischer, 45", detail: "Levothyroxine 75mcg, refill #5, TSH within normal range at last check.", ai: "Approve refill, no dose change", confidence: 0.93, unusual: false }
+];
+
+const LAB_CASES = [
+  { name: "D. Alvarez, 36", detail: "Annual CBC + metabolic panel, all values within reference range.", ai: "Close out as normal, notify patient", confidence: 0.95, unusual: false },
+  { name: "K. Osei, 49", detail: "Routine lipid panel, LDL 118, HDL 52, consistent with prior year.", ai: "Close out as normal, notify patient", confidence: 0.92, unusual: false },
+  { name: "P. Ibrahim, 61", detail: "A1c recheck at 5.6%, unchanged from last two panels.", ai: "Close out as normal, notify patient", confidence: 0.94, unusual: false },
+  { name: "C. Novak, 54", detail: "Routine CBC shows platelet count 68k, well below reference range.", ai: "Escalate: unexplained thrombocytopenia", confidence: 0.35, unusual: true },
+  { name: "H. Youssef, 27", detail: "Thyroid panel, TSH and free T4 both within normal limits.", ai: "Close out as normal, notify patient", confidence: 0.9, unusual: false },
+  { name: "V. Petrov, 70", detail: "Basic metabolic panel, creatinine up sharply from 0.9 to 2.1 since last check.", ai: "Escalate: acute kidney function change", confidence: 0.33, unusual: true },
+  { name: "N. Suárez, 38", detail: "Annual lipid panel, all values within normal range, no changes needed.", ai: "Close out as normal, notify patient", confidence: 0.93, unusual: false }
+];
+
+let state = {
+  tracks: {
+    renewal: { streak: 0, level: 0, pool: shuffle([...RENEWAL_CASES]) },
+    labs: { streak: 0, level: 0, pool: shuffle([...LAB_CASES]) }
+  },
+  queue: [],
+  log: [],
+  caseId: 0
+};
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(seedRandom()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+let seed = 42;
+function seedRandom(){
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+function levelName(level){
+  return ["Supervised (drafts only)", "Assisted (auto-clears routine)", "Entrusted (full autonomy, unusual cases still escalate)"][level];
+}
+
+function spawnCase(){
+  const types = Object.keys(TASK_TYPES);
+  const type = types[Math.floor(seedRandom()*types.length)];
+  const track = state.tracks[type];
+  if(track.pool.length === 0) track.pool = shuffle([type === "renewal" ? [...RENEWAL_CASES] : [...LAB_CASES]][0]);
+  const template = track.pool.pop();
+  const level = track.level;
+
+  const c = {
+    id: ++state.caseId,
+    type,
+    ...template
+  };
+
+  // If AI has earned autonomy for this task type and the case is routine, auto-clear it.
+  if(level >= 1 && !c.unusual){
+    autoClear(c);
+    render();
+    return;
+  }
+
+  state.queue.push(c);
+  render();
+}
+
+function autoClear(c){
+  addLog(`<b>${TASK_TYPES[c.type].label}</b> for ${c.name} auto-cleared by AI (${Math.round(c.confidence*100)}% confidence) &mdash; no physician review needed.`, "approve");
+}
+
+function addLog(msg, cls){
+  state.log.unshift({ msg, cls });
+  if(state.log.length > 40) state.log.pop();
+}
+
+function decide(caseId, action){
+  const idx = state.queue.findIndex(c => c.id === caseId);
+  if(idx === -1) return;
+  const c = state.queue[idx];
+  const track = state.tracks[c.type];
+
+  if(action === "approve"){
+    if(!c.unusual){
+      track.streak++;
+      maybeLevelUp(track, c.type);
+    }
+    addLog(`Approved AI recommendation for ${c.name} (${TASK_TYPES[c.type].label}): "${c.ai}"`, "approve");
+  } else if(action === "override"){
+    track.streak = 0;
+    if(track.level > 0){
+      track.level = Math.max(0, track.level - 1);
+      addLog(`Overrode AI on ${c.name} &mdash; <b>autonomy for ${TASK_TYPES[c.type].label} stepped down to "${levelName(track.level)}"</b>.`, "override");
+    } else {
+      addLog(`Overrode AI recommendation for ${c.name} (${TASK_TYPES[c.type].label}). Trust streak reset.`, "override");
+    }
+  } else if(action === "escalate"){
+    addLog(`Escalated ${c.name} (${TASK_TYPES[c.type].label}) for full physician workup, as flagged.`, "override");
+  }
+
+  state.queue.splice(idx, 1);
+  render();
+}
+
+function maybeLevelUp(track, type){
+  const gates = TASK_TYPES[type].gatesNeeded;
+  if(track.level < gates.length && track.streak >= gates[track.level]){
+    track.level++;
+    track.streak = 0;
+    addLog(`<b>${TASK_TYPES[type].label} autonomy raised to "${levelName(track.level)}"</b> after a clean approval streak.`, "approve");
+  }
+}
+
+function resetAll(){
+  seed = 42;
+  state = {
+    tracks: {
+      renewal: { streak: 0, level: 0, pool: shuffle([...RENEWAL_CASES]) },
+      labs: { streak: 0, level: 0, pool: shuffle([...LAB_CASES]) }
+    },
+    queue: [],
+    log: [],
+    caseId: 0
+  };
+  render();
+}
+
+function confClass(conf){
+  if(conf >= 0.8) return "high";
+  if(conf >= 0.5) return "mid";
+  return "low";
+}
+
+function render(){
+  const queueEl = document.getElementById("queue");
+  const emptyEl = document.getElementById("emptyMsg");
+  queueEl.innerHTML = "";
+  if(state.queue.length === 0){
+    emptyEl.style.display = "block";
+  } else {
+    emptyEl.style.display = "none";
+    state.queue.forEach(c => {
+      const div = document.createElement("div");
+      div.className = "case";
+      div.innerHTML = `
+        <div class="case-top">
+          <div>
+            <div class="case-title">${c.name}</div>
+            <div class="case-tag">${TASK_TYPES[c.type].label}${c.unusual ? " &middot; flagged unusual" : ""}</div>
+          </div>
+        </div>
+        <div class="case-detail">${c.detail}</div>
+        <div class="ai-box">
+          <div class="ai-line"><span>AI recommendation</span><span class="conf ${confClass(c.confidence)}">${Math.round(c.confidence*100)}% confidence</span></div>
+          <div class="ai-rec">${c.ai}</div>
+        </div>
+        <div class="btns">
+          <button class="approve" onclick="decide(${c.id}, 'approve')">Approve</button>
+          <button class="override" onclick="decide(${c.id}, 'override')">Override</button>
+          <button class="escalate" onclick="decide(${c.id}, 'escalate')">Escalate to full workup</button>
+        </div>
+      `;
+      queueEl.appendChild(div);
+    });
+  }
+
+  const tracksEl = document.getElementById("tracks");
+  tracksEl.innerHTML = "";
+  Object.entries(state.tracks).forEach(([type, track]) => {
+    const gates = TASK_TYPES[type].gatesNeeded;
+    const totalGates = gates.length;
+    const target = track.level < totalGates ? gates[track.level] : gates[totalGates-1];
+    const pct = track.level >= totalGates ? 100 : Math.min(100, (track.streak / target) * 100);
+    const div = document.createElement("div");
+    div.className = "track";
+    div.innerHTML = `
+      <div class="track-head">
+        <span class="track-name">${TASK_TYPES[type].label}</span>
+        <span class="track-level">${levelName(track.level)}</span>
+      </div>
+      <div class="bar-outer"><div class="bar-inner" style="width:${pct}%"></div></div>
+      <div class="gates">
+        ${gates.map((g,i) => `<div class="gate ${i < track.level ? 'hit' : ''}"></div>`).join("")}
+      </div>
+      <div class="level-note">${
+        track.level >= totalGates
+          ? "Maximum autonomy for this toy demo &mdash; unusual cases still always escalate."
+          : `${track.streak}/${target} clean approvals to next gate. One override drops a level.`
+      }</div>
+    `;
+    tracksEl.appendChild(div);
+  });
+
+  const logEl = document.getElementById("log");
+  logEl.innerHTML = state.log.length
+    ? state.log.map(l => `<div class="log-entry ${l.cls}">${l.msg}</div>`).join("")
+    : `<div class="empty">No decisions yet.</div>`;
+}
+
+// seed a few starting cases
+spawnCase();
+spawnCase();
+render();
+</script>
+</body>
+</html>
