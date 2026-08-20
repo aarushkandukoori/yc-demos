@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Co-Adjuster Sandbox — Regulation-Cited Claim Review</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #161d2e;
+    --panel-2: #1d2740;
+    --border: #2a3552;
+    --text: #e7ecf7;
+    --muted: #8a94ac;
+    --accent: #4fd1c5;
+    --accent-2: #f6ad55;
+    --danger: #fc8181;
+    --ok: #68d391;
+    --warn: #f6e05e;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #1a2440 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 40px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 720px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+    padding: 28px 40px 40px;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .field { margin-top: 16px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  select, input[type=number], input[type=text] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 10px;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .toggle-row input { transform: scale(1.1); }
+  .sample-btns {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+  }
+  .sample-btns button {
+    background: var(--panel-2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .sample-btns button:hover { color: var(--text); border-color: var(--accent); }
+  .run-btn {
+    margin-top: 22px;
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: #0b1220;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .run-btn:hover { filter: brightness(1.08); }
+  .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .decision-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .badge-approve { background: rgba(104,211,145,0.12); color: var(--ok); border: 1px solid rgba(104,211,145,0.4); }
+  .badge-review { background: rgba(246,224,94,0.12); color: var(--warn); border: 1px solid rgba(246,224,94,0.4); }
+  .badge-deny { background: rgba(252,129,129,0.12); color: var(--danger); border: 1px solid rgba(252,129,129,0.4); }
+  .confidence {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .meter {
+    height: 6px;
+    background: var(--panel-2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+  .placeholder {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 40px 10px;
+    text-align: center;
+  }
+  .rules {
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .rule-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .rule-card .rule-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .rule-cite {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .rule-status {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+  }
+  .status-pass { color: var(--ok); }
+  .status-flag { color: var(--danger); }
+  .status-check { color: var(--warn); }
+  .rule-text {
+    font-size: 13.5px;
+    color: var(--text);
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+  .rule-note {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .summary-box {
+    margin-top: 22px;
+    padding: 16px;
+    background: var(--panel-2);
+    border-radius: 10px;
+    border-left: 3px solid var(--accent);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .audit-line {
+    margin-top: 18px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px dashed var(--border);
+    padding-top: 12px;
+  }
+  footer {
+    padding: 18px 40px 26px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12.5px;
+    border-top: 1px solid var(--border);
+  }
+  .attorney-flag {
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--danger);
+    background: rgba(252,129,129,0.08);
+    border: 1px solid rgba(252,129,129,0.25);
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Co-Adjuster Sandbox</h1>
+  <p>Toy demo of a regulation-cited claim review engine. Enter synthetic claim facts, pick a jurisdiction ruleset, and get a decision with the specific statute citations it relied on — not a black-box score.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Claim Intake</h2>
+
+    <div class="field">
+      <label for="claimType">Claim type</label>
+      <select id="claimType">
+        <option value="wc">Workers' compensation — injury</option>
+        <option value="crop">Crop insurance — yield loss</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="jurisdiction">Jurisdiction ruleset</label>
+      <select id="jurisdiction">
+        <option value="CA">California Labor Code §139.3 / §4600</option>
+        <option value="TX">Texas Labor Code Title 5, Subtitle A</option>
+        <option value="FCIC">Federal Crop Insurance Corp Handbook</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="reportDelay">Days between injury/loss and report filed</label>
+      <input type="number" id="reportDelay" value="4" min="0" max="120">
+    </div>
+
+    <div class="field">
+      <label for="treatmentGap">Days before first treatment / inspection</label>
+      <input type="number" id="treatmentGap" value="2" min="0" max="120">
+    </div>
+
+    <div class="field">
+      <label for="claimAmount">Claimed amount (USD)</label>
+      <input type="number" id="claimAmount" value="18400" min="0" step="100">
+    </div>
+
+    <div class="field">
+      <label for="priorClaims">Prior claims on file (this policyholder)</label>
+      <input type="number" id="priorClaims" value="0" min="0" max="20">
+    </div>
+
+    <div class="toggle-row">
+      <span>Independent medical / field exam completed</span>
+      <input type="checkbox" id="examDone" checked>
+    </div>
+    <div class="toggle-row">
+      <span>Documentation package complete</span>
+      <input type="checkbox" id="docsComplete" checked>
+    </div>
+    <div class="toggle-row">
+      <span>Witness or third-party corroboration on file</span>
+      <input type="checkbox" id="witness">
+    </div>
+
+    <div class="sample-btns">
+      <button type="button" onclick="loadSample('clean')">Load: clean claim</button>
+      <button type="button" onclick="loadSample('late')">Load: late-reported</button>
+      <button type="button" onclick="loadSample('flagged')">Load: high-risk pattern</button>
+    </div>
+
+    <button class="run-btn" onclick="runReview()">Run co-adjuster review →</button>
+  </section>
+
+  <section class="panel" id="resultsPanel">
+    <h2>Decision Output</h2>
+    <div id="resultsBody">
+      <div class="placeholder">Fill in claim facts and run a review to see a cited decision here.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Veltha (YC S26). Not affiliated with Veltha.
+</footer>
+
+<script>
+const RULESETS = {
+  CA: {
+    label: "California Labor Code",
+    rules: [
+      { cite: "Lab. Code §5400", text: "Injury must be reported to the employer within 30 days; claims reported beyond this window require a documented good-cause exception.", type: "reportDelay", threshold: 30 },
+      { cite: "Lab. Code §4600", text: "Employer/carrier must authorize medical treatment within 1 working day of a valid claim; unreasonable delay exposes the claim to penalty.", type: "treatmentGap", threshold: 5 },
+      { cite: "Lab. Code §139.3", text: "Claims exceeding $15,000 in reserve exposure require a qualified medical evaluator (QME) exam before disposition.", type: "examRequired", threshold: 15000 },
+      { cite: "8 CCR §10109", text: "Disposition file must contain a complete documentation package before a compensability decision is finalized.", type: "docsComplete" },
+    ]
+  },
+  TX: {
+    label: "Texas Labor Code",
+    rules: [
+      { cite: "Lab. Code §409.001", text: "Injury must be reported within 30 days of occurrence or knowledge of the injury.", type: "reportDelay", threshold: 30 },
+      { cite: "Lab. Code §408.027", text: "First medical exam should occur within 7 days for injuries impacting ability to work.", type: "treatmentGap", threshold: 7 },
+      { cite: "28 TAC §127.10", text: "Claims over $10,000 in projected exposure require a designated-doctor exam prior to approval.", type: "examRequired", threshold: 10000 },
+      { cite: "28 TAC §124.2", text: "Wage statement and injury report must be complete in the file before benefits are set.", type: "docsComplete" },
+    ]
+  },
+  FCIC: {
+    label: "Federal Crop Insurance Handbook",
+    rules: [
+      { cite: "FCIC Handbook §2.4", text: "Notice of loss must be filed within 15 days of the earlier of harvest or damage discovery.", type: "reportDelay", threshold: 15 },
+      { cite: "FCIC Handbook §3.1", text: "Field inspection should occur within 10 days of notice for perishable-yield claims.", type: "treatmentGap", threshold: 10 },
+      { cite: "FCIC Handbook §4.7", text: "Loss claims above $10,000 require an appraisal worksheet signed by a certified loss adjuster.", type: "examRequired", threshold: 10000 },
+      { cite: "FCIC Handbook §5.2", text: "Production records and acreage report must be on file before indemnity is calculated.", type: "docsComplete" },
+    ]
+  }
+};
+
+function loadSample(kind) {
+  const s = {
+    clean: { delay: 3, gap: 2, amount: 8200, prior: 0, exam: true, docs: true, witness: true },
+    late: { delay: 46, gap: 1, amount: 6100, prior: 0, exam: true, docs: true, witness: false },
+    flagged: { delay: 2, gap: 12, amount: 27500, prior: 4, exam: false, docs: false, witness: false },
+  }[kind];
+  document.getElementById('reportDelay').value = s.delay;
+  document.getElementById('treatmentGap').value = s.gap;
+  document.getElementById('claimAmount').value = s.amount;
+  document.getElementById('priorClaims').value = s.prior;
+  document.getElementById('examDone').checked = s.exam;
+  document.getElementById('docsComplete').checked = s.docs;
+  document.getElementById('witness').checked = s.witness;
+}
+
+function runReview() {
+  const jurisdictionKey = document.getElementById('jurisdiction').value;
+  const ruleset = RULESETS[jurisdictionKey];
+  const claimType = document.getElementById('claimType').value;
+  const reportDelay = Number(document.getElementById('reportDelay').value) || 0;
+  const treatmentGap = Number(document.getElementById('treatmentGap').value) || 0;
+  const claimAmount = Number(document.getElementById('claimAmount').value) || 0;
+  const priorClaims = Number(document.getElementById('priorClaims').value) || 0;
+  const examDone = document.getElementById('examDone').checked;
+  const docsComplete = document.getElementById('docsComplete').checked;
+  const witness = document.getElementById('witness').checked;
+
+  let flags = 0;
+  let checks = 0;
+  const cards = ruleset.rules.map(rule => {
+    let status = 'pass';
+    let note = 'Consistent with facts on file.';
+
+    if (rule.type === 'reportDelay') {
+      if (reportDelay > rule.threshold) { status = 'flag'; note = `Reported ${reportDelay} days after loss — exceeds the ${rule.threshold}-day window. Needs a good-cause explanation before approval.`; flags++; }
+      else if (reportDelay > rule.threshold * 0.7) { status = 'check'; note = `Reported ${reportDelay} days after loss — inside the window but close to it.`; checks++; }
+    } else if (rule.type === 'treatmentGap') {
+      if (treatmentGap > rule.threshold) { status = 'flag'; note = `${treatmentGap}-day gap before first exam/treatment exceeds the ${rule.threshold}-day standard. Raises causation questions.`; flags++; }
+      else if (treatmentGap > rule.threshold * 0.6) { status = 'check'; note = `${treatmentGap}-day gap is on the high side; worth a note in the file.`; checks++; }
+    } else if (rule.type === 'examRequired') {
+      if (claimAmount > rule.threshold && !examDone) { status = 'flag'; note = `Claimed $${claimAmount.toLocaleString()} exceeds the $${rule.threshold.toLocaleString()} threshold and no qualifying exam is on file.`; flags++; }
+      else if (claimAmount > rule.threshold) { note = `Exam requirement met for a $${claimAmount.toLocaleString()} claim.`; }
+      else { note = `Below the $${rule.threshold.toLocaleString()} exam threshold — not required.`; }
+    } else if (rule.type === 'docsComplete') {
+      if (!docsComplete) { status = 'flag'; note = 'Documentation package is marked incomplete. Decision cannot be finalized on this record alone.'; flags++; }
+    }
+
+    return { ...rule, status, note };
+  });
+
+  if (priorClaims >= 3) { checks++; }
+  if (!witness && claimAmount > 15000) { checks++; }
+
+  let decision, badgeClass, headline;
+  if (flags === 0 && checks <= 1) {
+    decision = 'Recommend: Approve';
+    badgeClass = 'badge-approve';
+    headline = 'All cited requirements are satisfied on the current record.';
+  } else if (flags === 0) {
+    decision = 'Recommend: Approve with note';
+    badgeClass = 'badge-review';
+    headline = 'No hard rule violations, but a couple of soft signals are worth an adjuster glance.';
+  } else if (flags <= 1 && claimAmount < 25000) {
+    decision = 'Recommend: Route to human review';
+    badgeClass = 'badge-review';
+    headline = 'One cited requirement is unmet. Fixable with a supplemental document, not an automatic denial.';
+  } else {
+    decision = 'Recommend: Deny pending remediation';
+    badgeClass = 'badge-deny';
+    headline = 'Multiple cited requirements are unmet on a claim of this size — this is the profile that tends to end up with an attorney if it goes out unchanged.';
+  }
+
+  const confidence = Math.max(38, 96 - flags * 22 - checks * 8 - (priorClaims >= 3 ? 6 : 0));
+
+  const attorneyRisk = (flags >= 2 && claimAmount > 15000) || (flags >= 1 && priorClaims >= 3);
+
+  const rulesHtml = cards.map(c => `
+    <div class="rule-card">
+      <div class="rule-top">
+        <span class="rule-cite">${c.cite}</span>
+        <span class="rule-status status-${c.status}">${c.status === 'pass' ? 'Satisfied' : c.status === 'check' ? 'Note' : 'Flagged'}</span>
+      </div>
+      <div class="rule-text">${c.text}</div>
+      <div class="rule-note">${c.note}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('resultsBody').innerHTML = `
+    <div class="result-header">
+      <span class="decision-badge ${badgeClass}">${decision}</span>
+      <span class="confidence">Model confidence: ${confidence}%</span>
+    </div>
+    <div class="meter"><div class="meter-fill" style="width:${confidence}%"></div></div>
+    <div class="summary-box">${headline}</div>
+    ${attorneyRisk ? `<div class="attorney-flag">⚠ Escalation risk: this fact pattern (multiple unmet requirements + claim size/history) is statistically the kind that lands with plaintiff's counsel if sent out as-is.</div>` : ''}
+    <div class="rules">${rulesHtml}</div>
+    <div class="audit-line">
+      <span>Ruleset: ${ruleset.label} · Claim type: ${claimType === 'wc' ? "Workers' comp" : 'Crop insurance'}</span>
+      <span>${cards.length} citations checked · ${flags} flagged · ${checks} noted</span>
+    </div>
+  `;
+}
+</script>
+
+</body>
+</html>

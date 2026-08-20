@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Foundry — a toy foundation model over transaction streams</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-blue:    #2a78d6;
+    --series-red:     #e34948;
+    --good:           #006300;
+    --panel-bg:       #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-blue:    #3987e5;
+      --series-red:     #e66767;
+      --good:           #0ca30c;
+      --panel-bg:       #202020;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 24px 24px;
+  }
+  header.hero {
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-size: 30px;
+    line-height: 1.2;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    font-size: 15px;
+    color: var(--text-secondary);
+    max-width: 640px;
+    line-height: 1.5;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 16px;
+    font-weight: 700;
+  }
+
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .preset-btn {
+    font-size: 12.5px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .preset-btn:hover {
+    border-color: var(--series-blue);
+    color: var(--series-blue);
+  }
+  .preset-btn.active {
+    background: var(--series-blue);
+    border-color: var(--series-blue);
+    color: #fff;
+  }
+
+  .field {
+    margin-bottom: 18px;
+  }
+  .field:last-child { margin-bottom: 0; }
+  .field-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .field-label .name { color: var(--text-primary); font-weight: 500; }
+  .field-label .val {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--series-blue);
+    height: 18px;
+    cursor: pointer;
+  }
+
+  /* Output side */
+  .score-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .score-figure {
+    font-size: 56px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--series-blue);
+    transition: color 0.2s ease;
+  }
+  .score-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .score-title {
+    font-size: 13px;
+    color: var(--text-secondary);
+    max-width: 320px;
+    line-height: 1.4;
+  }
+  .score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    width: fit-content;
+  }
+  .badge-high   { background: rgba(10,131,10,0.12); color: var(--good); }
+  .badge-mid    { background: rgba(237,161,0,0.15); color: #a06400; }
+  .badge-low    { background: rgba(227,73,72,0.13); color: var(--series-red); }
+
+  .meter {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--grid);
+    overflow: hidden;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .meter-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--series-blue);
+    transition: width 0.25s ease;
+  }
+  .meter-tick {
+    position: absolute;
+    top: -3px;
+    width: 1px;
+    height: 14px;
+    background: var(--baseline);
+  }
+
+  .attr-section h2 { margin-bottom: 4px; }
+  .attr-sub {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 56px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 12.5px;
+  }
+  .bar-row .bar-label {
+    color: var(--text-secondary);
+    text-align: right;
+  }
+  .bar-track {
+    position: relative;
+    height: 16px;
+    background: transparent;
+  }
+  .bar-center-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--baseline);
+  }
+  .bar-fill {
+    position: absolute;
+    top: 2px;
+    height: 12px;
+    border-radius: 3px;
+    transition: width 0.25s ease, left 0.25s ease, background 0.25s ease;
+  }
+  .bar-value {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 14px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .explain {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--grid);
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+  .explain strong { color: var(--text-primary); }
+
+  footer.demo-footer {
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid var(--grid);
+    font-size: 12.5px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="wrap">
+
+    <header class="hero">
+      <div class="eyebrow">Toy demo · not a real product</div>
+      <h1>Signal Foundry</h1>
+      <p class="sub">
+        A miniature stand-in for a private model trained directly on a company's own
+        transaction stream. Shape a synthetic customer's spending behavior on the left —
+        the model on the right re-scores them instantly and shows exactly which signals
+        moved the needle, the same way a bank-hosted model would explain a credit or
+        upgrade decision.
+      </p>
+    </header>
+
+    <div class="grid">
+
+      <!-- LEFT: controls -->
+      <div class="panel">
+        <h2>Synthetic transaction profile</h2>
+        <div class="presets" id="presets"></div>
+        <div id="fields"></div>
+      </div>
+
+      <!-- RIGHT: model output -->
+      <div class="panel">
+        <h2>Model output — premium-tier conversion in next 90 days</h2>
+
+        <div class="score-row">
+          <div class="score-figure" id="scoreFigure">—</div>
+          <div class="score-meta">
+            <div class="score-badge" id="scoreBadge">calculating</div>
+            <div class="score-title">Likelihood this customer converts to the premium
+              card tier, estimated from their simulated transaction pattern alone.</div>
+          </div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-fill" id="meterFill"></div>
+          <div class="meter-tick" style="left:50%"></div>
+        </div>
+
+        <div class="attr-section">
+          <h2>What's driving this score</h2>
+          <div class="attr-sub">Each signal's pull on the prediction, ranked by strength.</div>
+          <div id="bars"></div>
+          <div class="legend">
+            <span><i class="swatch" style="background:var(--series-blue)"></i>pushes conversion likelihood up</span>
+            <span><i class="swatch" style="background:var(--series-red)"></i>pulls it down</span>
+          </div>
+        </div>
+
+        <div class="explain" id="explain"></div>
+      </div>
+
+    </div>
+
+    <footer class="demo-footer">
+      Independent demo built by Aarush Kandukoori, inspired by Lyon (YC S26). Not affiliated with Lyon.
+    </footer>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---- feature definitions: toy weights standing in for a learned model ----
+  var FEATURES = [
+    { key: 'spend',       label: 'Monthly card spend',        unit: '$',  min: 300,  max: 9000, step: 50,  weight: 1.15 },
+    { key: 'diningTravel', label: 'Dining & travel share',      unit: '%',  min: 0,    max: 60,   step: 1,   weight: 1.55 },
+    { key: 'subs',        label: 'Active subscriptions',       unit: '',   min: 0,    max: 14,   step: 1,   weight: 0.45 },
+    { key: 'balance',     label: 'Avg. end-of-month balance',  unit: '$',  min: -500, max: 18000, step: 100, weight: 1.25 },
+    { key: 'overdrafts',  label: 'Overdraft events / yr',      unit: '',   min: 0,    max: 10,   step: 1,   weight: -1.5 },
+    { key: 'income',      label: 'Income deposit regularity',  unit: '/100', min: 0,  max: 100,  step: 1,   weight: 1.2 },
+    { key: 'utilization', label: 'Existing credit utilization', unit: '%', min: 0,    max: 100,  step: 1,   weight: -0.9 }
+  ];
+  var BIAS = -1.75;
+
+  var PRESETS = [
+    { name: 'Frequent traveler', values: { spend: 6800, diningTravel: 42, subs: 6, balance: 9200, overdrafts: 0, income: 92, utilization: 22 } },
+    { name: 'Cash-strapped grad', values: { spend: 900, diningTravel: 8, subs: 2, balance: -300, overdrafts: 4, income: 45, utilization: 78 } },
+    { name: 'Steady saver', values: { spend: 2400, diningTravel: 15, subs: 3, balance: 4200, overdrafts: 0, income: 85, utilization: 30 } },
+    { name: 'Small-biz, lumpy income', values: { spend: 5200, diningTravel: 25, subs: 8, balance: 6100, overdrafts: 2, income: 55, utilization: 60 } }
+  ];
+
+  var state = {};
+  PRESETS[2].values && (state = Object.assign({}, PRESETS[2].values)); // start on "Steady saver"
+
+  var fieldsEl = document.getElementById('fields');
+  var presetsEl = document.getElementById('presets');
+  var barsEl = document.getElementById('bars');
+
+  function fmtVal(f, v) {
+    if (f.unit === '$') return '$' + Math.round(v).toLocaleString();
+    if (f.unit === '%') return Math.round(v) + '%';
+    if (f.unit === '/100') return Math.round(v) + '/100';
+    return Math.round(v).toString();
+  }
+
+  function buildFields() {
+    fieldsEl.innerHTML = '';
+    FEATURES.forEach(function (f) {
+      var wrap = document.createElement('div');
+      wrap.className = 'field';
+
+      var labelRow = document.createElement('div');
+      labelRow.className = 'field-label';
+      var name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = f.label;
+      var val = document.createElement('span');
+      val.className = 'val';
+      val.id = 'val-' + f.key;
+      labelRow.appendChild(name);
+      labelRow.appendChild(val);
+
+      var input = document.createElement('input');
+      input.type = 'range';
+      input.min = f.min;
+      input.max = f.max;
+      input.step = f.step;
+      input.value = state[f.key];
+      input.id = 'in-' + f.key;
+      input.addEventListener('input', function () {
+        state[f.key] = Number(input.value);
+        clearPresetHighlight();
+        update();
+      });
+
+      wrap.appendChild(labelRow);
+      wrap.appendChild(input);
+      fieldsEl.appendChild(wrap);
+    });
+  }
+
+  function buildPresets() {
+    presetsEl.innerHTML = '';
+    PRESETS.forEach(function (p, i) {
+      var btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = p.name;
+      btn.addEventListener('click', function () {
+        state = Object.assign({}, p.values);
+        FEATURES.forEach(function (f) {
+          document.getElementById('in-' + f.key).value = state[f.key];
+        });
+        Array.prototype.forEach.call(presetsEl.children, function (c) { c.classList.remove('active'); });
+        btn.classList.add('active');
+        update();
+      });
+      if (i === 2) btn.classList.add('active');
+      presetsEl.appendChild(btn);
+    });
+  }
+
+  function clearPresetHighlight() {
+    Array.prototype.forEach.call(presetsEl.children, function (c) { c.classList.remove('active'); });
+  }
+
+  function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+
+  function compute() {
+    var contributions = FEATURES.map(function (f) {
+      var z = ((state[f.key] - f.min) / (f.max - f.min)) * 2 - 1; // normalize -1..1
+      var contribution = f.weight * z;
+      return { key: f.key, label: f.label, contribution: contribution };
+    });
+    var logit = BIAS + contributions.reduce(function (s, c) { return s + c.contribution; }, 0);
+    var prob = sigmoid(logit);
+    return { prob: prob, contributions: contributions };
+  }
+
+  function renderBars(contributions) {
+    var sorted = contributions.slice().sort(function (a, b) { return Math.abs(b.contribution) - Math.abs(a.contribution); });
+    var maxAbs = Math.max.apply(null, sorted.map(function (c) { return Math.abs(c.contribution); }).concat([0.1]));
+
+    barsEl.innerHTML = '';
+    sorted.forEach(function (c) {
+      var row = document.createElement('div');
+      row.className = 'bar-row';
+
+      var label = document.createElement('div');
+      label.className = 'bar-label';
+      label.textContent = c.label;
+
+      var track = document.createElement('div');
+      track.className = 'bar-track';
+      var center = document.createElement('div');
+      center.className = 'bar-center-line';
+      track.appendChild(center);
+
+      var fill = document.createElement('div');
+      fill.className = 'bar-fill';
+      var pct = (Math.abs(c.contribution) / maxAbs) * 48; // max 48% of half-width
+      var positive = c.contribution >= 0;
+      fill.style.width = pct + '%';
+      fill.style.background = positive ? 'var(--series-blue)' : 'var(--series-red)';
+      fill.style.left = positive ? '50%' : (50 - pct) + '%';
+      track.appendChild(fill);
+
+      var value = document.createElement('div');
+      value.className = 'bar-value';
+      value.textContent = (c.contribution >= 0 ? '+' : '') + c.contribution.toFixed(2);
+
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(value);
+      barsEl.appendChild(row);
+    });
+  }
+
+  function badgeClass(prob) {
+    if (prob >= 0.66) return 'badge-high';
+    if (prob >= 0.33) return 'badge-mid';
+    return 'badge-low';
+  }
+  function badgeText(prob) {
+    if (prob >= 0.66) return 'high likelihood';
+    if (prob >= 0.33) return 'moderate likelihood';
+    return 'low likelihood';
+  }
+
+  function topDrivers(contributions, positive) {
+    return contributions
+      .filter(function (c) { return positive ? c.contribution > 0.05 : c.contribution < -0.05; })
+      .sort(function (a, b) { return Math.abs(b.contribution) - Math.abs(a.contribution); })
+      .slice(0, 2)
+      .map(function (c) { return c.label.toLowerCase(); });
+  }
+
+  function update() {
+    FEATURES.forEach(function (f) {
+      document.getElementById('val-' + f.key).textContent = fmtVal(f, state[f.key]);
+    });
+
+    var result = compute();
+    var pct = Math.round(result.prob * 1000) / 10;
+
+    document.getElementById('scoreFigure').textContent = pct.toFixed(1) + '%';
+    document.getElementById('meterFill').style.width = (result.prob * 100) + '%';
+    document.getElementById('meterFill').style.background = result.prob >= 0.5 ? 'var(--series-blue)' : 'var(--series-red)';
+
+    var badge = document.getElementById('scoreBadge');
+    badge.className = 'score-badge ' + badgeClass(result.prob);
+    badge.textContent = badgeText(result.prob);
+
+    renderBars(result.contributions);
+
+    var up = topDrivers(result.contributions, true);
+    var down = topDrivers(result.contributions, false);
+    var explainEl = document.getElementById('explain');
+    var parts = [];
+    if (up.length) parts.push('<strong>' + up.join(' and ') + '</strong> are pulling the score up');
+    if (down.length) parts.push('<strong>' + down.join(' and ') + '</strong> are dragging it down');
+    explainEl.innerHTML = parts.length
+      ? 'Reading the attribution: ' + parts.join(', while ') + '. A production model would learn these weights ' +
+        'and hundreds more directly from a company\'s own transaction history, instead of the seven hand-picked ' +
+        'ones used here.'
+      : 'Move a slider to see which signals the model leans on.';
+  }
+
+  buildFields();
+  buildPresets();
+  update();
+})();
+</script>
+</body>
+</html>
