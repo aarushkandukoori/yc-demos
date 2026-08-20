@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Synapse Trace — Blast Radius Demo</title>
+<style>
+  :root{
+    --bg:#0b0e14;
+    --panel:#12161f;
+    --panel2:#171c28;
+    --line:#232a3a;
+    --text:#e8ecf4;
+    --dim:#8892a6;
+    --accent:#6ee7c8;
+    --accent2:#ff9d6c;
+    --danger:#ff6b7a;
+    --auth:#6ea8ff;
+    --billing:#ffb86e;
+    --api:#c792ea;
+    --notif:#6ee7c8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #16203055, transparent 40%), var(--bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:28px 40px 18px;
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:26px;
+    letter-spacing:-0.02em;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0;
+    color:var(--dim);
+    font-size:14.5px;
+    max-width:640px;
+    line-height:1.5;
+  }
+  .layout{
+    display:grid;
+    grid-template-columns:1fr 380px;
+    gap:0;
+    min-height:calc(100vh - 110px);
+  }
+  .graph-wrap{
+    padding:24px;
+    position:relative;
+    border-right:1px solid var(--line);
+  }
+  .toolbar{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+  }
+  .toolbar .hint{
+    font-size:13px;
+    color:var(--dim);
+  }
+  .legend{
+    display:flex;
+    gap:16px;
+    margin-left:auto;
+    font-size:12px;
+    color:var(--dim);
+  }
+  .legend span{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  svg{
+    width:100%;
+    height:560px;
+    background:
+      linear-gradient(var(--panel2) 1px, transparent 1px) 0 0/32px 32px,
+      linear-gradient(90deg, var(--panel2) 1px, transparent 1px) 0 0/32px 32px,
+      var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+  }
+  .node circle{
+    stroke-width:2;
+    cursor:pointer;
+    transition:all .25s ease;
+  }
+  .node text{
+    fill:var(--text);
+    font-size:10.5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    pointer-events:none;
+  }
+  .node .file{
+    fill:var(--dim);
+    font-size:8.5px;
+  }
+  .edge{
+    stroke:#333c4f;
+    stroke-width:1.4;
+    fill:none;
+    marker-end:url(#arrow);
+    transition:all .25s ease;
+  }
+  .edge.lit{
+    stroke:var(--danger);
+    stroke-width:2.2;
+  }
+  .node.dim circle{opacity:.25;}
+  .node.dim text{opacity:.25;}
+  .node.selected circle{
+    stroke:#fff;
+    filter:drop-shadow(0 0 8px rgba(255,255,255,.5));
+  }
+  .node.hit circle{
+    stroke:var(--danger);
+  }
+  .side{
+    padding:24px;
+    background:var(--panel);
+    overflow-y:auto;
+    max-height:calc(100vh - 110px);
+  }
+  .side h2{
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--dim);
+    margin:0 0 12px;
+  }
+  .empty-state{
+    color:var(--dim);
+    font-size:13.5px;
+    line-height:1.6;
+    border:1px dashed var(--line);
+    border-radius:10px;
+    padding:18px;
+  }
+  .summary-card{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+    margin-bottom:16px;
+  }
+  .summary-card .sym{
+    font-family:ui-monospace,monospace;
+    font-size:16px;
+    color:var(--accent);
+  }
+  .summary-card .num{
+    font-size:28px;
+    font-weight:700;
+    margin:8px 0 2px;
+  }
+  .summary-card .lbl{
+    font-size:12px;
+    color:var(--dim);
+  }
+  .depth-group{
+    margin-bottom:14px;
+  }
+  .depth-group .dg-title{
+    font-size:11.5px;
+    color:var(--dim);
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    margin-bottom:6px;
+    display:flex;
+    justify-content:space-between;
+  }
+  .affected-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:8px 10px;
+    margin-bottom:6px;
+    font-size:12.5px;
+  }
+  .affected-row .name{
+    font-family:ui-monospace,monospace;
+    color:var(--text);
+  }
+  .affected-row .file{
+    color:var(--dim);
+    font-size:10.5px;
+    display:block;
+  }
+  .confidence{
+    font-variant-numeric:tabular-nums;
+    font-weight:600;
+    font-size:12px;
+  }
+  .conf-high{color:var(--danger);}
+  .conf-mid{color:var(--accent2);}
+  .conf-low{color:var(--dim);}
+  .scanning{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:var(--accent);
+    font-size:13px;
+    margin-bottom:10px;
+  }
+  .spinner{
+    width:12px;height:12px;
+    border:2px solid #233;
+    border-top-color:var(--accent);
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  footer{
+    padding:16px 40px;
+    border-top:1px solid var(--line);
+    color:var(--dim);
+    font-size:12px;
+  }
+  .reset-btn{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--dim);
+    padding:6px 12px;
+    border-radius:7px;
+    font-size:12.5px;
+    cursor:pointer;
+  }
+  .reset-btn:hover{color:var(--text);border-color:#3a4356;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Synapse <span>Trace</span></h1>
+  <p>A toy structural graph of a synthetic codebase. Click any function to trace its <strong>blast radius</strong> —
+  every symbol that transitively depends on it, grouped by hop distance with a decaying confidence score.
+  No embeddings, no guessing: just the call graph, walked backwards.</p>
+</header>
+
+<div class="layout">
+  <div class="graph-wrap">
+    <div class="toolbar">
+      <button class="reset-btn" id="resetBtn">Clear selection</button>
+      <span class="hint">Click a node to run impact analysis</span>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--auth)"></i>auth</span>
+        <span><i class="dot" style="background:var(--billing)"></i>billing</span>
+        <span><i class="dot" style="background:var(--api)"></i>api</span>
+        <span><i class="dot" style="background:var(--notif)"></i>notifications</span>
+      </div>
+    </div>
+    <svg id="graph" viewBox="0 0 920 560">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L7,3 z" fill="#333c4f"></path>
+        </marker>
+      </defs>
+      <g id="edgeLayer"></g>
+      <g id="nodeLayer"></g>
+    </svg>
+  </div>
+
+  <div class="side">
+    <h2>Impact Analysis</h2>
+    <div id="sideContent">
+      <div class="empty-state">
+        Select a symbol on the left. Synapse Trace will walk the call graph
+        upward and list every caller (direct and transitive) that would be
+        affected if that symbol's behavior changed — the same "blast radius"
+        an agent needs before it safely edits code.
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Akon Labs (YC S26). Not affiliated with Akon Labs.
+</footer>
+
+<script>
+(function(){
+  // Synthetic codebase: nodes = functions, edges = "caller calls callee"
+  const CLUSTERS = {
+    auth: {color:'var(--auth)', hex:'#6ea8ff'},
+    billing: {color:'var(--billing)', hex:'#ffb86e'},
+    api: {color:'var(--api)', hex:'#c792ea'},
+    notif: {color:'var(--notif)', hex:'#6ee7c8'}
+  };
+
+  const nodes = [
+    {id:'rateLimiter',      file:'src/api/gateway.ts',      cluster:'api',     x:120, y:80},
+    {id:'handleRequest',    file:'src/api/gateway.ts',      cluster:'api',     x:340, y:80},
+    {id:'routeToHandler',   file:'src/api/router.ts',       cluster:'api',     x:560, y:80},
+
+    {id:'authenticateUser', file:'src/auth/session.ts',     cluster:'auth',    x:340, y:210},
+    {id:'validateToken',    file:'src/auth/token.ts',       cluster:'auth',    x:170, y:330},
+    {id:'refreshSession',   file:'src/auth/session.ts',     cluster:'auth',    x:340, y:330},
+    {id:'checkPermissions', file:'src/auth/acl.ts',         cluster:'auth',    x:520, y:330},
+
+    {id:'chargeCard',       file:'src/billing/payments.ts', cluster:'billing', x:700, y:210},
+    {id:'calculateInvoice', file:'src/billing/invoice.ts',  cluster:'billing', x:700, y:330},
+    {id:'applyDiscount',    file:'src/billing/invoice.ts',  cluster:'billing', x:700, y:450},
+    {id:'refundPayment',    file:'src/billing/payments.ts', cluster:'billing', x:860, y:210},
+
+    {id:'sendEmail',        file:'src/notify/mailer.ts',    cluster:'notif',   x:480, y:450},
+    {id:'sendSlackAlert',   file:'src/notify/slack.ts',     cluster:'notif',   x:340, y:450},
+  ];
+
+  const edges = [
+    ['rateLimiter','handleRequest'],
+    ['handleRequest','authenticateUser'],
+    ['handleRequest','routeToHandler'],
+    ['routeToHandler','checkPermissions'],
+    ['routeToHandler','chargeCard'],
+    ['authenticateUser','validateToken'],
+    ['authenticateUser','refreshSession'],
+    ['checkPermissions','validateToken'],
+    ['chargeCard','calculateInvoice'],
+    ['calculateInvoice','applyDiscount'],
+    ['chargeCard','sendEmail'],
+    ['refundPayment','chargeCard'],
+    ['sendEmail','sendSlackAlert'],
+  ];
+
+  const byId = {};
+  nodes.forEach(n => byId[n.id] = n);
+
+  // reverse adjacency: for a given callee, who calls it directly
+  const callers = {};
+  nodes.forEach(n => callers[n.id] = []);
+  edges.forEach(([caller, callee]) => callers[callee].push(caller));
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const edgeLayer = document.getElementById('edgeLayer');
+  const nodeLayer = document.getElementById('nodeLayer');
+  const edgeEls = {};
+
+  function nodeCenter(id){
+    const n = byId[id];
+    return {x:n.x, y:n.y};
+  }
+
+  edges.forEach(([a,b]) => {
+    const p1 = nodeCenter(a), p2 = nodeCenter(b);
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    const r = 30;
+    const sx = p1.x + dx/dist*r, sy = p1.y + dy/dist*r;
+    const ex = p2.x - dx/dist*r, ey = p2.y - dy/dist*r;
+    const path = document.createElementNS(svgNS,'path');
+    path.setAttribute('d', `M${sx},${sy} L${ex},${ey}`);
+    path.setAttribute('class','edge');
+    path.dataset.a = a;
+    path.dataset.b = b;
+    edgeLayer.appendChild(path);
+    edgeEls[a+'->'+b] = path;
+  });
+
+  const nodeEls = {};
+  nodes.forEach(n => {
+    const g = document.createElementNS(svgNS,'g');
+    g.setAttribute('class','node');
+    g.dataset.id = n.id;
+    g.innerHTML = `
+      <circle cx="${n.x}" cy="${n.y}" r="26" fill="#161c28" stroke="${CLUSTERS[n.cluster].hex}"></circle>
+      <text x="${n.x}" y="${n.y-2}" text-anchor="middle">${n.id}</text>
+      <text class="file" x="${n.x}" y="${n.y+11}" text-anchor="middle">${n.file.split('/').pop()}</text>
+    `;
+    g.addEventListener('click', () => runTrace(n.id));
+    nodeLayer.appendChild(g);
+    nodeEls[n.id] = g;
+  });
+
+  function clearHighlight(){
+    Object.values(nodeEls).forEach(g => g.classList.remove('dim','selected','hit'));
+    Object.values(edgeEls).forEach(e => e.classList.remove('lit'));
+  }
+
+  function traceBlastRadius(startId){
+    // BFS upward through callers; depth 0 = start itself
+    const visited = {[startId]:0};
+    const order = [];
+    let frontier = [startId];
+    let depth = 0;
+    while(frontier.length){
+      depth++;
+      const next = [];
+      frontier.forEach(id => {
+        (callers[id] || []).forEach(c => {
+          if(!(c in visited)){
+            visited[c] = depth;
+            next.push(c);
+            order.push({id:c, depth});
+          }
+        });
+      });
+      frontier = next;
+      if(depth > 10) break;
+    }
+    return order;
+  }
+
+  function confidenceFor(depth){
+    // decays with distance from the changed symbol
+    return Math.round(100 * Math.pow(0.72, depth));
+  }
+
+  function confClass(v){
+    if(v >= 65) return 'conf-high';
+    if(v >= 35) return 'conf-mid';
+    return 'conf-low';
+  }
+
+  const sideContent = document.getElementById('sideContent');
+
+  function runTrace(id){
+    clearHighlight();
+    const affected = traceBlastRadius(id);
+
+    // dim everything first, then light up the path
+    Object.values(nodeEls).forEach(g => g.classList.add('dim'));
+    nodeEls[id].classList.remove('dim');
+    nodeEls[id].classList.add('selected');
+
+    affected.forEach(a => {
+      nodeEls[a.id].classList.remove('dim');
+      nodeEls[a.id].classList.add('hit');
+    });
+
+    // light edges that are part of the trace
+    const affectedIds = new Set([id, ...affected.map(a=>a.id)]);
+    edges.forEach(([a,b]) => {
+      if(affectedIds.has(a) && affectedIds.has(b)){
+        edgeEls[a+'->'+b].classList.add('lit');
+      }
+    });
+
+    // fake scanning delay for effect, then render results
+    sideContent.innerHTML = `<div class="scanning"><span class="spinner"></span> walking call graph from <b style="color:var(--text)">${id}</b>…</div>`;
+
+    setTimeout(() => renderResults(id, affected), 420);
+  }
+
+  function renderResults(id, affected){
+    const files = new Set(affected.map(a => byId[a.id].file));
+    const maxDepth = affected.reduce((m,a)=>Math.max(m,a.depth),0);
+
+    let html = `
+      <div class="summary-card">
+        <div class="lbl">Changed symbol</div>
+        <div class="sym">${id}()</div>
+        <div class="num">${affected.length}</div>
+        <div class="lbl">downstream symbols affected across ${files.size} file${files.size===1?'':'s'}, ${maxDepth} hop${maxDepth===1?'':'s'} deep</div>
+      </div>
+    `;
+
+    if(affected.length === 0){
+      html += `<div class="empty-state">Nothing calls <b>${id}</b> in this graph — it's a leaf. Safe to change in isolation.</div>`;
+    } else {
+      const byDepth = {};
+      affected.forEach(a => {
+        byDepth[a.depth] = byDepth[a.depth] || [];
+        byDepth[a.depth].push(a.id);
+      });
+      Object.keys(byDepth).sort((a,b)=>a-b).forEach(depth => {
+        const conf = confidenceFor(Number(depth));
+        html += `<div class="depth-group">
+          <div class="dg-title"><span>${depth} hop${depth==='1'?'':'s'} away</span><span>${byDepth[depth].length} symbol${byDepth[depth].length===1?'':'s'}</span></div>`;
+        byDepth[depth].forEach(sym => {
+          html += `<div class="affected-row">
+            <div>
+              <span class="name">${sym}()</span>
+              <span class="file">${byId[sym].file}</span>
+            </div>
+            <span class="confidence ${confClass(conf)}">${conf}%</span>
+          </div>`;
+        });
+        html += `</div>`;
+      });
+    }
+
+    sideContent.innerHTML = html;
+  }
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    clearHighlight();
+    sideContent.innerHTML = `<div class="empty-state">
+      Select a symbol on the left. Synapse Trace will walk the call graph
+      upward and list every caller (direct and transitive) that would be
+      affected if that symbol's behavior changed — the same "blast radius"
+      an agent needs before it safely edits code.
+    </div>`;
+  });
+})();
+</script>
+
+</body>
+</html>
