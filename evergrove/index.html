@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Coordinator — Voice Agent Care Coordination Demo</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1c2430;
+    --border: #2a3341;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #4fd1a5;
+    --accent-dim: #2c6b52;
+    --warn: #e6b450;
+    --danger: #f0655a;
+    --blue: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at 20% 0%, #131a24 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 40px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr 300px;
+    gap: 18px;
+    padding: 24px 40px;
+    align-items: start;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .case-list { display: flex; flex-direction: column; gap: 8px; }
+  .case-item {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color .15s, transform .15s;
+  }
+  .case-item:hover { border-color: var(--blue); transform: translateY(-1px); }
+  .case-item.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); }
+  .case-item .name { font-weight: 600; font-size: 14px; }
+  .case-item .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-top: 6px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .badge.intake { background: #23324a; color: var(--blue); }
+  .badge.status { background: #2a3d2f; color: var(--accent); }
+  .badge.billing { background: #3d2a1f; color: var(--warn); }
+
+  #callStage {
+    min-height: 520px;
+    display: flex;
+    flex-direction: column;
+  }
+  .call-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .call-title { font-size: 15px; font-weight: 600; }
+  .call-sub { font-size: 12px; color: var(--muted); }
+  #startBtn, .action-btn {
+    background: var(--accent);
+    color: #04231a;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 7px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #startBtn:disabled { opacity: 0.4; cursor: default; }
+  #startBtn:hover:not(:disabled), .action-btn:hover { filter: brightness(1.08); }
+
+  #transcript {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #0e141c;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 320px;
+  }
+  .line { display: flex; gap: 10px; max-width: 92%; }
+  .line.agent { align-self: flex-start; }
+  .line.human { align-self: flex-end; flex-direction: row-reverse; }
+  .avatar {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+  }
+  .line.agent .avatar { background: var(--accent-dim); color: var(--accent); }
+  .line.human .avatar { background: #33405a; color: var(--blue); }
+  .bubble {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 13.5px;
+    line-height: 1.45;
+  }
+  .line.human .bubble { background: #1a2536; }
+  .bubble.escalation { border-color: var(--danger); background: #2a1616; color: #ffcfc9; }
+  .typing { color: var(--muted); font-size: 12px; padding-left: 36px; }
+
+  #callControls {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .action-btn.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .action-btn.danger { background: var(--danger); color: #2b0906; }
+
+  #extractPanel .field {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 13px;
+    gap: 8px;
+  }
+  #extractPanel .field:last-child { border-bottom: none; }
+  #extractPanel .label { color: var(--muted); }
+  #extractPanel .value { font-weight: 600; text-align: right; }
+  #extractPanel .value.pending { color: var(--muted); font-weight: 400; font-style: italic; }
+  #extractPanel .value.filled { color: var(--accent); animation: pop .3s ease; }
+  #extractPanel .value.flagged { color: var(--warn); }
+  @keyframes pop { from { transform: scale(1.15); } to { transform: scale(1); } }
+
+  .confidence-bar {
+    height: 6px;
+    border-radius: 4px;
+    background: #263041;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .confidence-bar > div {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #7ee8c2);
+    width: 0%;
+    transition: width .4s ease;
+  }
+  #confidenceLabel { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  #stats { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .stat .num { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .stat .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  footer {
+    text-align: center;
+    padding: 16px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  footer strong { color: var(--text); }
+
+  @media (max-width: 1000px) {
+    main { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Coordinator <span>— voice agent care-coordination demo</span></h1>
+  <p>Pick an open case. The agent places a synthetic call, runs the conversation, and extracts structured
+  case data live in the right-hand panel — escalating to a human whenever its confidence drops too low
+  to trust an answer. This is a toy simulation: no real calls, numbers, or PHI are involved.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Open Cases</h2>
+    <div class="case-list" id="caseList"></div>
+  </section>
+
+  <section class="panel" id="callStage">
+    <div class="call-header">
+      <div>
+        <div class="call-title" id="callTitle">Select a case to begin</div>
+        <div class="call-sub" id="callSub">No call in progress</div>
+      </div>
+      <button id="startBtn" disabled>Start Call</button>
+    </div>
+    <div id="transcript"></div>
+    <div id="callControls"></div>
+  </section>
+
+  <section class="panel" id="extractPanel">
+    <h2>Live Extraction</h2>
+    <div id="fields"></div>
+    <div id="confidenceLabel">Overall confidence</div>
+    <div class="confidence-bar"><div id="confFill"></div></div>
+
+    <div id="stats">
+      <div class="stat"><div class="num" id="statCalls">0</div><div class="lbl">calls completed today</div></div>
+      <div class="stat"><div class="num" id="statEsc">0</div><div class="lbl">escalated to human</div></div>
+      <div class="stat"><div class="num" id="statTime">—</div><div class="lbl">avg. time saved vs. manual</div></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Evergrove (YC S26). Not affiliated with Evergrove.
+</footer>
+
+<script>
+(function () {
+  // ---- Synthetic case data ----
+  const CASES = [
+    {
+      id: 1, name: "J. Alvarez — Claim #48213", type: "intake",
+      party: "Riverstone PT Clinic", goal: "Schedule initial PT evaluation",
+      fields: [
+        { key: "patient_dob", label: "Patient DOB" },
+        { key: "injury_date", label: "Date of Injury" },
+        { key: "body_part", label: "Body Part" },
+        { key: "next_appt", label: "Next Appointment" },
+        { key: "auth_number", label: "Authorization #" }
+      ],
+      script: [
+        { who: "agent", text: "Hi, this is Coordinator calling on behalf of Meridian Care Partners regarding claim 48213 for J. Alvarez. Do you have a moment to confirm intake details?" },
+        { who: "human", text: "Sure, go ahead." },
+        { who: "agent", text: "Great — can you confirm the patient's date of birth on file?" },
+        { who: "human", text: "Yep, 03/14/1989." },
+        { who: "agent", text: "Thank you. And the date of injury we have listed is June 2nd — does that match your records?", extract: { key: "patient_dob", value: "03/14/1989" } },
+        { who: "human", text: "Correct, June 2nd." },
+        { who: "agent", text: "Understood. Which body part is the referral for — we have lower back listed." , extract: { key: "injury_date", value: "06/02/2026" }},
+        { who: "human", text: "Lower back, yes, with some radiating pain down the left leg." },
+        { who: "agent", text: "Got it. Do you have availability for an initial evaluation in the next 5 business days?", extract: { key: "body_part", value: "Lower back (radiating, L leg)" } },
+        { who: "human", text: "We could do Thursday at 2:15pm." },
+        { who: "agent", text: "Thursday 2:15pm works — I'll confirm with the adjuster. Last thing, can you read back the authorization number so I can log it?", extract: { key: "next_appt", value: "Thu 2:15 PM" } },
+        { who: "human", text: "It's mumbled... sounds like A-something-7-7, I'd have to check the fax." , low_conf: true},
+        { who: "agent", text: "That number came through unclear on my end too — I want to flag this rather than guess on an authorization ID.", escalate: "auth_number", extract: { key: "auth_number", value: "unclear — flagged", flagged: true } },
+        { who: "agent", text: "I've logged everything else and routed the authorization number to a human reviewer for confirmation. Thanks for your time today." }
+      ]
+    },
+    {
+      id: 2, name: "M. Chen — Claim #51902", type: "status",
+      party: "Baystate Ortho Group", goal: "Status update on treatment plan",
+      fields: [
+        { key: "visits_completed", label: "Visits Completed" },
+        { key: "progress", label: "Clinical Progress" },
+        { key: "next_review", label: "Next Review Date" },
+        { key: "work_status", label: "Return-to-Work Status" }
+      ],
+      script: [
+        { who: "agent", text: "Hi, calling from Meridian Care Partners for a routine status check on M. Chen, claim 51902. Is the treating clinician available or can you speak to the chart?" },
+        { who: "human", text: "I can pull it up, one sec... okay, go ahead." },
+        { who: "agent", text: "Thanks. How many PT visits has the patient completed so far?" },
+        { who: "human", text: "Looks like 6 of the approved 12." },
+        { who: "agent", text: "And how would you describe clinical progress at this stage?", extract: { key: "visits_completed", value: "6 of 12" } },
+        { who: "human", text: "Improving — range of motion is up, pain reported down from 7 to 4." },
+        { who: "agent", text: "That's good to hear. Is there a scheduled re-evaluation or review date?", extract: { key: "progress", value: "ROM up, pain 7→4" } },
+        { who: "human", text: "Yes, two weeks from today." },
+        { who: "agent", text: "Perfect. Last question — any update on return-to-work status, even modified duty?", extract: { key: "next_review", value: "In 2 weeks" } },
+        { who: "human", text: "Not yet, still fully off work pending the re-eval." },
+        { who: "agent", text: "Understood — I'll log full duty restriction pending re-evaluation and notify the adjuster. Thanks for the update.", extract: { key: "work_status", value: "Off work, pending re-eval" } }
+      ]
+    },
+    {
+      id: 3, name: "R. Okafor — Claim #39987", type: "billing",
+      party: "Summit Diagnostics Billing", goal: "Resolve billing discrepancy inquiry",
+      fields: [
+        { key: "invoice_id", label: "Invoice ID" },
+        { key: "amount", label: "Disputed Amount" },
+        { key: "reason", label: "Discrepancy Reason" },
+        { key: "resolution", label: "Resolution Path" }
+      ],
+      script: [
+        { who: "agent", text: "Hi, this is Coordinator calling from Meridian Care Partners regarding a billing inquiry on claim 39987 for R. Okafor. I understand there's a discrepancy on a recent invoice?" },
+        { who: "human", text: "Yes, we billed for an MRI but it's showing as denied on our end." },
+        { who: "agent", text: "Can you give me the invoice ID so I can pull the corresponding record?" },
+        { who: "human", text: "Invoice INV-88214." },
+        { who: "agent", text: "Thank you. And what amount is being disputed?", extract: { key: "invoice_id", value: "INV-88214" } },
+        { who: "human", text: "$1,240 for the lumbar MRI." },
+        { who: "agent", text: "I see the authorization on file was approved for a cervical MRI, not lumbar — that mismatch is likely why it denied. Does that match what you're seeing?", extract: { key: "amount", value: "$1,240" } },
+        { who: "human", text: "Huh — actually yes, that would explain it. We may have coded the wrong region." , low_conf: true},
+        { who: "agent", text: "I don't have authority to approve a re-code myself, so I'm going to route this to a claims reviewer with both records attached rather than assume the fix.", escalate: "resolution", extract: { key: "reason", value: "Body region mismatch (lumbar vs. cervical auth)" } },
+        { who: "agent", text: "I've flagged it for human review with a note on the likely cause. You should hear back within one business day." }
+      ]
+    }
+  ];
+
+  const caseListEl = document.getElementById('caseList');
+  const callTitle = document.getElementById('callTitle');
+  const callSub = document.getElementById('callSub');
+  const startBtn = document.getElementById('startBtn');
+  const transcriptEl = document.getElementById('transcript');
+  const controlsEl = document.getElementById('callControls');
+  const fieldsEl = document.getElementById('fields');
+  const confFill = document.getElementById('confFill');
+  const confLabel = document.getElementById('confidenceLabel');
+  const statCalls = document.getElementById('statCalls');
+  const statEsc = document.getElementById('statEsc');
+  const statTime = document.getElementById('statTime');
+
+  let activeCase = null;
+  let callRunning = false;
+  let callTimer = null;
+  let completedCalls = 0;
+  let escalations = 0;
+
+  function renderCaseList() {
+    caseListEl.innerHTML = '';
+    CASES.forEach(c => {
+      const div = document.createElement('div');
+      div.className = 'case-item' + (activeCase && activeCase.id === c.id ? ' active' : '');
+      div.innerHTML = `
+        <div class="name">${c.name}</div>
+        <div class="meta">${c.party}</div>
+        <div class="meta">${c.goal}</div>
+        <span class="badge ${c.type}">${c.type.toUpperCase()}</span>
+      `;
+      div.onclick = () => selectCase(c.id);
+      caseListEl.appendChild(div);
+    });
+  }
+
+  function selectCase(id) {
+    if (callRunning) return;
+    activeCase = CASES.find(c => c.id === id);
+    renderCaseList();
+    callTitle.textContent = activeCase.name;
+    callSub.textContent = `Calling ${activeCase.party} — ${activeCase.goal}`;
+    startBtn.disabled = false;
+    transcriptEl.innerHTML = '<div class="typing">Ready to dial. Press "Start Call".</div>';
+    controlsEl.innerHTML = '';
+    renderFields(activeCase, {});
+    updateConfidence(0);
+  }
+
+  function renderFields(caseObj, values) {
+    fieldsEl.innerHTML = '';
+    caseObj.fields.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'field';
+      const v = values[f.key];
+      let cls = 'pending', text = 'listening…';
+      if (v) {
+        cls = v.flagged ? 'flagged' : 'filled';
+        text = v.value;
+      }
+      row.innerHTML = `<span class="label">${f.label}</span><span class="value ${cls}" data-key="${f.key}">${text}</span>`;
+      fieldsEl.appendChild(row);
+    });
+  }
+
+  function updateConfidence(pct, note) {
+    confFill.style.width = pct + '%';
+    confLabel.textContent = note ? note : `Overall confidence — ${pct}%`;
+  }
+
+  function addLine(who, text, escalation) {
+    const line = document.createElement('div');
+    line.className = 'line ' + who;
+    const avatarText = who === 'agent' ? 'AI' : 'H';
+    line.innerHTML = `
+      <div class="avatar">${avatarText}</div>
+      <div class="bubble ${escalation ? 'escalation' : ''}">${text}</div>
+    `;
+    transcriptEl.appendChild(line);
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  function addTyping(who) {
+    const el = document.createElement('div');
+    el.className = 'typing';
+    el.textContent = (who === 'agent' ? 'Agent' : 'Human') + ' is speaking…';
+    el.id = 'typingIndicator';
+    transcriptEl.appendChild(el);
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+  }
+
+  function startCall() {
+    if (!activeCase || callRunning) return;
+    callRunning = true;
+    startBtn.disabled = true;
+    transcriptEl.innerHTML = '';
+    controlsEl.innerHTML = '<button class="action-btn danger" id="hangupBtn">End Call Early</button>';
+    document.getElementById('hangupBtn').onclick = endCallEarly;
+
+    const values = {};
+    let confidence = 0;
+    renderFields(activeCase, values);
+    updateConfidence(0, 'Dialing…');
+
+    const script = activeCase.script;
+    let i = 0;
+
+    function step() {
+      if (!callRunning || i >= script.length) {
+        finishCall(values);
+        return;
+      }
+      const turn = script[i];
+      addTyping(turn.who);
+      callTimer = setTimeout(() => {
+        removeTyping();
+        addLine(turn.who, turn.text, !!turn.escalate);
+        if (turn.extract) {
+          values[turn.extract.key] = turn.extract;
+          renderFields(activeCase, values);
+          const filledCount = Object.keys(values).length;
+          confidence = Math.min(96, Math.round((filledCount / activeCase.fields.length) * 92) + (turn.extract.flagged ? -8 : 4));
+          updateConfidence(Math.max(confidence, 8), turn.escalate ? 'Confidence dipped — flagging for review' : undefined);
+        }
+        if (turn.escalate) {
+          escalations++;
+          statEsc.textContent = escalations;
+        }
+        i++;
+        callTimer = setTimeout(step, turn.who === 'human' ? 650 : 550);
+      }, turn.who === 'agent' ? 700 : 900);
+    }
+    step();
+  }
+
+  function endCallEarly() {
+    callRunning = false;
+    clearTimeout(callTimer);
+    addLine('agent', 'Call ended manually by supervisor.');
+    controlsEl.innerHTML = '';
+    resetAfterCall();
+  }
+
+  function finishCall(values) {
+    callRunning = false;
+    completedCalls++;
+    statCalls.textContent = completedCalls;
+    statTime.textContent = (7 + Math.round(Math.random() * 4)) + ' min';
+    controlsEl.innerHTML = '<button class="action-btn" id="newCallBtn">Log &amp; Start Another Call</button>';
+    document.getElementById('newCallBtn').onclick = () => {
+      activeCase = null;
+      renderCaseList();
+      callTitle.textContent = 'Select a case to begin';
+      callSub.textContent = 'No call in progress';
+      startBtn.disabled = true;
+      transcriptEl.innerHTML = '<div class="typing">Pick a case on the left to place the next call.</div>';
+      controlsEl.innerHTML = '';
+      fieldsEl.innerHTML = '';
+      updateConfidence(0, 'Overall confidence');
+    };
+  }
+
+  function resetAfterCall() {
+    startBtn.disabled = false;
+  }
+
+  startBtn.addEventListener('click', startCall);
+
+  renderCaseList();
+})();
+</script>
+
+</body>
+</html>

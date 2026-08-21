@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ScanGate — Automated Asset Condition Demo</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel2: #171f2b;
+    --line: #223042;
+    --text: #dce6f2;
+    --muted: #7f93a8;
+    --accent: #4fd1a5;
+    --accent2: #ff8f5e;
+    --danger: #ff5c5c;
+    --warn: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at 20% 0%, #142230 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 32px 24px 12px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 28px;
+    letter-spacing: 0.5px;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px) {
+    .board { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+  .stage {
+    position: relative;
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+  }
+  svg { width: 100%; height: 100%; display: block; }
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--accent);
+    color: #06231a;
+    border: none;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: transform 0.1s ease, opacity 0.15s ease;
+  }
+  button:hover { transform: translateY(-1px); }
+  button.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .scan-line {
+    position: absolute;
+    top: 0;
+    left: -6%;
+    width: 6%;
+    height: 100%;
+    background: linear-gradient(90deg, rgba(79,209,165,0) 0%, rgba(79,209,165,0.55) 50%, rgba(79,209,165,0) 100%);
+    display: none;
+  }
+  .scan-line.active {
+    display: block;
+    animation: sweep 1.4s linear;
+  }
+  @keyframes sweep {
+    from { left: -6%; }
+    to { left: 100%; }
+  }
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .badge {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .badge.clean { background: rgba(79,209,165,0.15); color: var(--accent); }
+  .badge.flag { background: rgba(255,92,92,0.15); color: var(--danger); }
+  .badge.idle { background: rgba(127,147,168,0.15); color: var(--muted); }
+  .findings {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .finding {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--danger);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .finding:hover { background: #1c2530; }
+  .finding .loc {
+    font-weight: 700;
+    color: var(--text);
+  }
+  .finding .meta {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .finding .conf {
+    float: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent2);
+    font-weight: 700;
+  }
+  .empty-state {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 20px 8px;
+  }
+  .timeline {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .pass-chip {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel2);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .pass-chip.selected {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .legend {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.new { background: var(--danger); }
+  .dot.old { background: var(--muted); }
+  footer {
+    text-align: center;
+    padding: 26px 16px 40px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--line);
+    margin-top: 20px;
+  }
+  .subtle {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ScanGate</h1>
+  <p>A toy gate-scan simulator. Drive an asset through the gate on intake, then again on return — ScanGate diffs the two 360° captures and flags anything new. This is an original demo inspired by pocket AI damage cameras, built to explore the core mechanic: automatic before/after diffing of a physical asset.</p>
+</header>
+
+<div class="wrap">
+  <div class="board">
+    <div class="panel">
+      <h2>Gate Camera — Live Diff View</h2>
+      <div class="stage" id="stage">
+        <svg viewBox="0 0 400 300" id="carSvg"></svg>
+        <div class="scan-line" id="scanLine"></div>
+      </div>
+      <div class="controls">
+        <button id="intakeBtn">1. Run Intake Scan</button>
+        <button id="returnBtn" disabled>2. Run Return Scan</button>
+        <button class="secondary" id="resetBtn">Reset Asset</button>
+      </div>
+      <div class="status-row">
+        <span id="statusText">Waiting for intake scan…</span>
+        <span class="badge idle" id="statusBadge">Idle</span>
+      </div>
+      <div class="legend">
+        <span><span class="dot old"></span> pre-existing wear (ignored)</span>
+        <span><span class="dot new"></span> new since intake (flagged)</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Condition Record — Unit #TRK-2291</h2>
+      <div class="timeline" id="timeline"></div>
+      <div class="findings" id="findings">
+        <div class="empty-state">No scans yet. Run an intake scan to build a baseline condition record.</div>
+      </div>
+      <div class="subtle" id="explainer">
+        ScanGate builds a per-panel baseline from the intake pass, then re-photographs every panel on return and compares geometry + surface texture against that baseline. Differences below the confidence threshold are treated as lighting noise and suppressed automatically.
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Dream (YC S26). Not affiliated with Dream.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Synthetic "asset" geometry: a simple car silhouette drawn in SVG ----
+  const svg = document.getElementById("carSvg");
+  const stage = document.getElementById("stage");
+  const scanLine = document.getElementById("scanLine");
+  const intakeBtn = document.getElementById("intakeBtn");
+  const returnBtn = document.getElementById("returnBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const statusText = document.getElementById("statusText");
+  const statusBadge = document.getElementById("statusBadge");
+  const findingsEl = document.getElementById("findings");
+  const timelineEl = document.getElementById("timeline");
+
+  const NS = "http://www.w3.org/2000/svg";
+
+  // Panel zones on the silhouette, in svg coordinates, mapped to plausible names
+  const PANELS = [
+    { id: "hood",       label: "Hood",             cx: 90,  cy: 150, r: 26 },
+    { id: "fender-fl",  label: "Front-left fender", cx: 60,  cy: 175, r: 20 },
+    { id: "door-fl",    label: "Front-left door",   cx: 150, cy: 170, r: 22 },
+    { id: "door-rl",    label: "Rear-left door",    cx: 210, cy: 170, r: 22 },
+    { id: "quarter-rl", label: "Rear-left quarter", cx: 270, cy: 175, r: 20 },
+    { id: "bumper-r",   label: "Rear bumper",       cx: 320, cy: 165, r: 22 },
+    { id: "roof",       label: "Roof panel",        cx: 190, cy: 110, r: 24 },
+    { id: "bumper-f",   label: "Front bumper",      cx: 40,  cy: 165, r: 18 }
+  ];
+
+  // Pre-existing wear that should NOT be flagged on return (already in the baseline)
+  const PRE_EXISTING = ["fender-fl"];
+
+  // Deterministic "damage that happened during the rental/trip" — appears only on return
+  const NEW_DAMAGE = [
+    { panelId: "door-rl",   type: "Scrape",  confidence: 0.94 },
+    { panelId: "bumper-r",  type: "Dent",    confidence: 0.88 },
+    { panelId: "quarter-rl",type: "Scratch", confidence: 0.81 }
+  ];
+
+  let state = "empty"; // empty -> intake -> return
+  let selectedPanel = null;
+
+  function drawCar(mode) {
+    // mode: "empty" | "intake" | "return"
+    svg.innerHTML = "";
+
+    const bg = document.createElementNS(NS, "rect");
+    bg.setAttribute("x", 0); bg.setAttribute("y", 0);
+    bg.setAttribute("width", 400); bg.setAttribute("height", 300);
+    bg.setAttribute("fill", "#0f1620");
+    svg.appendChild(bg);
+
+    // ground line
+    const ground = document.createElementNS(NS, "line");
+    ground.setAttribute("x1", 10); ground.setAttribute("x2", 390);
+    ground.setAttribute("y1", 210); ground.setAttribute("y2", 210);
+    ground.setAttribute("stroke", "#223042");
+    ground.setAttribute("stroke-width", 2);
+    svg.appendChild(ground);
+
+    if (mode === "empty") {
+      const txt = document.createElementNS(NS, "text");
+      txt.setAttribute("x", 200); txt.setAttribute("y", 155);
+      txt.setAttribute("text-anchor", "middle");
+      txt.setAttribute("fill", "#4a5b6e");
+      txt.setAttribute("font-size", "14");
+      txt.textContent = "gate is empty — press \"Run Intake Scan\"";
+      svg.appendChild(txt);
+      return;
+    }
+
+    // car body silhouette
+    const body = document.createElementNS(NS, "path");
+    body.setAttribute("d", "M20,190 Q20,150 60,145 L100,110 Q140,95 190,95 Q240,95 270,115 L330,145 Q380,150 380,190 L380,205 L20,205 Z");
+    body.setAttribute("fill", "#2a3b4d");
+    body.setAttribute("stroke", "#3d5064");
+    body.setAttribute("stroke-width", 2);
+    svg.appendChild(body);
+
+    // wheels
+    [90, 310].forEach(function (wx) {
+      const w = document.createElementNS(NS, "circle");
+      w.setAttribute("cx", wx); w.setAttribute("cy", 205); w.setAttribute("r", 16);
+      w.setAttribute("fill", "#12181f"); w.setAttribute("stroke", "#3d5064"); w.setAttribute("stroke-width", 2);
+      svg.appendChild(w);
+    });
+
+    // panel hit-zones (invisible-ish, used for damage markers)
+    PANELS.forEach(function (p) {
+      const zone = document.createElementNS(NS, "circle");
+      zone.setAttribute("cx", p.cx); zone.setAttribute("cy", p.cy); zone.setAttribute("r", p.r);
+      zone.setAttribute("fill", "rgba(255,255,255,0.02)");
+      zone.setAttribute("stroke", "rgba(255,255,255,0.05)");
+      zone.setAttribute("stroke-dasharray", "3,3");
+      svg.appendChild(zone);
+    });
+
+    if (mode === "intake") {
+      PRE_EXISTING.forEach(function (pid) {
+        markPanel(pid, "old");
+      });
+    }
+
+    if (mode === "return") {
+      PRE_EXISTING.forEach(function (pid) {
+        markPanel(pid, "old");
+      });
+      NEW_DAMAGE.forEach(function (d) {
+        markPanel(d.panelId, "new", d);
+      });
+    }
+  }
+
+  function markPanel(panelId, kind, damage) {
+    const p = PANELS.find(function (pp) { return pp.id === panelId; });
+    if (!p) return;
+    const marker = document.createElementNS(NS, "circle");
+    marker.setAttribute("cx", p.cx);
+    marker.setAttribute("cy", p.cy);
+    marker.setAttribute("r", kind === "new" ? 12 : 9);
+    marker.setAttribute("fill", kind === "new" ? "rgba(255,92,92,0.85)" : "rgba(127,147,168,0.55)");
+    marker.setAttribute("stroke", "#0b0f14");
+    marker.setAttribute("stroke-width", 2);
+    marker.setAttribute("data-panel", panelId);
+    marker.style.cursor = "pointer";
+    if (kind === "new") {
+      marker.addEventListener("click", function () { selectFinding(panelId); });
+      const pulse = document.createElementNS(NS, "animate");
+      pulse.setAttribute("attributeName", "r");
+      pulse.setAttribute("values", "10;14;10");
+      pulse.setAttribute("dur", "1.6s");
+      pulse.setAttribute("repeatCount", "indefinite");
+      marker.appendChild(pulse);
+    }
+    svg.appendChild(marker);
+  }
+
+  function runScan(mode) {
+    scanLine.classList.remove("active");
+    void scanLine.offsetWidth; // restart animation
+    scanLine.classList.add("active");
+    intakeBtn.disabled = true;
+    returnBtn.disabled = true;
+
+    setTimeout(function () {
+      if (mode === "intake") {
+        state = "intake";
+        drawCar("intake");
+        statusText.textContent = "Baseline captured — 8 panels indexed, 1 pre-existing wear mark ignored.";
+        statusBadge.textContent = "Baseline set";
+        statusBadge.className = "badge clean";
+        returnBtn.disabled = false;
+        intakeBtn.disabled = true;
+        findingsEl.innerHTML = '<div class="empty-state">Baseline stored. Now run the return scan to compare.</div>';
+        renderTimeline();
+      } else if (mode === "return") {
+        state = "return";
+        drawCar("return");
+        statusText.textContent = "Comparison complete — " + NEW_DAMAGE.length + " new findings since intake.";
+        statusBadge.textContent = NEW_DAMAGE.length + " flagged";
+        statusBadge.className = "badge flag";
+        returnBtn.disabled = true;
+        renderFindings();
+        renderTimeline();
+      }
+    }, 1450);
+  }
+
+  function renderFindings() {
+    findingsEl.innerHTML = "";
+    NEW_DAMAGE.forEach(function (d) {
+      const p = PANELS.find(function (pp) { return pp.id === d.panelId; });
+      const row = document.createElement("div");
+      row.className = "finding";
+      row.dataset.panel = d.panelId;
+      row.innerHTML =
+        '<span class="conf">' + Math.round(d.confidence * 100) + '% conf</span>' +
+        '<div class="loc">' + p.label + ' — ' + d.type + '</div>' +
+        '<div class="meta">Not present in intake baseline. Flagged as new damage.</div>';
+      row.addEventListener("click", function () { selectFinding(d.panelId); });
+      findingsEl.appendChild(row);
+    });
+  }
+
+  function selectFinding(panelId) {
+    document.querySelectorAll(".finding").forEach(function (f) {
+      f.style.borderLeftColor = f.dataset.panel === panelId ? "var(--warn)" : "var(--danger)";
+    });
+    const marker = svg.querySelector('circle[data-panel="' + panelId + '"]');
+    if (marker) {
+      marker.setAttribute("stroke", "#ffd166");
+      marker.setAttribute("stroke-width", 3);
+      setTimeout(function () {
+        marker.setAttribute("stroke", "#0b0f14");
+        marker.setAttribute("stroke-width", 2);
+      }, 700);
+    }
+  }
+
+  function renderTimeline() {
+    const passes = [];
+    passes.push({ label: "Intake", active: state === "intake" });
+    if (state === "return") passes.push({ label: "Return", active: true });
+    timelineEl.innerHTML = "";
+    passes.forEach(function (pass) {
+      const chip = document.createElement("div");
+      chip.className = "pass-chip" + (pass.active ? " selected" : "");
+      chip.textContent = pass.label + " scan";
+      timelineEl.appendChild(chip);
+    });
+  }
+
+  intakeBtn.addEventListener("click", function () { runScan("intake"); });
+  returnBtn.addEventListener("click", function () { runScan("return"); });
+  resetBtn.addEventListener("click", function () {
+    state = "empty";
+    scanLine.classList.remove("active");
+    intakeBtn.disabled = false;
+    returnBtn.disabled = true;
+    statusText.textContent = "Waiting for intake scan…";
+    statusBadge.textContent = "Idle";
+    statusBadge.className = "badge idle";
+    findingsEl.innerHTML = '<div class="empty-state">No scans yet. Run an intake scan to build a baseline condition record.</div>';
+    timelineEl.innerHTML = "";
+    drawCar("empty");
+  });
+
+  drawCar("empty");
+})();
+</script>
+
+</body>
+</html>

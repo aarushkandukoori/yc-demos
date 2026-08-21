@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloudbreak — Solar Uplift Simulator</title>
+<style>
+  :root{
+    --bg:#0b1220;
+    --panel:#121b2e;
+    --panel2:#182338;
+    --line:#24314c;
+    --sun:#ffb84d;
+    --sun2:#ffd98a;
+    --sky:#3a5a8a;
+    --cloud:#c7d3e8;
+    --good:#3ddc97;
+    --warn:#ff6b6b;
+    --text:#e8edf7;
+    --muted:#8ea0c0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #16233d 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 16px 12px;
+  }
+  header{
+    max-width:920px;
+    width:100%;
+    text-align:center;
+    margin-bottom:22px;
+  }
+  h1{
+    margin:0 0 8px;
+    font-size:28px;
+    letter-spacing:-0.01em;
+  }
+  h1 span{
+    background:linear-gradient(90deg, var(--sun), var(--sun2));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  header p{
+    margin:0 auto;
+    max-width:640px;
+    color:var(--muted);
+    font-size:14.5px;
+    line-height:1.5;
+  }
+  .layout{
+    width:100%;
+    max-width:1040px;
+    display:grid;
+    grid-template-columns:1fr 300px;
+    gap:18px;
+  }
+  @media (max-width:820px){
+    .layout{grid-template-columns:1fr;}
+  }
+  .card{
+    background:linear-gradient(180deg, var(--panel), var(--panel2));
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:18px;
+  }
+  .field-wrap{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .field-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .field-header h2{
+    margin:0;
+    font-size:15px;
+    color:var(--muted);
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+  }
+  .legend{
+    display:flex;
+    gap:14px;
+    font-size:12px;
+    color:var(--muted);
+  }
+  .legend span{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  #field{
+    display:grid;
+    grid-template-columns:repeat(10, 1fr);
+    gap:4px;
+    aspect-ratio:10/6;
+    background:#0d1526;
+    border-radius:10px;
+    padding:8px;
+    border:1px solid var(--line);
+  }
+  .cell{
+    position:relative;
+    border-radius:5px;
+    cursor:pointer;
+    overflow:hidden;
+    background:#1a2740;
+    transition:transform .12s ease;
+  }
+  .cell:hover{transform:scale(1.04);}
+  .cell .panel{
+    position:absolute;
+    inset:0;
+    background:linear-gradient(160deg,#1c2c4a,#101a2e);
+    transition:background .5s ease, box-shadow .5s ease;
+  }
+  .cell .cloud{
+    position:absolute;
+    inset:0;
+    background:radial-gradient(circle at 50% 40%, var(--cloud), #8fa2c2 75%);
+    opacity:var(--cover, 0);
+    transition:opacity .6s ease;
+    mix-blend-mode:screen;
+  }
+  .cell .drone{
+    position:absolute;
+    top:50%;left:50%;
+    width:9px;height:9px;
+    margin:-4.5px 0 0 -4.5px;
+    border-radius:50%;
+    background:#fff;
+    box-shadow:0 0 8px 2px rgba(255,255,255,.9);
+    opacity:0;
+    transition:opacity .3s ease;
+  }
+  .cell.dispatching .drone{opacity:1; animation:pulse 1s ease-in-out infinite;}
+  @keyframes pulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.6);}
+  }
+  .cell .pct{
+    position:absolute;
+    bottom:3px; right:5px;
+    font-size:9px;
+    color:rgba(255,255,255,.55);
+    font-variant-numeric:tabular-nums;
+  }
+  .controls{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:14px;
+  }
+  button{
+    font:inherit;
+    font-weight:600;
+    font-size:13.5px;
+    padding:10px 16px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    background:#1a2740;
+    color:var(--text);
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  button:hover{background:#22314f;}
+  button:active{transform:scale(.97);}
+  button.primary{
+    background:linear-gradient(90deg,#ff9d3d,#ffcf6b);
+    color:#241300;
+    border:none;
+  }
+  button.primary:hover{filter:brightness(1.06);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .stat-block{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .stat{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .stat .label{
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted);
+  }
+  .stat .value{
+    font-size:26px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+  }
+  .stat .value small{
+    font-size:14px;
+    font-weight:500;
+    color:var(--muted);
+  }
+  .bar-track{
+    width:100%;
+    height:8px;
+    background:#0d1526;
+    border-radius:5px;
+    overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .bar-fill{
+    height:100%;
+    background:linear-gradient(90deg,var(--good),#7fffd4);
+    width:0%;
+    transition:width .6s ease;
+  }
+  .uplift-tag{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:12.5px;
+    padding:5px 10px;
+    border-radius:100px;
+    background:rgba(61,220,151,.12);
+    color:var(--good);
+    border:1px solid rgba(61,220,151,.3);
+    width:fit-content;
+  }
+  .log{
+    margin-top:6px;
+    font-size:12px;
+    color:var(--muted);
+    max-height:120px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    padding-right:4px;
+  }
+  .log div{border-left:2px solid var(--line); padding-left:8px;}
+  .log div.new{color:var(--good); border-left-color:var(--good);}
+  footer{
+    margin-top:26px;
+    padding:14px 10px 26px;
+    font-size:12px;
+    color:var(--muted);
+    text-align:center;
+    max-width:640px;
+  }
+  footer a{color:var(--muted);}
+  .hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cloud<span>break</span> — Solar Uplift Simulator</h1>
+  <p>A toy model of dispatching a drone fleet to thin cloud cover over a solar array, cell by cell, and watching real-time output respond. Click any shaded cell to send a drone; darker haze means less sunlight reaching the panel underneath.</p>
+</header>
+
+<div class="layout">
+  <div class="card field-wrap">
+    <div class="field-header">
+      <h2>Solar Field — 60 Panel Cells</h2>
+      <div class="legend">
+        <span><i class="dot" style="background:#8fa2c2"></i>Cloud cover</span>
+        <span><i class="dot" style="background:#ffcf6b"></i>Full sun</span>
+        <span><i class="dot" style="background:#fff"></i>Drone active</span>
+      </div>
+    </div>
+    <div id="field"></div>
+    <div class="controls">
+      <button class="primary" id="autoBtn">Auto-dispatch fleet</button>
+      <button id="stormBtn">Roll in new cloud front</button>
+      <button id="resetBtn">Reset field</button>
+    </div>
+    <p class="hint">Drones clear a 3×3 radius around the cell they're sent to and cover regrows slowly over time — this mirrors the constant redeployment a real fleet would do as clouds drift.</p>
+  </div>
+
+  <div class="card stat-block">
+    <div class="stat">
+      <div class="label">Live array output</div>
+      <div class="value" id="outputVal">0.0 <small>MW</small></div>
+      <div class="bar-track"><div class="bar-fill" id="outputBar"></div></div>
+    </div>
+    <div class="stat">
+      <div class="label">Uplift vs. clear-sky baseline start</div>
+      <div class="uplift-tag" id="upliftTag">+0% uplift</div>
+    </div>
+    <div class="stat">
+      <div class="label">Cloud coverage</div>
+      <div class="value" id="coverVal">0% <small>of field</small></div>
+    </div>
+    <div class="stat">
+      <div class="label">Drones dispatched</div>
+      <div class="value" id="droneVal">0</div>
+    </div>
+    <div class="stat">
+      <div class="label">Dispatch log</div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Meteoric (YC S26). Not affiliated with Meteoric.
+</footer>
+
+<script>
+(function(){
+  const COLS = 10, ROWS = 6, N = COLS*ROWS;
+  const CAPACITY_PER_CELL = 8.5; // synthetic kW-equivalent per cell at 100% sun, scaled to MW below
+  const field = document.getElementById('field');
+  const cells = [];
+  const coverage = new Float32Array(N);
+
+  function idx(r,c){ return r*COLS + c; }
+
+  function seedClouds(){
+    for(let i=0;i<N;i++) coverage[i] = 0;
+    // scatter a few soft cloud blobs
+    const blobs = 4 + Math.floor(Math.random()*3);
+    for(let b=0; b<blobs; b++){
+      const cr = Math.floor(Math.random()*ROWS);
+      const cc = Math.floor(Math.random()*COLS);
+      const rad = 1.6 + Math.random()*1.4;
+      const strength = 0.55 + Math.random()*0.4;
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const d = Math.hypot(r-cr, c-cc);
+          if(d < rad){
+            const add = strength * (1 - d/rad);
+            const i = idx(r,c);
+            coverage[i] = Math.min(1, coverage[i] + add);
+          }
+        }
+      }
+    }
+  }
+
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.innerHTML = '<div class="panel"></div><div class="cloud"></div><div class="drone"></div><div class="pct"></div>';
+      cell.addEventListener('click', () => dispatchTo(r,c));
+      field.appendChild(cell);
+      cells.push(cell);
+    }
+  }
+
+  seedClouds();
+
+  let droneCount = 0;
+  let baselineOutput = null;
+
+  function render(){
+    let totalSun = 0;
+    let totalCover = 0;
+    for(let i=0;i<N;i++){
+      const cov = coverage[i];
+      const sun = 1 - cov*0.85; // full cloud still lets ~15% through
+      totalSun += sun;
+      totalCover += cov;
+      const cell = cells[i];
+      cell.querySelector('.cloud').style.setProperty('--cover', cov.toFixed(2));
+      const panel = cell.querySelector('.panel');
+      const glow = Math.round(sun*255);
+      panel.style.background = `radial-gradient(circle at 50% 35%, rgba(255,${140+glow*0.35|0},${60+glow*0.2|0},${0.15+sun*0.55}), #101a2e)`;
+      panel.style.boxShadow = sun > 0.6 ? `0 0 ${8*sun}px rgba(255,190,90,${sun*0.5})` : 'none';
+      cell.querySelector('.pct').textContent = Math.round(sun*100) + '%';
+    }
+    const avgSun = totalSun / N;
+    const outputMW = avgSun * CAPACITY_PER_CELL * N / 100; // scaled to a friendly MW number
+    if(baselineOutput === null) baselineOutput = outputMW;
+    document.getElementById('outputVal').innerHTML = outputMW.toFixed(1) + ' <small>MW</small>';
+    document.getElementById('outputBar').style.width = Math.min(100, avgSun*100) + '%';
+    document.getElementById('coverVal').innerHTML = Math.round((totalCover/N)*100) + '% <small>of field</small>';
+    const uplift = baselineOutput > 0 ? ((outputMW - baselineOutput) / baselineOutput * 100) : 0;
+    const tag = document.getElementById('upliftTag');
+    tag.textContent = (uplift >= 0 ? '+' : '') + uplift.toFixed(1) + '% uplift';
+    tag.style.color = uplift >= 0 ? 'var(--good)' : 'var(--warn)';
+    tag.style.background = uplift >= 0 ? 'rgba(61,220,151,.12)' : 'rgba(255,107,107,.12)';
+    tag.style.borderColor = uplift >= 0 ? 'rgba(61,220,151,.3)' : 'rgba(255,107,107,.3)';
+  }
+
+  function log(msg, fresh){
+    const box = document.getElementById('log');
+    const line = document.createElement('div');
+    if(fresh) line.className = 'new';
+    line.textContent = msg;
+    box.prepend(line);
+    while(box.children.length > 12) box.removeChild(box.lastChild);
+  }
+
+  function dispatchTo(r,c){
+    const i = idx(r,c);
+    if(coverage[i] < 0.05){
+      log(`Cell (${r+1},${c+1}) already clear — no dispatch needed.`);
+      return;
+    }
+    const cell = cells[i];
+    cell.classList.add('dispatching');
+    droneCount++;
+    document.getElementById('droneVal').textContent = droneCount;
+    log(`Drone ${droneCount} → cell (${r+1},${c+1}): thinning cloud droplets in 3×3 radius.`, true);
+
+    setTimeout(() => {
+      for(let dr=-1; dr<=1; dr++){
+        for(let dc=-1; dc<=1; dc++){
+          const rr = r+dr, cc = c+dc;
+          if(rr<0||rr>=ROWS||cc<0||cc>=COLS) continue;
+          const d = Math.hypot(dr,dc);
+          const j = idx(rr,cc);
+          const reduction = d === 0 ? 0.9 : 0.55;
+          coverage[j] = Math.max(0, coverage[j] - reduction);
+        }
+      }
+      cell.classList.remove('dispatching');
+      render();
+    }, 750);
+  }
+
+  // slow natural regrowth + drift, so the field stays "alive"
+  setInterval(() => {
+    for(let i=0;i<N;i++){
+      coverage[i] = Math.min(1, coverage[i] + (Math.random()*0.015));
+    }
+    render();
+  }, 2200);
+
+  document.getElementById('autoBtn').addEventListener('click', () => {
+    // find the cloudiest cells and dispatch to them automatically
+    const ranked = Array.from({length:N}, (_,i)=>i).sort((a,b)=>coverage[b]-coverage[a]);
+    const targets = ranked.slice(0, 6).filter(i => coverage[i] > 0.1);
+    if(targets.length === 0){ log('Field already clear — no cloudy cells to target.'); return; }
+    targets.forEach((i, k) => {
+      setTimeout(() => dispatchTo(Math.floor(i/COLS), i%COLS), k*180);
+    });
+  });
+
+  document.getElementById('stormBtn').addEventListener('click', () => {
+    seedClouds();
+    for(let i=0;i<N;i++) coverage[i] = Math.min(1, coverage[i]*0.4 + Math.random()*0.6);
+    log('New cloud front rolled in from the west.', true);
+    render();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    seedClouds();
+    droneCount = 0;
+    baselineOutput = null;
+    document.getElementById('droneVal').textContent = '0';
+    document.getElementById('log').innerHTML = '';
+    log('Field reset.');
+    render();
+  });
+
+  render();
+  log('Field initialized with scattered cloud cover.');
+})();
+</script>
+</body>
+</html>
