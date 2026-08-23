@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ballot Compass — Policy-Driven Proxy Vote Engine (Demo)</title>
+<style>
+  :root{
+    --bg:#0f1420;
+    --panel:#161d2e;
+    --panel-2:#1c2438;
+    --border:#2a3450;
+    --text:#e8ecf5;
+    --muted:#8b96b3;
+    --accent:#5b8def;
+    --accent-2:#7fd9c1;
+    --for:#4fd18b;
+    --against:#f06565;
+    --abstain:#e8b944;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,#0b0f19,#0f1420 40%);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:28px 32px 16px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{
+    width:36px;height:36px;border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;color:#0b0f19;font-size:16px;
+  }
+  .brand h1{font-size:18px;margin:0;letter-spacing:.2px;}
+  .brand p{margin:2px 0 0;font-size:12px;color:var(--muted);}
+  main{
+    max-width:1180px;
+    margin:0 auto;
+    padding:28px 32px 60px;
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:24px;
+  }
+  @media (max-width:900px){ main{grid-template-columns:1fr;} }
+  section.card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:20px;
+  }
+  .card h2{font-size:14px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);}
+  .card h2 span{color:var(--text);}
+  .policy-group{margin-top:18px;}
+  .policy-row{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .policy-row:last-child{border-bottom:none;}
+  .policy-label{font-size:13px;line-height:1.4;}
+  .policy-label b{display:block;font-size:13.5px;margin-bottom:2px;}
+  .policy-label small{color:var(--muted);font-size:11.5px;}
+  .switch{
+    position:relative;width:42px;height:24px;flex:0 0 auto;cursor:pointer;
+  }
+  .switch input{opacity:0;width:0;height:0;}
+  .slider-toggle{
+    position:absolute;inset:0;background:#2a3450;border-radius:999px;transition:.15s;
+  }
+  .slider-toggle:before{
+    content:"";position:absolute;height:18px;width:18px;left:3px;top:3px;
+    background:#fff;border-radius:50%;transition:.15s;
+  }
+  input:checked + .slider-toggle{background:var(--accent);}
+  input:checked + .slider-toggle:before{transform:translateX(18px);}
+  .threshold{margin-top:18px;}
+  .threshold label{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;}
+  .threshold input[type=range]{width:100%;margin-top:6px;accent-color:var(--accent);}
+  .run-btn{
+    margin-top:20px;
+    width:100%;
+    padding:12px;
+    background:linear-gradient(135deg,var(--accent),#4173d6);
+    border:none;border-radius:8px;
+    color:#fff;font-weight:700;font-size:13.5px;
+    cursor:pointer;
+    letter-spacing:.2px;
+  }
+  .run-btn:hover{filter:brightness(1.08);}
+  .meeting-picker{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .meeting-pill{
+    padding:6px 12px;border:1px solid var(--border);border-radius:999px;
+    font-size:12px;color:var(--muted);cursor:pointer;background:var(--panel-2);
+  }
+  .meeting-pill.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .ballot-list{display:flex;flex-direction:column;gap:14px;margin-top:16px;}
+  .ballot-item{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px;
+  }
+  .ballot-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+  .ballot-title{font-size:14px;font-weight:700;}
+  .ballot-sub{font-size:11.5px;color:var(--muted);margin-top:3px;}
+  .vote-badge{
+    padding:5px 12px;border-radius:999px;font-size:12px;font-weight:800;
+    letter-spacing:.4px;white-space:nowrap;
+  }
+  .vote-for{background:rgba(79,209,139,.15);color:var(--for);border:1px solid rgba(79,209,139,.4);}
+  .vote-against{background:rgba(240,101,101,.15);color:var(--against);border:1px solid rgba(240,101,101,.4);}
+  .vote-abstain{background:rgba(232,185,68,.15);color:var(--abstain);border:1px solid rgba(232,185,68,.4);}
+  .rationale{
+    margin-top:10px;font-size:12.5px;color:#c3cbe0;line-height:1.55;
+    padding-top:10px;border-top:1px dashed var(--border);
+  }
+  .rationale b{color:var(--text);}
+  .conf-bar{
+    margin-top:10px;height:5px;border-radius:999px;background:#101627;overflow:hidden;
+  }
+  .conf-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));}
+  .conf-label{font-size:10.5px;color:var(--muted);margin-top:4px;display:flex;justify-content:space-between;}
+  .summary-bar{
+    display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;
+  }
+  .summary-chip{
+    flex:1;min-width:110px;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:8px;padding:10px 14px;
+  }
+  .summary-chip .n{font-size:20px;font-weight:800;}
+  .summary-chip .l{font-size:11px;color:var(--muted);margin-top:2px;}
+  .audit-toggle{
+    margin-top:18px;font-size:12px;color:var(--accent);cursor:pointer;user-select:none;
+  }
+  .audit-log{
+    display:none;margin-top:12px;background:#0c111d;border:1px solid var(--border);
+    border-radius:8px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11px;color:#8fa0c9;line-height:1.7;max-height:220px;overflow-y:auto;
+  }
+  .audit-log.open{display:block;}
+  .audit-log .rule-hit{color:var(--accent-2);}
+  footer{
+    text-align:center;padding:24px 20px 40px;color:var(--muted);font-size:12px;
+    border-top:1px solid var(--border);margin-top:20px;
+  }
+  .disclaimer{
+    font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">BC</div>
+    <div>
+      <h1>Ballot Compass</h1>
+      <p>Toy demo of a policy-driven proxy voting engine</p>
+    </div>
+  </div>
+  <div class="disclaimer" style="max-width:320px;text-align:right;">
+    All companies, filings and votes below are synthetic, generated in-browser to illustrate the mechanic.
+  </div>
+</header>
+
+<main>
+  <section class="card" id="policyCard">
+    <h2>Your voting policy <span>(editable)</span></h2>
+    <p style="font-size:12px;color:var(--muted);margin:6px 0 0;">
+      These are the principles the engine reasons from. Flip a rule and re-run — every recommendation
+      below updates to match.
+    </p>
+
+    <div class="policy-group" id="policyToggles"></div>
+
+    <div class="threshold">
+      <label><span>Say-on-pay: max CEO-to-median pay ratio</span><span id="payRatioVal">250x</span></label>
+      <input type="range" id="payRatio" min="100" max="500" step="10" value="250">
+    </div>
+
+    <div class="threshold">
+      <label><span>Director independence: min % independent board</span><span id="indepVal">60%</span></label>
+      <input type="range" id="indep" min="30" max="90" step="5" value="60">
+    </div>
+
+    <button class="run-btn" id="runBtn">Run policy against ballot →</button>
+  </section>
+
+  <section class="card">
+    <h2>Upcoming meeting <span id="meetingName">—</span></h2>
+    <div class="meeting-picker" id="meetingPicker"></div>
+
+    <div class="summary-bar" id="summaryBar"></div>
+
+    <div class="ballot-list" id="ballotList"></div>
+
+    <div class="audit-toggle" id="auditToggle">▸ view full reasoning trail (audit log)</div>
+    <div class="audit-log" id="auditLog"></div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Pennant (YC S26). Not affiliated with Pennant.
+</footer>
+
+<script>
+/* ---------- synthetic data ---------- */
+
+const MEETINGS = [
+  {
+    id: "atlasNC",
+    company: "Atlas Northern Corp.",
+    ticker: "ANC",
+    proposals: [
+      { id:1, type:"say_on_pay", title:"Advisory vote on executive compensation",
+        detail:"CEO total comp $18.4M vs. median employee pay $71K.", payRatio: 259 },
+      { id:2, type:"director", title:"Election of director: R. Halvorsen (Audit Chair)",
+        detail:"Board currently 55% independent; nominee is a related party via prior consulting contract.", independence: 55, related:true },
+      { id:3, type:"poison_pill", title:"Ratify shareholder rights plan (poison pill)",
+        detail:"Adopted without shareholder vote in response to activist stake building.", noVoteAdoption:true },
+      { id:4, type:"esg", title:"Shareholder proposal: report on Scope 3 emissions",
+        detail:"Non-binding request for annual Scope 3 disclosure starting FY27.", binding:false },
+    ]
+  },
+  {
+    id: "vermontMed",
+    company: "Vermont Meridian Health",
+    ticker: "VMH",
+    proposals: [
+      { id:1, type:"say_on_pay", title:"Advisory vote on executive compensation",
+        detail:"CEO total comp $9.1M vs. median employee pay $58K.", payRatio: 157 },
+      { id:2, type:"director", title:"Election of director: J. Okafor (independent)",
+        detail:"Board currently 71% independent; nominee has no related-party ties.", independence: 71, related:false },
+      { id:3, type:"merger", title:"Approve merger with Cascadia Diagnostics",
+        detail:"All-stock deal, 22% premium to unaffected price, fairness opinion attached.", premium:22 },
+      { id:4, type:"esg", title:"Shareholder proposal: independent board chair",
+        detail:"Binding bylaw amendment separating Chair and CEO roles.", binding:true },
+    ]
+  },
+  {
+    id: "brightForge",
+    company: "BrightForge Industrial",
+    ticker: "BFI",
+    proposals: [
+      { id:1, type:"say_on_pay", title:"Advisory vote on executive compensation",
+        detail:"CEO total comp $31.2M vs. median employee pay $64K.", payRatio: 487 },
+      { id:2, type:"director", title:"Election of director: M. Castellano (Compensation Chair)",
+        detail:"Board currently 48% independent; nominee approved the flagged pay package.", independence: 48, related:false, approvedPay:true },
+      { id:3, type:"poison_pill", title:"Ratify shareholder rights plan (poison pill)",
+        detail:"Renewal of existing plan, approved by shareholder vote at last AGM.", noVoteAdoption:false },
+      { id:4, type:"esg", title:"Shareholder proposal: political spending disclosure",
+        detail:"Non-binding request for annual disclosure of lobbying expenditures.", binding:false },
+    ]
+  }
+];
+
+const POLICY_DEFS = [
+  { key:"payRatioCap", label:"Cap executive pay ratio", sub:"Vote against say-on-pay if CEO-to-median pay ratio exceeds threshold below.", default:true },
+  { key:"boardIndependence", label:"Require board independence floor", sub:"Vote against director nominees if independent-director % falls below threshold below.", default:true },
+  { key:"relatedParty", label:"Flag related-party nominees", sub:"Vote against any director nominee with an undisclosed related-party relationship.", default:true },
+  { key:"noVotePill", label:"Oppose unratified poison pills", sub:"Vote against rights plans adopted without a prior shareholder vote.", default:true },
+  { key:"supportESG", label:"Support non-binding ESG disclosure asks", sub:"Vote for shareholder proposals requesting disclosure, even if non-binding.", default:false },
+  { key:"mergerPremium", label:"Require 15%+ deal premium", sub:"Vote against mergers offering less than a 15% premium to unaffected price.", default:true },
+];
+
+let policyState = {};
+POLICY_DEFS.forEach(p => policyState[p.key] = p.default);
+let activeMeetingId = MEETINGS[0].id;
+let lastAudit = [];
+
+/* ---------- render policy panel ---------- */
+
+function renderPolicyToggles(){
+  const el = document.getElementById("policyToggles");
+  el.innerHTML = "";
+  POLICY_DEFS.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "policy-row";
+    row.innerHTML = `
+      <div class="policy-label"><b>${p.label}</b><small>${p.sub}</small></div>
+      <label class="switch">
+        <input type="checkbox" data-key="${p.key}" ${policyState[p.key] ? "checked":""}>
+        <span class="slider-toggle"></span>
+      </label>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll("input[type=checkbox]").forEach(cb => {
+    cb.addEventListener("change", e => {
+      policyState[e.target.dataset.key] = e.target.checked;
+    });
+  });
+}
+
+function renderMeetingPicker(){
+  const el = document.getElementById("meetingPicker");
+  el.innerHTML = "";
+  MEETINGS.forEach(m => {
+    const pill = document.createElement("div");
+    pill.className = "meeting-pill" + (m.id === activeMeetingId ? " active" : "");
+    pill.textContent = `${m.company} (${m.ticker})`;
+    pill.addEventListener("click", () => {
+      activeMeetingId = m.id;
+      renderMeetingPicker();
+      runEngine();
+    });
+    el.appendChild(pill);
+  });
+}
+
+/* ---------- the core mechanic: policy -> recommendation ---------- */
+
+function evaluateProposal(proposal, policy, thresholds){
+  const trail = [];
+  let vote = "FOR";
+  let confidence = 0.62;
+  let reasons = [];
+
+  if (proposal.type === "say_on_pay") {
+    trail.push(`checking payRatioCap rule (enabled=${policy.payRatioCap})`);
+    if (policy.payRatioCap) {
+      if (proposal.payRatio > thresholds.payRatio) {
+        vote = "AGAINST";
+        confidence = 0.9;
+        reasons.push(`Pay ratio ${proposal.payRatio}x exceeds your ${thresholds.payRatio}x cap.`);
+        trail.push(`RULE HIT: payRatio ${proposal.payRatio} > cap ${thresholds.payRatio} → AGAINST`);
+      } else {
+        vote = "FOR";
+        confidence = 0.78;
+        reasons.push(`Pay ratio ${proposal.payRatio}x is within your ${thresholds.payRatio}x cap.`);
+        trail.push(`payRatio ${proposal.payRatio} <= cap ${thresholds.payRatio} → FOR`);
+      }
+    } else {
+      vote = "ABSTAIN";
+      confidence = 0.4;
+      reasons.push("Pay-ratio rule disabled — no policy basis to take a position.");
+      trail.push("payRatioCap disabled → ABSTAIN (no applicable rule)");
+    }
+  }
+
+  else if (proposal.type === "director") {
+    trail.push(`checking boardIndependence (enabled=${policy.boardIndependence}), relatedParty (enabled=${policy.relatedParty})`);
+    let against = [];
+    if (policy.boardIndependence && proposal.independence < thresholds.indep) {
+      against.push(`board independence ${proposal.independence}% is below your ${thresholds.indep}% floor`);
+      trail.push(`RULE HIT: independence ${proposal.independence} < floor ${thresholds.indep}`);
+    }
+    if (policy.relatedParty && proposal.related) {
+      against.push("nominee has an undisclosed related-party relationship");
+      trail.push("RULE HIT: relatedParty flag = true");
+    }
+    if (against.length) {
+      vote = "AGAINST";
+      confidence = 0.85;
+      reasons.push(against.map(a => a.charAt(0).toUpperCase()+a.slice(1)+".").join(" "));
+    } else {
+      vote = "FOR";
+      confidence = 0.74;
+      reasons.push(`Board independence ${proposal.independence}% clears your floor and no related-party flags.`);
+      trail.push("no rule hit → FOR");
+    }
+  }
+
+  else if (proposal.type === "poison_pill") {
+    trail.push(`checking noVotePill (enabled=${policy.noVotePill})`);
+    if (policy.noVotePill && proposal.noVoteAdoption) {
+      vote = "AGAINST";
+      confidence = 0.88;
+      reasons.push("Rights plan was adopted without a prior shareholder vote.");
+      trail.push("RULE HIT: noVoteAdoption = true → AGAINST");
+    } else {
+      vote = "FOR";
+      confidence = 0.7;
+      reasons.push(proposal.noVoteAdoption ? "Rule disabled — treating as routine ratification." : "Plan was previously put to a shareholder vote.");
+      trail.push("no rule hit → FOR");
+    }
+  }
+
+  else if (proposal.type === "esg") {
+    trail.push(`checking supportESG (enabled=${policy.supportESG}), binding=${proposal.binding}`);
+    if (proposal.binding) {
+      vote = "FOR";
+      confidence = 0.8;
+      reasons.push("Binding governance proposal (independent chair) aligns with standard separation-of-powers principles.");
+      trail.push("binding governance proposal → FOR regardless of ESG toggle");
+    } else if (policy.supportESG) {
+      vote = "FOR";
+      confidence = 0.65;
+      reasons.push("Non-binding disclosure request — your policy supports transparency asks.");
+      trail.push("RULE HIT: supportESG enabled → FOR");
+    } else {
+      vote = "AGAINST";
+      confidence = 0.55;
+      reasons.push("Non-binding disclosure request — your policy does not automatically back these.");
+      trail.push("supportESG disabled → AGAINST (default skepticism on non-binding asks)");
+    }
+  }
+
+  else if (proposal.type === "merger") {
+    trail.push(`checking mergerPremium (enabled=${policy.mergerPremium})`);
+    if (policy.mergerPremium && proposal.premium < 15) {
+      vote = "AGAINST";
+      confidence = 0.82;
+      reasons.push(`Deal premium of ${proposal.premium}% is below your 15% minimum.`);
+      trail.push(`RULE HIT: premium ${proposal.premium} < 15 → AGAINST`);
+    } else {
+      vote = "FOR";
+      confidence = 0.77;
+      reasons.push(`Deal premium of ${proposal.premium}% clears your minimum, fairness opinion on file.`);
+      trail.push("premium clears floor → FOR");
+    }
+  }
+
+  return { vote, confidence, rationale: reasons.join(" "), trail };
+}
+
+/* ---------- render ballots ---------- */
+
+function voteClass(v){
+  return v === "FOR" ? "vote-for" : v === "AGAINST" ? "vote-against" : "vote-abstain";
+}
+
+function runEngine(){
+  const meeting = MEETINGS.find(m => m.id === activeMeetingId);
+  document.getElementById("meetingName").textContent = `— ${meeting.company} (${meeting.ticker})`;
+
+  const thresholds = {
+    payRatio: Number(document.getElementById("payRatio").value),
+    indep: Number(document.getElementById("indep").value),
+  };
+
+  const list = document.getElementById("ballotList");
+  list.innerHTML = "";
+  lastAudit = [`Loaded ballot: ${meeting.company} (${meeting.ticker}) — ${meeting.proposals.length} proposals`];
+
+  let counts = { FOR:0, AGAINST:0, ABSTAIN:0 };
+
+  meeting.proposals.forEach(p => {
+    const result = evaluateProposal(p, policyState, thresholds);
+    counts[result.vote]++;
+
+    lastAudit.push(`\n[Proposal ${p.id}] ${p.title}`);
+    result.trail.forEach(t => lastAudit.push("  " + t));
+    lastAudit.push(`  → FINAL: ${result.vote} (confidence ${Math.round(result.confidence*100)}%)`);
+
+    const item = document.createElement("div");
+    item.className = "ballot-item";
+    item.innerHTML = `
+      <div class="ballot-top">
+        <div>
+          <div class="ballot-title">${p.title}</div>
+          <div class="ballot-sub">${p.detail}</div>
+        </div>
+        <div class="vote-badge ${voteClass(result.vote)}">${result.vote}</div>
+      </div>
+      <div class="rationale"><b>Why:</b> ${result.rationale}</div>
+      <div class="conf-bar"><div class="conf-fill" style="width:${Math.round(result.confidence*100)}%"></div></div>
+      <div class="conf-label"><span>model confidence</span><span>${Math.round(result.confidence*100)}%</span></div>
+    `;
+    list.appendChild(item);
+  });
+
+  const summary = document.getElementById("summaryBar");
+  summary.innerHTML = `
+    <div class="summary-chip"><div class="n" style="color:var(--for)">${counts.FOR}</div><div class="l">FOR</div></div>
+    <div class="summary-chip"><div class="n" style="color:var(--against)">${counts.AGAINST}</div><div class="l">AGAINST</div></div>
+    <div class="summary-chip"><div class="n" style="color:var(--abstain)">${counts.ABSTAIN}</div><div class="l">ABSTAIN</div></div>
+  `;
+
+  const log = document.getElementById("auditLog");
+  log.innerHTML = lastAudit.map(l => {
+    const escaped = l.replace(/</g,"&lt;");
+    return `<div class="${l.includes('RULE HIT') ? 'rule-hit' : ''}">${escaped}</div>`;
+  }).join("");
+}
+
+/* ---------- wiring ---------- */
+
+document.getElementById("payRatio").addEventListener("input", e => {
+  document.getElementById("payRatioVal").textContent = e.target.value + "x";
+});
+document.getElementById("indep").addEventListener("input", e => {
+  document.getElementById("indepVal").textContent = e.target.value + "%";
+});
+document.getElementById("runBtn").addEventListener("click", runEngine);
+document.getElementById("auditToggle").addEventListener("click", () => {
+  const log = document.getElementById("auditLog");
+  const open = log.classList.toggle("open");
+  document.getElementById("auditToggle").textContent =
+    (open ? "▾" : "▸") + " view full reasoning trail (audit log)";
+});
+
+renderPolicyToggles();
+renderMeetingPicker();
+runEngine();
+</script>
+
+</body>
+</html>
