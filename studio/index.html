@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cohort Forecast — a decision simulation toy</title>
+<style>
+  :root{
+    --bg:#0b0e14;
+    --panel:#12161f;
+    --panel2:#161b26;
+    --border:#232a38;
+    --text:#e8ecf4;
+    --muted:#8b93a7;
+    --accent:#5fd4c4;
+    --accent2:#f0b45a;
+    --bad:#e2685f;
+    --good:#6fce8b;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #17202b 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:36px 20px 20px;
+  }
+  header{
+    max-width:920px;
+    width:100%;
+    margin-bottom:24px;
+  }
+  h1{
+    font-size:28px;
+    margin:0 0 6px;
+    letter-spacing:-0.02em;
+  }
+  header p{
+    color:var(--muted);
+    margin:0;
+    font-size:15px;
+    line-height:1.5;
+    max-width:640px;
+  }
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--accent);
+    border:1px solid rgba(95,212,196,0.35);
+    background:rgba(95,212,196,0.08);
+    padding:4px 9px;
+    border-radius:999px;
+    margin-bottom:12px;
+  }
+  main{
+    max-width:920px;
+    width:100%;
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:18px;
+  }
+  @media (max-width:800px){
+    main{grid-template-columns:1fr;}
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:20px;
+  }
+  .panel h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0 0 16px;
+  }
+  .field{margin-bottom:20px;}
+  .field label{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    margin-bottom:8px;
+    color:var(--text);
+  }
+  .field label span.val{color:var(--accent); font-variant-numeric:tabular-nums;}
+  input[type=range]{
+    width:100%;
+    accent-color:var(--accent);
+  }
+  select{
+    width:100%;
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:9px 10px;
+    font-size:14px;
+  }
+  button#run{
+    width:100%;
+    margin-top:6px;
+    padding:12px;
+    border-radius:9px;
+    border:none;
+    background:linear-gradient(135deg,var(--accent),#3fb8a8);
+    color:#06110f;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+    transition:transform .1s ease, box-shadow .15s ease;
+  }
+  button#run:hover{transform:translateY(-1px); box-shadow:0 6px 20px rgba(95,212,196,0.25);}
+  button#run:active{transform:translateY(0);}
+  .hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:10px;
+    line-height:1.5;
+  }
+
+  .worlds-wrap{
+    position:relative;
+    min-height:340px;
+    display:flex;
+    flex-direction:column;
+  }
+  .status{
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:10px;
+    min-height:18px;
+  }
+  #worldsCanvas{
+    width:100%;
+    height:150px;
+    display:block;
+    border-radius:8px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+  }
+  .metrics{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:12px;
+    margin-top:16px;
+  }
+  .metric{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 14px;
+  }
+  .metric .m-label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  .metric .m-value{
+    font-size:22px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+  }
+  .metric .m-sub{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:3px;
+  }
+  .up{color:var(--good);}
+  .down{color:var(--bad);}
+
+  .cohorts{margin-top:18px;}
+  .cohort-row{
+    display:grid;
+    grid-template-columns:150px 1fr 60px;
+    align-items:center;
+    gap:10px;
+    margin-bottom:9px;
+    font-size:12.5px;
+  }
+  .cohort-row .name{color:var(--text);}
+  .cohort-row .bar-track{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    height:14px;
+    overflow:hidden;
+    position:relative;
+  }
+  .cohort-row .bar-fill{
+    height:100%;
+    background:linear-gradient(90deg,var(--accent2),var(--accent));
+    width:0%;
+    transition:width .6s cubic-bezier(.2,.8,.2,1);
+  }
+  .cohort-row .pct{
+    text-align:right;
+    color:var(--muted);
+    font-variant-numeric:tabular-nums;
+  }
+
+  footer{
+    max-width:920px;
+    width:100%;
+    margin-top:30px;
+    padding-top:16px;
+    border-top:1px solid var(--border);
+    color:var(--muted);
+    font-size:12px;
+    text-align:center;
+    line-height:1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">Toy simulation</div>
+  <h1>Cohort Forecast</h1>
+  <p>Pick a launch decision. We run it through a set of synthetic consumer cohorts, each with its own price sensitivity, trust, and switching behavior, and forecast what happens before you ship it. Every number below is generated in your browser from made-up sample data — nothing here is a real prediction.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Launch decision</h2>
+
+    <div class="field">
+      <label>Category
+      </label>
+      <select id="category">
+        <option value="snack">New snack flavor</option>
+        <option value="drink">Ready-to-drink beverage</option>
+        <option value="qsr">QSR combo meal</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Price change vs. current line <span class="val" id="priceVal">+0%</span></label>
+      <input type="range" id="price" min="-20" max="30" value="0">
+    </div>
+
+    <div class="field">
+      <label>Promotional intensity <span class="val" id="promoVal">Low</span></label>
+      <input type="range" id="promo" min="0" max="2" value="1">
+    </div>
+
+    <div class="field">
+      <label>Shelf / app placement <span class="val" id="placeVal">Standard</span></label>
+      <input type="range" id="place" min="0" max="2" value="1">
+    </div>
+
+    <button id="run">Run 1,000 simulated worlds</button>
+    <p class="hint">Each run samples 1,000 synthetic market draws across five cohorts, then averages outcomes into a forecast with a confidence band.</p>
+  </section>
+
+  <section class="panel worlds-wrap">
+    <h2>Simulation output</h2>
+    <div class="status" id="status">Adjust the decision, then run the simulation.</div>
+    <canvas id="worldsCanvas" width="600" height="150"></canvas>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="m-label">Adoption, week 4</div>
+        <div class="m-value" id="mAdoption">—</div>
+        <div class="m-sub" id="mAdoptionSub">&nbsp;</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Revenue index</div>
+        <div class="m-value" id="mRevenue">—</div>
+        <div class="m-sub" id="mRevenueSub">&nbsp;</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Net sentiment</div>
+        <div class="m-value" id="mSentiment">—</div>
+        <div class="m-sub" id="mSentimentSub">&nbsp;</div>
+      </div>
+    </div>
+
+    <div class="cohorts" id="cohorts"></div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Studio (YC S26). Not affiliated with Studio.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- synthetic cohort definitions ----
+  // each cohort has a share of the population and response sensitivities
+  // that are entirely made up for this toy, not derived from any real data.
+  const COHORTS = [
+    { key:"loyal",   name:"Loyal regulars",        share:0.31, priceSens:0.35, promoSens:0.30, placeSens:0.25, baseAdopt:0.62, trust:0.85 },
+    { key:"deal",    name:"Deal-triggered shoppers",share:0.24, priceSens:1.00, promoSens:1.10, placeSens:0.55, baseAdopt:0.30, trust:0.55 },
+    { key:"switch",  name:"Price-sensitive switchers", share:0.19, priceSens:1.35, promoSens:0.70, placeSens:0.60, baseAdopt:0.22, trust:0.45 },
+    { key:"early",   name:"First-week adopters",    share:0.14, priceSens:0.20, promoSens:0.90, placeSens:0.95, baseAdopt:0.45, trust:0.60 },
+    { key:"skeptic", name:"Vocal skeptics",         share:0.12, priceSens:0.60, promoSens:0.15, placeSens:0.20, baseAdopt:0.08, trust:0.25 },
+  ];
+
+  const CATEGORY_BASE = {
+    snack: { adopt: 1.00, revenue: 1.00, sentiment: 1.00 },
+    drink: { adopt: 0.90, revenue: 1.15, sentiment: 0.95 },
+    qsr:   { adopt: 1.10, revenue: 1.30, sentiment: 0.90 },
+  };
+
+  const PROMO_LABELS = ["Low","Medium","High"];
+  const PLACE_LABELS = ["Standard","Featured","Endcap / homepage"];
+
+  // deterministic pseudo-random so re-runs with same inputs feel stable-ish
+  // but still show sampling noise across the "1000 worlds"
+  let seed = 42;
+  function rand(){
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return (seed / 0x7fffffff);
+  }
+
+  const priceEl = document.getElementById("price");
+  const promoEl = document.getElementById("promo");
+  const placeEl = document.getElementById("place");
+  const categoryEl = document.getElementById("category");
+  const priceVal = document.getElementById("priceVal");
+  const promoVal = document.getElementById("promoVal");
+  const placeVal = document.getElementById("placeVal");
+  const statusEl = document.getElementById("status");
+  const cohortsEl = document.getElementById("cohorts");
+  const canvas = document.getElementById("worldsCanvas");
+  const ctx = canvas.getContext("2d");
+
+  function syncLabelsSafe(){
+    const p = parseInt(priceEl.value,10);
+    priceVal.textContent = (p>=0?"+":"") + p + "%";
+    promoVal.textContent = PROMO_LABELS[parseInt(promoEl.value,10)];
+    placeVal.textContent = PLACE_LABELS[parseInt(placeEl.value,10)];
+  }
+
+  [priceEl,promoEl,placeEl].forEach(el=>{
+    el.addEventListener("input", syncLabelsSafe);
+  });
+  syncLabelsSafe();
+
+  function buildCohortRows(){
+    cohortsEl.innerHTML = "";
+    COHORTS.forEach(c=>{
+      const row = document.createElement("div");
+      row.className = "cohort-row";
+      row.innerHTML = `
+        <div class="name">${c.name}</div>
+        <div class="bar-track"><div class="bar-fill" id="bar-${c.key}"></div></div>
+        <div class="pct" id="pct-${c.key}">—</div>
+      `;
+      cohortsEl.appendChild(row);
+    });
+  }
+  buildCohortRows();
+
+  function drawWorlds(samples, meanVal){
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+
+    const min = Math.min(...samples);
+    const max = Math.max(...samples);
+    const range = Math.max(max-min, 0.0001);
+
+    // histogram
+    const bins = 40;
+    const counts = new Array(bins).fill(0);
+    samples.forEach(s=>{
+      let idx = Math.floor(((s-min)/range)*bins);
+      if(idx>=bins) idx = bins-1;
+      if(idx<0) idx = 0;
+      counts[idx]++;
+    });
+    const maxCount = Math.max(...counts);
+
+    const padLeft = 6, padRight = 6, padBottom = 6, padTop = 6;
+    const plotW = w - padLeft - padRight;
+    const plotH = h - padBottom - padTop;
+    const barW = plotW / bins;
+
+    for(let i=0;i<bins;i++){
+      const barH = (counts[i]/maxCount) * plotH;
+      const x = padLeft + i*barW;
+      const y = h - padBottom - barH;
+      ctx.fillStyle = "rgba(95,212,196,0.55)";
+      ctx.fillRect(x, y, barW-1, barH);
+    }
+
+    // mean marker
+    const meanX = padLeft + ((meanVal-min)/range)*plotW;
+    ctx.strokeStyle = "#f0b45a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(meanX, padTop);
+    ctx.lineTo(meanX, h-padBottom);
+    ctx.stroke();
+  }
+
+  function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+
+  function runSimulation(){
+    const priceChange = parseInt(priceEl.value,10) / 100; // e.g. 0.1 = +10%
+    const promoLevel = parseInt(promoEl.value,10); // 0,1,2
+    const placeLevel = parseInt(placeEl.value,10); // 0,1,2
+    const category = CATEGORY_BASE[categoryEl.value];
+
+    statusEl.textContent = "Sampling 1,000 worlds across 5 cohorts…";
+
+    // simulate N draws, each draw perturbs cohort behavior with noise
+    const N = 1000;
+    const revenueSamples = [];
+    const adoptionSamples = [];
+    const sentimentSamples = [];
+
+    // accumulate per-cohort adoption for the bar chart
+    const cohortAdoptTotals = {};
+    COHORTS.forEach(c=> cohortAdoptTotals[c.key] = 0);
+
+    for(let i=0;i<N;i++){
+      let worldAdoption = 0;
+      let worldRevenue = 0;
+      let worldSentiment = 0;
+
+      COHORTS.forEach(c=>{
+        const noise = (rand()-0.5) * 0.12;
+
+        // price hurts adoption proportional to sensitivity; negative price change helps
+        const priceEffect = -priceChange * c.priceSens + noise;
+
+        // promo helps adoption, scaled by cohort's promo sensitivity
+        const promoEffect = (promoLevel/2) * c.promoSens * 0.25;
+
+        // placement helps visibility-driven adoption
+        const placeEffect = (placeLevel/2) * c.placeSens * 0.20;
+
+        let cohortAdopt = c.baseAdopt + priceEffect + promoEffect + placeEffect;
+        cohortAdopt = clamp(cohortAdopt, 0.01, 0.98);
+
+        // sentiment drops if price rises faster than trust can absorb, rises with promo relevance
+        let cohortSentiment = c.trust - priceChange*c.priceSens*0.6 + promoEffect*0.3 - (promoLevel>1 && c.key==="skeptic" ? 0.08 : 0);
+        cohortSentiment = clamp(cohortSentiment, 0, 1);
+
+        worldAdoption += cohortAdopt * c.share;
+        worldSentiment += cohortSentiment * c.share;
+        worldRevenue += cohortAdopt * c.share * (1+priceChange) * (1 + (promoLevel*0.04));
+
+        cohortAdoptTotals[c.key] += cohortAdopt;
+      });
+
+      adoptionSamples.push(worldAdoption * category.adopt);
+      revenueSamples.push(worldRevenue * 100 * category.revenue);
+      sentimentSamples.push((worldSentiment*2 - 1) * category.sentiment); // map to -1..1
+    }
+
+    const mean = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+
+    const meanAdoption = mean(adoptionSamples);
+    const meanRevenue = mean(revenueSamples);
+    const meanSentiment = mean(sentimentSamples);
+
+    // baseline (all sliders neutral) for delta comparison, computed quickly
+    const baselineRevenue = 100 * category.revenue * COHORTS.reduce((s,c)=> s + c.baseAdopt*c.share, 0);
+    const revenueDelta = ((meanRevenue-baselineRevenue)/baselineRevenue)*100;
+
+    document.getElementById("mAdoption").textContent = (meanAdoption*100).toFixed(1)+"%";
+    document.getElementById("mAdoptionSub").textContent = "of exposed audience, by week 4";
+
+    document.getElementById("mRevenue").textContent = meanRevenue.toFixed(0);
+    const revEl = document.getElementById("mRevenueSub");
+    revEl.textContent = (revenueDelta>=0?"+":"") + revenueDelta.toFixed(1) + "% vs. no-change baseline";
+    revEl.className = "m-sub " + (revenueDelta>=0 ? "up":"down");
+
+    document.getElementById("mSentiment").textContent = (meanSentiment>=0?"+":"") + meanSentiment.toFixed(2);
+    document.getElementById("mSentimentSub").textContent = "scale −1 (rejection) to +1 (advocacy)";
+
+    drawWorlds(revenueSamples, meanRevenue);
+
+    COHORTS.forEach(c=>{
+      const avgAdopt = cohortAdoptTotals[c.key]/N;
+      const bar = document.getElementById("bar-"+c.key);
+      const pct = document.getElementById("pct-"+c.key);
+      bar.style.width = (avgAdopt*100).toFixed(0)+"%";
+      pct.textContent = (avgAdopt*100).toFixed(0)+"%";
+    });
+
+    statusEl.textContent = "1,000 worlds sampled. Histogram shows revenue-index spread; orange line is the mean.";
+  }
+
+  document.getElementById("run").addEventListener("click", runSimulation);
+
+  // draw an empty baseline chart on load
+  drawWorlds([0,0.1,0.2,0.3,0.4,0.5],0.25);
+})();
+</script>
+
+</body>
+</html>
