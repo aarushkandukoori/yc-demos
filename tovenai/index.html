@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sentinel Desk — Compliance Alert Triage (Demo)</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #111823;
+    --panel-2: #161f2c;
+    --border: #24303f;
+    --text: #dfe8f1;
+    --muted: #7c8ba1;
+    --accent: #4fd1c5;
+    --accent-dim: #1f4a46;
+    --danger: #f2695c;
+    --danger-dim: #4a2320;
+    --warn: #e8b74a;
+    --ok: #63d38a;
+    --mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 800px at 10% -10%, #14202b 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 36px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.3px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 720px;
+    line-height: 1.5;
+  }
+  .stats {
+    display: flex;
+    gap: 14px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    min-width: 110px;
+  }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+  .stat.ok .num { color: var(--ok); }
+  .stat.esc .num { color: var(--danger); }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 150px);
+  }
+  .queue {
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    max-height: calc(100vh - 150px);
+  }
+  .queue h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 6px 6px 12px;
+  }
+  .alert-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .alert-card:hover { border-color: #35526e; transform: translateY(-1px); }
+  .alert-card.active { border-color: var(--accent); background: var(--panel-2); }
+  .alert-card .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .alert-card .src {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    background: #0d141c;
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 5px;
+  }
+  .alert-card .title { font-size: 13.5px; font-weight: 600; margin: 4px 0 3px; }
+  .alert-card .sub { font-size: 12px; color: var(--muted); }
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .badge.pending { background: #2b2410; color: var(--warn); }
+  .badge.cleared { background: var(--accent-dim); color: var(--accent); }
+  .badge.escalated { background: var(--danger-dim); color: var(--danger); }
+
+  .workspace { padding: 24px 36px; overflow-y: auto; max-height: calc(100vh - 150px); }
+  .empty-state { color: var(--muted); font-size: 14px; margin-top: 80px; text-align: center; }
+
+  .case-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+  .case-header h2 { margin: 0 0 4px; font-size: 19px; }
+  .case-meta { color: var(--muted); font-size: 13px; }
+  .case-meta b { color: var(--text); font-weight: 600; }
+
+  .evidence {
+    margin-top: 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .evidence .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 8px; }
+  .evidence pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    margin: 0;
+    color: #c9d6e3;
+  }
+  .evidence .fields {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    font-size: 12.5px;
+  }
+  .evidence .fields div { color: var(--muted); }
+  .evidence .fields b { color: var(--text); display: block; font-size: 13px; margin-top: 2px; }
+
+  .run-btn {
+    margin-top: 20px;
+    background: var(--accent);
+    color: #04201d;
+    border: none;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 11px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: 0.2px;
+  }
+  .run-btn:hover { filter: brightness(1.08); }
+  .run-btn:disabled { opacity: 0.45; cursor: default; }
+
+  .trace {
+    margin-top: 22px;
+    border-left: 2px solid var(--border);
+    padding-left: 18px;
+  }
+  .trace-step {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    opacity: 0;
+    transform: translateY(4px);
+    animation: rise 0.35s ease forwards;
+  }
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+  .trace-step .dot {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--ok);
+  }
+  .trace-step .txt { font-size: 13.5px; color: #c9d6e3; line-height: 1.5; }
+  .trace-step .txt .rule { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+  .verdict {
+    margin-top: 20px;
+    border-radius: 10px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+    opacity: 0;
+    animation: rise 0.4s ease forwards;
+  }
+  .verdict.cleared { background: linear-gradient(180deg, var(--accent-dim), #0d1e1c); border-color: #2b6e64; }
+  .verdict.escalated { background: linear-gradient(180deg, var(--danger-dim), #24120f); border-color: #7a3a32; }
+  .verdict .vtitle { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .verdict.cleared .vtitle { color: var(--ok); }
+  .verdict.escalated .vtitle { color: var(--danger); }
+  .verdict .conf { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .verdict ul { margin: 12px 0 0; padding-left: 18px; font-size: 13.5px; line-height: 1.7; color: #dbe4ee; }
+  .verdict .audit {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    border-top: 1px dashed var(--border);
+    padding-top: 10px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  footer b { color: #9fb0c2; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sentinel Desk <span>· Alert Triage Copilot</span></h1>
+  <p>A toy simulation of automated compliance triage: an agent reviews raw alerts from surveillance systems, reasons over the evidence against a rule library, and either clears the false positive or escalates it with a documented rationale. All alerts and data below are synthetic.</p>
+  <div class="stats">
+    <div class="stat"><div class="num" id="statTotal">0</div><div class="label">Reviewed</div></div>
+    <div class="stat ok"><div class="num" id="statCleared">0</div><div class="label">Auto-cleared</div></div>
+    <div class="stat esc"><div class="num" id="statEscalated">0</div><div class="label">Escalated</div></div>
+    <div class="stat"><div class="num" id="statRate">—</div><div class="label">Auto-clear rate</div></div>
+  </div>
+</header>
+
+<main>
+  <div class="queue">
+    <h2>Alert Queue</h2>
+    <div id="queueList"></div>
+  </div>
+  <div class="workspace" id="workspace">
+    <div class="empty-state">Select an alert from the queue to begin review.</div>
+  </div>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by <b>TovenAI</b> (YC S26). Not affiliated with TovenAI.</footer>
+
+<script>
+// ---------- synthetic alert data ----------
+const ALERTS = [
+  {
+    id: "ALT-3391",
+    source: "eComms",
+    title: "Chat mentions 'trade' in casual channel",
+    sub: "R. Delgado · #desk-general · Bloomberg IB",
+    fields: { Trader: "R. Delgado", Channel: "#desk-general", System: "Bloomberg IB", Trigger: "keyword: trade" },
+    body: "hey grab lunch at 1? that NVDA trade yesterday was wild, saw it on the desk screen lol",
+    facts: {
+      offChannel: false,
+      restrictedListHit: false,
+      clientFacing: false,
+      guaranteeLanguage: false,
+      instructionToHide: false,
+      matchesKnownExceptionId: null,
+      priceDeviationBp: null,
+      counterpartyOverlap: false
+    }
+  },
+  {
+    id: "ALT-3392",
+    source: "Trade Monitoring",
+    title: "Same-day round-trip in illiquid name",
+    sub: "K. Ostrowski · XLTN · Cloud9",
+    fields: { Trader: "K. Ostrowski", Instrument: "XLTN (ADV 40k)", System: "Cloud9", Trigger: "wash-trade pattern" },
+    body: "09:41 BUY 25,000 XLTN @ 4.21 -- 15:58 SELL 25,000 XLTN @ 4.19, same counterparty desk both legs, net economic change ~0.",
+    facts: {
+      offChannel: false,
+      restrictedListHit: false,
+      clientFacing: false,
+      guaranteeLanguage: false,
+      instructionToHide: false,
+      matchesKnownExceptionId: null,
+      priceDeviationBp: 5,
+      counterpartyOverlap: true
+    }
+  },
+  {
+    id: "ALT-3393",
+    source: "eComms",
+    title: "Off-channel instruction language",
+    sub: "M. Feld · WhatsApp bridge · Global Relay",
+    fields: { Trader: "M. Feld", Channel: "WhatsApp bridge", System: "Global Relay", Trigger: "phrase: off the books" },
+    body: "just do this one off the books, don't log it in the blotter, I'll square it up manually later",
+    facts: {
+      offChannel: true,
+      restrictedListHit: false,
+      clientFacing: false,
+      guaranteeLanguage: false,
+      instructionToHide: true,
+      matchesKnownExceptionId: null,
+      priceDeviationBp: null,
+      counterpartyOverlap: false
+    }
+  },
+  {
+    id: "ALT-3394",
+    source: "Trade Surveillance",
+    title: "Restricted-list execution",
+    sub: "A. Nakamura · VRTX · NICE Actimize",
+    fields: { Trader: "A. Nakamura", Instrument: "VRTX", System: "NICE Actimize", Trigger: "restricted-list match" },
+    body: "Executed 8,000 VRTX for house account. VRTX added to restricted list 2 days prior pending M&A advisory.",
+    facts: {
+      offChannel: false,
+      restrictedListHit: true,
+      clientFacing: false,
+      guaranteeLanguage: false,
+      instructionToHide: false,
+      matchesKnownExceptionId: "EXC-1187 (pre-cleared, compliance-approved 04/02)",
+      priceDeviationBp: null,
+      counterpartyOverlap: false
+    }
+  },
+  {
+    id: "ALT-3395",
+    source: "eComms",
+    title: "Guaranteed-return language to client",
+    sub: "J. Whitfield · Symphony · client thread",
+    fields: { Trader: "J. Whitfield", Channel: "Symphony", System: "Symphony", Trigger: "phrase: guaranteed return" },
+    body: "trust me on this one, it's a guaranteed 20% return, literally cannot lose on this position",
+    facts: {
+      offChannel: false,
+      restrictedListHit: false,
+      clientFacing: true,
+      guaranteeLanguage: true,
+      instructionToHide: false,
+      matchesKnownExceptionId: null,
+      priceDeviationBp: null,
+      counterpartyOverlap: false
+    }
+  },
+  {
+    id: "ALT-3396",
+    source: "Trade Monitoring",
+    title: "Order price vs. VWAP deviation",
+    sub: "P. Simmons · ENPH · Exchange Cloud9",
+    fields: { Trader: "P. Simmons", Instrument: "ENPH", System: "Exchange Cloud9", Trigger: "price deviation flag" },
+    body: "Order filled 0.6bp above 5-min VWAP during standard market hours, single fill, no repeat pattern in trailing 30 days.",
+    facts: {
+      offChannel: false,
+      restrictedListHit: false,
+      clientFacing: false,
+      guaranteeLanguage: false,
+      instructionToHide: false,
+      matchesKnownExceptionId: null,
+      priceDeviationBp: 0.6,
+      counterpartyOverlap: false
+    }
+  },
+  {
+    id: "ALT-3397",
+    source: "Publication Review",
+    title: "Research note precedes block trade",
+    sub: "Research Desk · ABCX coverage",
+    fields: { Desk: "Equity Research", Instrument: "ABCX", System: "Publication Review", Trigger: "timing overlap" },
+    body: "Bullish note on ABCX published 6:52am. Same desk executed a 40,000 share block in ABCX at 9:35am, no client order on file preceding publication.",
+    facts: {
+      offChannel: false,
+      restrictedListHit: false,
+      clientFacing: false,
+      guaranteeLanguage: false,
+      instructionToHide: false,
+      matchesKnownExceptionId: null,
+      priceDeviationBp: null,
+      counterpartyOverlap: false,
+      frontRunTimingFlag: true
+    }
+  }
+];
+
+// ---------- rule engine: deterministic, transparent "reasoning" ----------
+function evaluate(alert) {
+  const f = alert.facts;
+  const steps = [];
+  let escalate = false;
+  let confidence = 92;
+
+  steps.push({ rule: "R-01 off-channel comms", note: f.offChannel
+    ? "Message routed through an unmonitored bridge channel — recordkeeping rule engaged."
+    : "Communication occurred on a monitored, archived channel." });
+  if (f.offChannel) { escalate = true; confidence -= 4; }
+
+  steps.push({ rule: "R-02 instruction-to-conceal", note: f.instructionToHide
+    ? "Language explicitly instructs bypassing the blotter / audit trail."
+    : "No language suggesting intent to conceal the activity." });
+  if (f.instructionToHide) { escalate = true; confidence -= 3; }
+
+  steps.push({ rule: "R-03 restricted list cross-check", note: f.restrictedListHit
+    ? (f.matchesKnownExceptionId
+        ? `Instrument is on the restricted list, but a pre-cleared exception was found on file: ${f.matchesKnownExceptionId}.`
+        : "Instrument is on the restricted list with no matching exception record.")
+    : "No restricted-list conflict detected." });
+  if (f.restrictedListHit && !f.matchesKnownExceptionId) { escalate = true; confidence -= 2; }
+
+  steps.push({ rule: "R-04 client-facing guarantee language", note: f.guaranteeLanguage && f.clientFacing
+    ? "Message to a client contains return-guarantee language — potential misrepresentation."
+    : "No guarantee-of-return language detected in client-facing content." });
+  if (f.guaranteeLanguage && f.clientFacing) { escalate = true; confidence -= 1; }
+
+  if (f.priceDeviationBp !== null) {
+    const wash = f.counterpartyOverlap && f.priceDeviationBp < 10;
+    steps.push({ rule: "R-05 execution price / counterparty pattern", note: wash
+      ? `Round-trip with overlapping counterparty desk and only ${f.priceDeviationBp}bp net price movement — consistent with a wash-trade pattern.`
+      : `Price deviation of ${f.priceDeviationBp}bp is within normal execution variance for the instrument's liquidity profile.` });
+    if (wash) { escalate = true; confidence -= 5; }
+  }
+
+  if (f.frontRunTimingFlag) {
+    steps.push({ rule: "R-06 publication-to-execution timing", note: "Block trade executed under 3 hours after a bullish note on the same name, with no prior client order on file — timing pattern consistent with front-running risk." });
+    escalate = true; confidence -= 6;
+  }
+
+  steps.push({ rule: "R-07 keyword vs. intent pass", note: !escalate
+    ? "Trigger keyword present but surrounding context indicates informal, non-instructional conversation."
+    : "Contextual language analysis corroborates the pattern flagged above rather than contradicting it." });
+
+  confidence = Math.max(58, Math.min(99, confidence + (escalate ? 0 : 7)));
+
+  return { escalate, confidence, steps };
+}
+
+// ---------- render ----------
+const state = { active: null, results: {} };
+
+function renderQueue() {
+  const list = document.getElementById('queueList');
+  list.innerHTML = '';
+  ALERTS.forEach(a => {
+    const res = state.results[a.id];
+    const card = document.createElement('div');
+    card.className = 'alert-card' + (state.active === a.id ? ' active' : '');
+    const badge = res ? (res.escalate ? '<span class="badge escalated">Escalated</span>' : '<span class="badge cleared">Cleared</span>') : '<span class="badge pending">Pending</span>';
+    card.innerHTML = `
+      <div class="top-row"><span class="src">${a.source}</span>${badge}</div>
+      <div class="title">${a.id} — ${a.title}</div>
+      <div class="sub">${a.sub}</div>
+    `;
+    card.onclick = () => { state.active = a.id; renderQueue(); renderWorkspace(a.id); };
+    list.appendChild(card);
+  });
+}
+
+function renderWorkspace(id) {
+  const alert = ALERTS.find(a => a.id === id);
+  const ws = document.getElementById('workspace');
+  const existing = state.results[id];
+
+  const fieldsHtml = Object.entries(alert.fields).map(([k, v]) =>
+    `<div>${k}<b>${v}</b></div>`).join('');
+
+  ws.innerHTML = `
+    <div class="case-header">
+      <div>
+        <h2>${alert.id} — ${alert.title}</h2>
+        <div class="case-meta">Source system: <b>${alert.source}</b></div>
+      </div>
+    </div>
+    <div class="evidence">
+      <div class="label">Raw evidence</div>
+      <pre>"${alert.body}"</pre>
+      <div class="fields">${fieldsHtml}</div>
+    </div>
+    ${existing ? '' : `<button class="run-btn" id="runBtn">Run compliance agent</button>`}
+    <div class="trace" id="trace"></div>
+    <div id="verdictSlot"></div>
+  `;
+
+  if (existing) {
+    renderTrace(existing.steps, true);
+    renderVerdict(alert, existing);
+  } else {
+    document.getElementById('runBtn').onclick = () => runAgent(alert);
+  }
+}
+
+function renderTrace(steps, instant) {
+  const trace = document.getElementById('trace');
+  trace.innerHTML = '';
+  steps.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'trace-step';
+    el.style.animationDelay = instant ? '0s' : (i * 0.28) + 's';
+    el.innerHTML = `<div class="dot">✓</div><div class="txt"><span class="rule">${s.rule}</span><br>${s.note}</div>`;
+    trace.appendChild(el);
+  });
+}
+
+function renderVerdict(alert, result) {
+  const slot = document.getElementById('verdictSlot');
+  const cls = result.escalate ? 'escalated' : 'cleared';
+  const title = result.escalate ? '⚠ Escalated to analyst' : '✓ Cleared — false positive';
+  const reasons = result.escalate
+    ? ['Case packaged with evidence, rule citations, and comparable prior dispositions for analyst review.', 'Assigned priority based on rule severity and confidence gap to the clear threshold.']
+    : ['No further action required — disposition and full reasoning trace logged to the audit record.', 'Case remains searchable if related activity resurfaces later.'];
+  const now = "2026-08-24T" + (9 + (ALERTS.findIndex(a=>a.id===alert.id) % 6)) + ":14:0" + (2 + (ALERTS.findIndex(a=>a.id===alert.id))) + "Z";
+
+  slot.innerHTML = `
+    <div class="verdict ${cls}">
+      <div class="vtitle">${title}</div>
+      <div class="conf">Confidence: ${result.confidence}% · ${result.steps.length} rules evaluated</div>
+      <ul>${reasons.map(r => `<li>${r}</li>`).join('')}</ul>
+      <div class="audit">audit_log :: case=${alert.id} · disposition=${result.escalate ? 'ESCALATE' : 'CLEAR'} · confidence=${result.confidence} · ts=${now} · agent=sentinel-triage-v1</div>
+    </div>
+  `;
+}
+
+function runAgent(alert) {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing…';
+  const result = evaluate(alert);
+
+  renderTrace(result.steps, false);
+
+  const totalDelay = result.steps.length * 280 + 400;
+  setTimeout(() => {
+    state.results[alert.id] = result;
+    renderVerdict(alert, result);
+    btn.remove();
+    renderQueue();
+    updateStats();
+  }, totalDelay);
+}
+
+function updateStats() {
+  const results = Object.values(state.results);
+  const total = results.length;
+  const cleared = results.filter(r => !r.escalate).length;
+  const escalated = total - cleared;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statCleared').textContent = cleared;
+  document.getElementById('statEscalated').textContent = escalated;
+  document.getElementById('statRate').textContent = total ? Math.round((cleared / total) * 100) + '%' : '—';
+}
+
+renderQueue();
+</script>
+
+</body>
+</html>
