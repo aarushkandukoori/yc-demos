@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>One Demo, Any Part — Robot Learning Sandbox</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0e1117;
+    --panel:#161b24;
+    --panel2:#1c2330;
+    --line:#2a3345;
+    --accent:#5fd0a8;
+    --accent2:#f2a65a;
+    --danger:#e2617a;
+    --text:#e7ecf3;
+    --muted:#8a94a6;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background:radial-gradient(circle at 20% -10%, #1c2434 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 16px 12px;
+  }
+  header{max-width:920px; text-align:center; margin-bottom:20px;}
+  h1{font-size:1.8rem; margin:0 0 8px; letter-spacing:-0.01em;}
+  header p{color:var(--muted); font-size:0.98rem; line-height:1.5; margin:4px 0;}
+  .tag{
+    display:inline-block; font-size:0.72rem; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--accent); border:1px solid rgba(95,208,168,0.4); padding:3px 10px; border-radius:20px;
+    margin-bottom:14px; background:rgba(95,208,168,0.08);
+  }
+
+  .layout{
+    display:grid;
+    grid-template-columns:minmax(0,760px) 300px;
+    gap:18px;
+    width:100%;
+    max-width:1080px;
+  }
+  @media (max-width:880px){ .layout{grid-template-columns:1fr;} }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:16px;
+  }
+
+  .stage-wrap{position:relative;}
+  #stage{
+    width:100%;
+    height:auto;
+    background:
+      linear-gradient(var(--panel2), var(--panel2)),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 28px);
+    border-radius:10px;
+    border:1px solid var(--line);
+    touch-action:none;
+    user-select:none;
+    display:block;
+  }
+
+  .part{cursor:grab;}
+  .part.dragging{cursor:grabbing;}
+  .bin-label{font:600 11px var(--mono); fill:var(--muted);}
+
+  .toolbar{
+    display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; align-items:center;
+  }
+  button{
+    font-family:inherit;
+    font-size:0.85rem;
+    font-weight:600;
+    padding:9px 16px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:var(--panel2);
+    color:var(--text);
+    cursor:pointer;
+    transition:transform 0.1s, border-color 0.15s, background 0.15s;
+  }
+  button:hover:not(:disabled){border-color:var(--accent); transform:translateY(-1px);}
+  button:disabled{opacity:0.35; cursor:not-allowed;}
+  button.primary{background:linear-gradient(180deg, #5fd0a8, #45b98f); color:#08150f; border:none;}
+  button.primary:hover:not(:disabled){transform:translateY(-1px); filter:brightness(1.06);}
+  button.ghost{background:transparent;}
+  button.danger-outline{border-color:rgba(226,97,122,0.5); color:var(--danger);}
+
+  .status-line{
+    margin-top:10px; font-size:0.83rem; color:var(--muted); min-height:18px;
+    font-family:var(--mono);
+  }
+  .status-line b{color:var(--text); font-weight:600;}
+
+  .side h2{font-size:0.95rem; margin:0 0 10px;}
+  .steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px;}
+  .steps li{
+    display:flex; gap:10px; align-items:flex-start; font-size:0.83rem; color:var(--muted);
+    padding:9px 10px; border-radius:8px; border:1px solid transparent;
+  }
+  .steps li.active{background:rgba(95,208,168,0.08); border-color:rgba(95,208,168,0.35); color:var(--text);}
+  .steps li.done{color:var(--accent);}
+  .steps .num{
+    flex:0 0 auto; width:20px; height:20px; border-radius:50%; background:var(--panel2);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
+    font-size:0.7rem; font-weight:700; color:var(--muted);
+  }
+  .steps li.active .num{border-color:var(--accent); color:var(--accent);}
+  .steps li.done .num{background:var(--accent); color:#08150f; border-color:var(--accent);}
+
+  .metric-row{display:flex; justify-content:space-between; font-size:0.8rem; padding:7px 0; border-bottom:1px dashed var(--line);}
+  .metric-row:last-child{border-bottom:none;}
+  .metric-row span:first-child{color:var(--muted);}
+  .metric-row span:last-child{font-family:var(--mono); font-weight:600;}
+  .ok{color:var(--accent);}
+  .bad{color:var(--danger);}
+
+  .compare-note{
+    margin-top:14px; font-size:0.78rem; color:var(--muted); line-height:1.5;
+    padding-top:12px; border-top:1px solid var(--line);
+  }
+
+  footer{
+    margin-top:26px; margin-bottom:10px; text-align:center; color:var(--muted); font-size:0.78rem;
+    max-width:640px; line-height:1.5;
+  }
+  footer strong{color:var(--text);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tag">interactive sandbox</div>
+  <h1>One Demonstration, Any Part Position</h1>
+  <p>Drag the part into the bin once — that's your only training example. Then scatter new parts
+  anywhere on the line, at any angle, and watch a learned pick-and-place policy generalize the
+  single demo instead of failing like a hard-coded coordinate program would.</p>
+</header>
+
+<div class="layout">
+  <div class="card stage-wrap">
+    <svg id="stage" viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="toolbar">
+      <button id="resetDemoBtn" class="ghost">Reset demo</button>
+      <button id="scatterBtn" class="primary" disabled>Scatter new parts</button>
+      <button id="runBtn" class="primary" disabled>Run learned policy</button>
+      <button id="hardcodedBtn" class="danger-outline" disabled>Run fixed-program instead</button>
+    </div>
+    <div class="status-line" id="statusLine">Drag the teal part into the "bin" zone to record your one demonstration.</div>
+  </div>
+
+  <div class="card side">
+    <h2>How this mimics the real thing</h2>
+    <ul class="steps" id="steps">
+      <li class="active" data-step="1"><div class="num">1</div><div>Show it once — drag the part to where it belongs. That relative motion (start pose → place pose) is the entire training set.</div></li>
+      <li data-step="2"><div class="num">2</div><div>New parts land anywhere on the line, rotated differently, like a real high-mix cell.</div></li>
+      <li data-step="3"><div class="num">3</div><div>The policy re-derives the same relative grasp-and-place transform for each new pose, instead of replaying fixed coordinates.</div></li>
+      <li data-step="4"><div class="num">4</div><div>Compare against a hard-coded program, which only ever reaches for the original spot.</div></li>
+    </ul>
+    <div class="compare-note" id="metrics">
+      <div class="metric-row"><span>Demo recorded</span><span id="mDemo">no</span></div>
+      <div class="metric-row"><span>New parts spawned</span><span id="mSpawn">0</span></div>
+      <div class="metric-row"><span>Learned policy success</span><span id="mLearned">–</span></div>
+      <div class="metric-row"><span>Fixed program success</span><span id="mFixed">–</span></div>
+    </div>
+    <div class="compare-note">
+      This is a toy 2D stand-in for a real pipeline — no CAD, no teach pendant, no per-position
+      reprogramming. The mechanic being illustrated (one demo → pose-invariant generalization) is
+      the same idea, simplified to something you can click through in 30 seconds.
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Shiraz AI (YC S26).
+  <strong>Not affiliated with Shiraz AI.</strong>
+</footer>
+
+<script>
+(function(){
+  const svg = document.getElementById('stage');
+  const NS = 'http://www.w3.org/2000/svg';
+  const statusLine = document.getElementById('statusLine');
+  const stepsEls = [...document.querySelectorAll('#steps li')];
+  const mDemo = document.getElementById('mDemo');
+  const mSpawn = document.getElementById('mSpawn');
+  const mLearned = document.getElementById('mLearned');
+  const mFixed = document.getElementById('mFixed');
+
+  const resetDemoBtn = document.getElementById('resetDemoBtn');
+  const scatterBtn = document.getElementById('scatterBtn');
+  const runBtn = document.getElementById('runBtn');
+  const hardcodedBtn = document.getElementById('hardcodedBtn');
+
+  const BIN = {x: 600, y: 340, w: 110, h: 74};
+  const DEMO_START = {x: 130, y: 120, rot: 0};
+
+  let phase = 'demo'; // demo -> demoed -> spawned -> running
+  let demo = null;    // {dx, dy, drot} relative transform learned
+  let dragState = null;
+  let spawned = [];   // array of {el, x, y, rot, id}
+  let idCounter = 0;
+
+  function el(tag, attrs){
+    const e = document.createElementNS(NS, tag);
+    for(const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function setStep(n, extraDoneUpTo){
+    stepsEls.forEach(li=>{
+      const s = parseInt(li.dataset.step,10);
+      li.classList.remove('active','done');
+      if(s < n) li.classList.add('done');
+      else if(s === n) li.classList.add('active');
+    });
+  }
+
+  function drawStatic(){
+    svg.innerHTML = '';
+
+    // conveyor backdrop stripes
+    const belt = el('rect', {x:20, y:60, width:720, height:200, rx:10, fill:'#171e2a', stroke:'#25304487'});
+    svg.appendChild(belt);
+    for(let i=0;i<14;i++){
+      svg.appendChild(el('line', {x1: 40+i*52, y1:64, x2: 40+i*52, y2:256, stroke:'#232c3d', 'stroke-width':2}));
+    }
+
+    // bin zone
+    const bin = el('rect', {x:BIN.x-BIN.w/2, y:BIN.y-BIN.h/2, width:BIN.w, height:BIN.h, rx:10,
+      fill:'rgba(95,208,168,0.08)', stroke:'#5fd0a8', 'stroke-width':2, 'stroke-dasharray':'6 5'});
+    svg.appendChild(bin);
+    const binLabel = el('text', {x:BIN.x, y:BIN.y+6, 'text-anchor':'middle', class:'bin-label'});
+    binLabel.textContent = 'PLACE BIN';
+    svg.appendChild(binLabel);
+
+    // robot base (decorative)
+    const base = el('rect', {x:340, y:380, width:64, height:26, rx:6, fill:'#232c3d', stroke:'#333f56'});
+    svg.appendChild(base);
+    const armPost = el('rect', {x:365, y:340, width:14, height:44, rx:4, fill:'#2b3548'});
+    svg.appendChild(armPost);
+
+    svg.appendChild(el('text', {x:130, y:96, 'text-anchor':'middle', class:'bin-label'}).also ? null : (function(){
+      const t = el('text', {x:130, y:96, 'text-anchor':'middle', class:'bin-label'});
+      t.textContent = 'DEMO PART';
+      return t;
+    })());
+  }
+
+  function makePart(x,y,rot,color,id,draggable){
+    const g = el('g', {class:'part', transform:`translate(${x},${y}) rotate(${rot})`, 'data-id':id});
+    const body = el('rect', {x:-24, y:-16, width:48, height:32, rx:6, fill:color, stroke:'rgba(0,0,0,0.35)', 'stroke-width':1.5});
+    const notch = el('circle', {cx:0, cy:0, r:4, fill:'rgba(0,0,0,0.35)'});
+    g.appendChild(body);
+    g.appendChild(notch);
+    if(draggable) g.classList.add('draggable');
+    svg.appendChild(g);
+    return g;
+  }
+
+  let demoPartEl = null;
+  let robotGripper = null;
+
+  function drawGripper(x,y,rot,open){
+    if(robotGripper) robotGripper.remove();
+    const g = el('g', {transform:`translate(${x},${y}) rotate(${rot})`});
+    g.appendChild(el('rect', {x:-3, y:-30, width:6, height:24, fill:'#4a5674'}));
+    const spread = open ? 14 : 6;
+    g.appendChild(el('rect', {x:-spread-3, y:-8, width:6, height:16, rx:2, fill:'#f2a65a'}));
+    g.appendChild(el('rect', {x:spread-3, y:-8, width:6, height:16, rx:2, fill:'#f2a65a'}));
+    robotGripper = g;
+    svg.appendChild(g);
+  }
+
+  function initDemo(){
+    phase = 'demo';
+    demo = null;
+    spawned = [];
+    drawStatic();
+    demoPartEl = makePart(DEMO_START.x, DEMO_START.y, DEMO_START.rot, '#5fd0a8', 'demo', true);
+    drawGripper(DEMO_START.x, DEMO_START.y-40, 0, true);
+    attachDrag(demoPartEl, DEMO_START, onDemoDrop);
+    setStep(1);
+    statusLine.innerHTML = 'Drag the teal part into the <b>PLACE BIN</b> to record your one demonstration.';
+    scatterBtn.disabled = true;
+    runBtn.disabled = true;
+    hardcodedBtn.disabled = true;
+    mDemo.textContent = 'no'; mDemo.className = '';
+    mSpawn.textContent = '0';
+    mLearned.textContent = '–'; mLearned.className = '';
+    mFixed.textContent = '–'; mFixed.className = '';
+  }
+
+  function svgPoint(evt){
+    const rect = svg.getBoundingClientRect();
+    const vb = svg.viewBox.baseVal;
+    const px = (evt.clientX - rect.left) / rect.width * vb.width;
+    const py = (evt.clientY - rect.top) / rect.height * vb.height;
+    return {x:px, y:py};
+  }
+
+  function attachDrag(g, origin, onDrop){
+    let dragging = false;
+    let start = {x:origin.x, y:origin.y};
+    let rot = origin.rot;
+
+    g.addEventListener('pointerdown', (e)=>{
+      if(phase !== 'demo' && g.dataset.id !== 'demo') return;
+      dragging = true;
+      g.classList.add('dragging');
+      g.setPointerCapture(e.pointerId);
+    });
+    g.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      const p = svgPoint(e);
+      g.setAttribute('transform', `translate(${p.x},${p.y}) rotate(${rot})`);
+      drawGripper(p.x, p.y-2, rot, false);
+      start = p;
+    });
+    g.addEventListener('pointerup', (e)=>{
+      if(!dragging) return;
+      dragging = false;
+      g.classList.remove('dragging');
+      onDrop(start.x, start.y, rot);
+    });
+  }
+
+  function onDemoDrop(x,y,rot){
+    const inBin = Math.abs(x-BIN.x) < BIN.w/2+10 && Math.abs(y-BIN.y) < BIN.h/2+10;
+    if(!inBin){
+      statusLine.textContent = 'Not quite in the bin — try dragging the part fully inside the dashed zone.';
+      demoPartEl.setAttribute('transform', `translate(${DEMO_START.x},${DEMO_START.y}) rotate(${DEMO_START.rot})`);
+      drawGripper(DEMO_START.x, DEMO_START.y-40, 0, true);
+      return;
+    }
+    // snap into bin center, record relative transform
+    demoPartEl.setAttribute('transform', `translate(${BIN.x},${BIN.y}) rotate(${DEMO_START.rot})`);
+    drawGripper(BIN.x, BIN.y-2, DEMO_START.rot, false);
+    demo = {
+      dx: BIN.x - DEMO_START.x,
+      dy: BIN.y - DEMO_START.y,
+      drot: 0
+    };
+    phase = 'demoed';
+    mDemo.textContent = 'yes'; mDemo.className = 'ok';
+    setStep(2);
+    statusLine.innerHTML = '<b>Demo captured.</b> Learned relative motion: move (+' +
+      Math.round(demo.dx) + ', +' + Math.round(demo.dy) + ') from wherever the part starts. Now scatter new parts.';
+    scatterBtn.disabled = false;
+  }
+
+  function rand(min,max){ return min + Math.random()*(max-min); }
+
+  function scatterParts(){
+    phase = 'spawned';
+    drawStatic();
+    drawGripper(365, 300, 0, true);
+    spawned = [];
+    const colors = ['#f2a65a','#7aa7ff','#e2617a','#c792ea','#5fd0a8'];
+    const count = 5;
+    for(let i=0;i<count;i++){
+      const x = rand(70,300);
+      const y = rand(90,240);
+      const rot = rand(-60,60);
+      const id = 'p'+(idCounter++);
+      const gEl = makePart(x,y,rot,colors[i%colors.length],id,false);
+      spawned.push({el:gEl, x,y,rot,id, placed:false});
+    }
+    setStep(3);
+    mSpawn.textContent = String(count);
+    statusLine.textContent = count + ' new parts scattered at random positions and angles. Run the learned policy or compare it against a fixed program.';
+    runBtn.disabled = false;
+    hardcodedBtn.disabled = false;
+    scatterBtn.disabled = true;
+    mLearned.textContent = '–'; mLearned.className = '';
+    mFixed.textContent = '–'; mFixed.className = '';
+  }
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  async function animateMove(g, fromX, fromY, toX, toY, rot, steps){
+    for(let i=1;i<=steps;i++){
+      const t = i/steps;
+      const ex = fromX + (toX-fromX)*easeInOut(t);
+      const ey = fromY + (toY-fromY)*easeInOut(t);
+      g.setAttribute('transform', `translate(${ex},${ey}) rotate(${rot})`);
+      drawGripper(ex, ey-2, rot, false);
+      await sleep(14);
+    }
+  }
+  function easeInOut(t){ return t<0.5 ? 2*t*t : -1+(4-2*t)*t; }
+
+  async function runLearned(){
+    runBtn.disabled = true;
+    hardcodedBtn.disabled = true;
+    setStep(4);
+    let successes = 0;
+    for(const part of spawned){
+      if(part.placed) continue;
+      drawGripper(part.x, part.y-40, part.rot, true);
+      statusLine.textContent = `Learned policy: locating part at (${Math.round(part.x)}, ${Math.round(part.y)}), applying learned relative transform…`;
+      await sleep(260);
+      const targetX = part.x + demo.dx;
+      const targetY = part.y + demo.dy;
+      await animateMove(part.el, part.x, part.y, targetX, targetY, part.rot, 26);
+      const landedInBin = Math.abs(targetX-BIN.x) < BIN.w/2+6 && Math.abs(targetY-BIN.y) < BIN.h/2+6;
+      if(landedInBin) successes++;
+      part.placed = true;
+      await sleep(120);
+    }
+    mLearned.textContent = successes + ' / ' + spawned.length;
+    mLearned.className = successes === spawned.length ? 'ok' : (successes>0 ? '' : 'bad');
+    statusLine.innerHTML = `Learned policy finished: <b>${successes}/${spawned.length}</b> parts placed correctly by re-deriving the demo's relative motion for each new start pose.`;
+    hardcodedBtn.disabled = false;
+  }
+
+  async function runHardcoded(){
+    runBtn.disabled = true;
+    hardcodedBtn.disabled = true;
+    let successes = 0;
+    for(const part of spawned){
+      if(part.placed) continue;
+      statusLine.textContent = 'Fixed program: reaching for the original recorded coordinates, ignoring this part\'s actual position…';
+      drawGripper(DEMO_START.x, DEMO_START.y-40, 0, true);
+      await sleep(220);
+      // hardcoded program always goes to the ORIGINAL demo coordinates, not the part's real location
+      const missedX = DEMO_START.x + demo.dx;
+      const missedY = DEMO_START.y + demo.dy;
+      await animateMove(part.el, part.x, part.y, part.x, part.y, part.rot, 4); // part doesn't move, gripper misses
+      drawGripper(missedX, missedY-2, 0, false);
+      const partNearBin = false; // gripper closed on empty air at the old coordinate
+      if(partNearBin) successes++;
+      part.placed = true;
+      await sleep(160);
+    }
+    mFixed.textContent = successes + ' / ' + spawned.length;
+    mFixed.className = 'bad';
+    statusLine.innerHTML = `Fixed program finished: <b>${successes}/${spawned.length}</b> — it kept reaching for the one coordinate it was taught, so every relocated part was missed.`;
+  }
+
+  resetDemoBtn.addEventListener('click', initDemo);
+  scatterBtn.addEventListener('click', scatterParts);
+  runBtn.addEventListener('click', runLearned);
+  hardcodedBtn.addEventListener('click', ()=>{
+    // reset spawned "placed" flags so the fixed-program run works on the same layout
+    scatterPartsResetForFixed();
+  });
+
+  function scatterPartsResetForFixed(){
+    // re-scatter fresh parts at the same phase so the comparison is fair and independent of the learned run
+    phase = 'spawned';
+    drawStatic();
+    drawGripper(365, 300, 0, true);
+    const colors = ['#f2a65a','#7aa7ff','#e2617a','#c792ea','#5fd0a8'];
+    spawned = spawned.map((p,i)=>{
+      const gEl = makePart(p.x,p.y,p.rot,colors[i%colors.length],p.id,false);
+      return {el:gEl, x:p.x, y:p.y, rot:p.rot, id:p.id, placed:false};
+    });
+    runHardcoded();
+  }
+
+  initDemo();
+})();
+</script>
+</body>
+</html>

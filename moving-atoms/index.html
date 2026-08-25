@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rollout Lab — toy action-conditioned world model</title>
+<style>
+  :root{
+    --bg:#0b0e14;
+    --panel:#12161f;
+    --panel-2:#171c28;
+    --line:#232a3a;
+    --text:#e7ebf3;
+    --dim:#8b93a7;
+    --accent:#5eead4;
+    --accent-2:#f0a6ff;
+    --warn:#ffb454;
+    --bad:#ff6b6b;
+    --good:#6ee7a0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 20% -10%, #1a2130 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 32px 12px;
+    max-width:1100px;
+    margin:0 auto;
+    width:100%;
+  }
+  .kicker{
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--accent);
+    font-weight:700;
+    margin-bottom:8px;
+  }
+  h1{
+    margin:0 0 8px;
+    font-size:28px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    color:var(--dim);
+    max-width:640px;
+    line-height:1.5;
+    margin:0;
+    font-size:14.5px;
+  }
+  main{
+    max-width:1100px;
+    margin:0 auto;
+    padding:20px 32px 40px;
+    width:100%;
+    display:grid;
+    grid-template-columns:1.3fr 1fr;
+    gap:20px;
+    flex:1;
+  }
+  @media (max-width:860px){
+    main{grid-template-columns:1fr;}
+  }
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:18px;
+  }
+  .panel h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--dim);
+    margin:0 0 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  canvas{
+    width:100%;
+    background:#080a10;
+    border-radius:10px;
+    border:1px solid var(--line);
+    display:block;
+  }
+  .legend{
+    display:flex;
+    gap:18px;
+    margin-top:10px;
+    font-size:12.5px;
+    color:var(--dim);
+  }
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+  .dot.gt{background:var(--accent);}
+  .dot.pred{background:var(--accent-2);}
+  .controls{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .row{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .row label{
+    font-size:12.5px;
+    color:var(--dim);
+    display:flex;
+    justify-content:space-between;
+  }
+  .row label b{color:var(--text);font-weight:600;}
+  input[type=range]{
+    width:100%;
+    accent-color:var(--accent);
+  }
+  .action-pad{
+    position:relative;
+    width:100%;
+    aspect-ratio:1.6;
+    background:#080a10;
+    border:1px solid var(--line);
+    border-radius:10px;
+    cursor:crosshair;
+    overflow:hidden;
+  }
+  .action-pad .center-line{
+    position:absolute;
+    top:50%;left:0;right:0;
+    height:1px;background:#1c2333;
+  }
+  .action-pad .center-line.v{
+    top:0;bottom:0;left:50%;width:1px;height:auto;
+  }
+  .action-pad .arrow{
+    position:absolute;
+    left:50%;top:50%;
+    width:2px;
+    background:var(--warn);
+    transform-origin:0 0;
+    pointer-events:none;
+  }
+  .action-pad .arrow::after{
+    content:'';
+    position:absolute;
+    right:-4px; top:-4px;
+    width:10px;height:10px;
+    border-radius:50%;
+    background:var(--warn);
+  }
+  .hint{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.4;}
+  button{
+    background:var(--accent);
+    color:#06110f;
+    border:none;
+    border-radius:8px;
+    padding:10px 16px;
+    font-weight:700;
+    font-size:13.5px;
+    cursor:pointer;
+    letter-spacing:.01em;
+  }
+  button:hover{filter:brightness(1.08);}
+  button.secondary{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--text);
+  }
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;}
+  .scorebox{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:6px;
+  }
+  .metric{
+    background:#0d111a;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px;
+  }
+  .metric .val{
+    font-size:22px;
+    font-weight:800;
+    font-variant-numeric:tabular-nums;
+  }
+  .metric .lbl{
+    font-size:11px;
+    color:var(--dim);
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    margin-top:2px;
+  }
+  .val.good{color:var(--good);}
+  .val.warn{color:var(--warn);}
+  .val.bad{color:var(--bad);}
+  .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .presets button{padding:6px 10px;font-size:12px;}
+  .log{
+    font-size:12px;
+    color:var(--dim);
+    max-height:110px;
+    overflow-y:auto;
+    background:#0d111a;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:8px 10px;
+    line-height:1.6;
+    margin-top:6px;
+  }
+  .log b{color:var(--accent-2);}
+  footer{
+    text-align:center;
+    color:var(--dim);
+    font-size:12px;
+    padding:18px 20px 26px;
+    border-top:1px solid var(--line);
+  }
+  footer a{color:var(--dim);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Rollout Lab · toy demo</div>
+  <h1>Nudge the block. Watch a toy world model predict what happens next.</h1>
+  <p>Drag inside the action pad to set a push (direction + force) on the block, like an action-conditioned world model would receive from a robot policy. The model rolls forward its own predicted physics <i>without</i> seeing the real simulator, frame by frame, then we overlay both and score the divergence — the same idea behind benchmarking a world model against ground-truth rollouts.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Rollout <span id="frameCounter">frame 0 / 90</span></h2>
+    <canvas id="stage" width="620" height="380"></canvas>
+    <div class="legend">
+      <span><i class="dot gt"></i> ground-truth physics</span>
+      <span><i class="dot pred"></i> world-model prediction</span>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <h2>Set the action</h2>
+    <div class="action-pad" id="pad">
+      <div class="center-line"></div>
+      <div class="center-line v"></div>
+      <div class="arrow" id="arrow"></div>
+    </div>
+    <div class="hint">Drag from the center outward. Distance = force, angle = push direction. Release to lock the action, then hit Run Rollout.</div>
+
+    <div class="row">
+      <label>World-model noise <b id="noiseLbl">0.35</b></label>
+      <input type="range" id="noise" min="0" max="100" value="35">
+    </div>
+
+    <div class="presets">
+      <span style="font-size:11.5px;color:var(--dim);align-self:center;">try:</span>
+      <button class="secondary" data-preset="soft">soft tap</button>
+      <button class="secondary" data-preset="hard">hard shove</button>
+      <button class="secondary" data-preset="spin">glancing spin</button>
+    </div>
+
+    <div class="btnrow">
+      <button id="runBtn">Run rollout</button>
+      <button class="secondary" id="resetBtn">Reset scene</button>
+    </div>
+
+    <div class="scorebox">
+      <div class="metric"><div class="val" id="mae">—</div><div class="lbl">position error (px)</div></div>
+      <div class="metric"><div class="val" id="physIq">—</div><div class="lbl">physics-IQ-style score</div></div>
+    </div>
+
+    <div class="log" id="log">Set an action on the pad, then run a rollout. Predictions are generated live in your browser — nothing is sent anywhere.</div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Moving Atoms (YC S26). Not affiliated with Moving Atoms.
+  <br><a href="https://movingatoms.ai/" target="_blank" rel="noopener">movingatoms.ai</a>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const GROUND = H - 46;
+
+  const pad = document.getElementById('pad');
+  const arrow = document.getElementById('arrow');
+  const noiseSlider = document.getElementById('noise');
+  const noiseLbl = document.getElementById('noiseLbl');
+  const runBtn = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const frameCounter = document.getElementById('frameCounter');
+  const maeEl = document.getElementById('mae');
+  const physIqEl = document.getElementById('physIq');
+  const logEl = document.getElementById('log');
+
+  const START_X = 150, START_Y = GROUND - 22, SIZE = 44;
+  const TOTAL_FRAMES = 90;
+  const FRICTION = 0.965;
+  const RESTITUTION = 0.42;
+
+  let action = {fx:0, fy:0, set:false};
+  let dragging = false;
+
+  let gt = null, pred = null;
+  let frame = 0;
+  let running = false;
+  let rafId = null;
+  let errHistory = [];
+
+  function log(msg){
+    const line = document.createElement('div');
+    line.innerHTML = msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  noiseSlider.addEventListener('input', () => {
+    noiseLbl.textContent = (noiseSlider.value/100).toFixed(2);
+  });
+
+  function padRect(){ return pad.getBoundingClientRect(); }
+
+  function setActionFromPad(clientX, clientY){
+    const r = padRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    let dx = clientX - cx, dy = clientY - cy;
+    const maxR = Math.min(r.width, r.height) * 0.46;
+    const dist = Math.min(Math.hypot(dx, dy), maxR);
+    const ang = Math.atan2(dy, dx);
+    dx = Math.cos(ang) * dist;
+    dy = Math.sin(ang) * dist;
+    arrow.style.width = dist + 'px';
+    arrow.style.transform = `rotate(${ang}rad)`;
+    const forceScale = 0.16;
+    action.fx = dx * forceScale;
+    action.fy = dy * forceScale * 0.6;
+    action.set = true;
+  }
+
+  pad.addEventListener('pointerdown', e => {
+    dragging = true;
+    setActionFromPad(e.clientX, e.clientY);
+    pad.setPointerCapture(e.pointerId);
+  });
+  pad.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    setActionFromPad(e.clientX, e.clientY);
+  });
+  pad.addEventListener('pointerup', () => { dragging = false; });
+  pad.addEventListener('pointercancel', () => { dragging = false; });
+
+  const PRESETS = {
+    soft: {dx:40, dy:2},
+    hard: {dx:140, dy:0},
+    spin: {dx:90, dy:-70}
+  };
+  document.querySelectorAll('[data-preset]').forEach(btn=>{
+    btn.addEventListener('click', () => {
+      const p = PRESETS[btn.dataset.preset];
+      const forceScale = 0.16;
+      action.fx = p.dx * forceScale;
+      action.fy = p.dy * forceScale * 0.6;
+      action.set = true;
+      const dist = Math.hypot(p.dx, p.dy);
+      const ang = Math.atan2(p.dy, p.dx);
+      arrow.style.width = Math.min(dist, 90) + 'px';
+      arrow.style.transform = `rotate(${ang}rad)`;
+    });
+  });
+
+  function freshBody(){
+    return {
+      x: START_X, y: START_Y,
+      vx: 0, vy: 0,
+      rot: 0, vrot: 0,
+      w: SIZE, h: SIZE
+    };
+  }
+
+  function stepGroundTruth(b){
+    b.vy += 0.55; // gravity
+    b.x += b.vx;
+    b.y += b.vy;
+    b.rot += b.vrot;
+    b.vx *= FRICTION;
+    b.vrot *= 0.985;
+
+    const floorY = GROUND - b.h/2;
+    if(b.y > floorY){
+      b.y = floorY;
+      if(Math.abs(b.vy) > 0.6){
+        b.vy = -b.vy * RESTITUTION;
+      } else {
+        b.vy = 0;
+        b.vrot *= 0.9;
+      }
+      b.vx *= 0.88;
+    }
+    if(b.x < b.w/2){ b.x = b.w/2; b.vx *= -0.5; }
+    if(b.x > W - b.w/2){ b.x = W - b.w/2; b.vx *= -0.5; }
+  }
+
+  // The "world model" rolls forward from its own noisy internal state,
+  // never observing the ground-truth simulator once the rollout starts —
+  // exactly the failure mode a real video/world model has to fight (drift).
+  function stepPrediction(b, noiseAmt){
+    const jitter = () => (Math.random()-0.5) * noiseAmt;
+    b.vy += 0.55 * (1 + jitter()*0.15);
+    b.x += b.vx * (1 + jitter()*0.1);
+    b.y += b.vy;
+    b.rot += b.vrot;
+    b.vx *= FRICTION * (1 - Math.abs(jitter())*0.02);
+    b.vrot *= 0.985;
+
+    const floorY = GROUND - b.h/2;
+    if(b.y > floorY){
+      b.y = floorY;
+      if(Math.abs(b.vy) > 0.6){
+        b.vy = -b.vy * (RESTITUTION + jitter()*0.25);
+      } else {
+        b.vy = 0;
+        b.vrot *= 0.9;
+      }
+      b.vx *= 0.88;
+    }
+    if(b.x < b.w/2){ b.x = b.w/2; b.vx *= -0.5; }
+    if(b.x > W - b.w/2){ b.x = W - b.w/2; b.vx *= -0.5; }
+    // small compounding drift, like accumulated prediction error over a rollout
+    b.x += jitter() * 1.4;
+    b.y += jitter() * 0.6;
+  }
+
+  function drawScene(){
+    ctx.clearRect(0,0,W,H);
+
+    ctx.fillStyle = '#0d1119';
+    ctx.fillRect(0,0,W,H);
+
+    ctx.strokeStyle = '#1c2333';
+    ctx.lineWidth = 1;
+    for(let x=0;x<W;x+=40){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    }
+
+    ctx.strokeStyle = '#2a3348';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND);
+    ctx.lineTo(W, GROUND);
+    ctx.stroke();
+
+    if(gt) drawBody(gt, '#5eead4', 'GT');
+    if(pred) drawBody(pred, '#f0a6ff', 'PRED');
+
+    if(gt && pred){
+      ctx.strokeStyle = 'rgba(255,107,107,0.55)';
+      ctx.setLineDash([4,4]);
+      ctx.beginPath();
+      ctx.moveTo(gt.x, gt.y);
+      ctx.lineTo(pred.x, pred.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  function drawBody(b, color, tag){
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.rot);
+    ctx.fillStyle = color + '33';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(-b.w/2, -b.h/2, b.w, b.h, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = color;
+    ctx.font = '10px monospace';
+    ctx.fillText(tag, b.x - 10, b.y - b.h/2 - 8);
+  }
+
+  function computeScore(){
+    if(errHistory.length === 0) return {mae:0, iq:100};
+    const mae = errHistory.reduce((a,c)=>a+c,0) / errHistory.length;
+    // squash a pixel error into a 0-100 "physics-IQ-style" score,
+    // purely illustrative — not the real Physics-IQ metric.
+    const iq = Math.max(0, Math.min(100, 100 - mae*2.1));
+    return {mae, iq};
+  }
+
+  function updateScoreUI(){
+    const {mae, iq} = computeScore();
+    maeEl.textContent = mae.toFixed(1);
+    physIqEl.textContent = iq.toFixed(1);
+    [maeEl, physIqEl].forEach(el=>{
+      el.classList.remove('good','warn','bad');
+    });
+    if(iq > 75){ maeEl.classList.add('good'); physIqEl.classList.add('good'); }
+    else if(iq > 45){ maeEl.classList.add('warn'); physIqEl.classList.add('warn'); }
+    else { maeEl.classList.add('bad'); physIqEl.classList.add('bad'); }
+  }
+
+  function resetScene(){
+    if(rafId) cancelAnimationFrame(rafId);
+    running = false;
+    frame = 0;
+    gt = freshBody();
+    pred = freshBody();
+    errHistory = [];
+    frameCounter.textContent = `frame 0 / ${TOTAL_FRAMES}`;
+    maeEl.textContent = '—';
+    physIqEl.textContent = '—';
+    drawScene();
+  }
+
+  function tick(){
+    if(!running) return;
+    const noiseAmt = noiseSlider.value / 100;
+
+    gt.vx += action.set ? 0 : 0;
+    stepGroundTruth(gt);
+    stepPrediction(pred, noiseAmt);
+
+    const err = Math.hypot(gt.x - pred.x, gt.y - pred.y);
+    errHistory.push(err);
+
+    frame++;
+    frameCounter.textContent = `frame ${frame} / ${TOTAL_FRAMES}`;
+    drawScene();
+    updateScoreUI();
+
+    if(frame >= TOTAL_FRAMES){
+      running = false;
+      const {iq} = computeScore();
+      const verdict = iq > 75 ? '<span style="color:#6ee7a0">held up well</span>'
+                     : iq > 45 ? '<span style="color:#ffb454">drifted somewhat</span>'
+                     : '<span style="color:#ff6b6b">diverged badly</span>';
+      log(`Rollout done — prediction ${verdict} over ${TOTAL_FRAMES} frames. Final score <b>${iq.toFixed(1)}</b>.`);
+      return;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  runBtn.addEventListener('click', () => {
+    if(!action.set){
+      log('Set a push on the action pad first — the model needs an action to condition on.');
+      return;
+    }
+    if(rafId) cancelAnimationFrame(rafId);
+    frame = 0;
+    errHistory = [];
+    gt = freshBody();
+    pred = freshBody();
+    gt.vx = action.fx; gt.vy += action.fy; gt.vrot = action.fx * 0.01;
+    pred.vx = action.fx; pred.vy += action.fy; pred.vrot = action.fx * 0.01;
+    running = true;
+    log(`Rolling out with action fx=${action.fx.toFixed(2)}, fy=${action.fy.toFixed(2)}, noise=${(noiseSlider.value/100).toFixed(2)}…`);
+    tick();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    action = {fx:0, fy:0, set:false};
+    arrow.style.width = '0px';
+    resetScene();
+    log('Scene reset.');
+  });
+
+  resetScene();
+})();
+</script>
+</body>
+</html>
