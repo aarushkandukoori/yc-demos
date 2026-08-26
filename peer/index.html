@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lanehand — Instant Freight Quoting Sandbox</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#141b26;
+    --panel2:#1a2332;
+    --border:#26324a;
+    --text:#e7edf7;
+    --muted:#8a97ad;
+    --accent:#ff8a3d;
+    --accent2:#3ddc97;
+    --danger:#ff5d5d;
+    --font:'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--font); background:radial-gradient(circle at 20% -10%, #1a2436 0%, var(--bg) 55%);
+    color:var(--text); min-height:100vh; padding:32px 20px 60px;
+  }
+  header{max-width:980px;margin:0 auto 28px;}
+  header h1{font-size:28px;margin:0 0 6px;letter-spacing:-0.5px;}
+  header h1 span{color:var(--accent);}
+  header p{color:var(--muted);margin:0;font-size:15px;max-width:640px;line-height:1.5;}
+  .wrap{max-width:980px;margin:0 auto;display:grid;gap:20px;}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--border); border-radius:14px; padding:22px 24px;
+    box-shadow:0 10px 30px -18px rgba(0,0,0,.7);
+  }
+  .card h2{margin:0 0 16px;font-size:16px;color:var(--text);display:flex;align-items:center;gap:8px;}
+  .card h2 .step{
+    width:22px;height:22px;border-radius:50%;background:var(--accent);color:#1a0e00;
+    font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  }
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;}
+  select, input{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+    background:#0f1622; color:var(--text); font-size:14px; font-family:var(--font);
+  }
+  select:focus, input:focus{outline:1px solid var(--accent);}
+  button{
+    cursor:pointer; border:none; border-radius:9px; padding:11px 20px; font-size:14px;
+    font-weight:600; font-family:var(--font); transition:transform .1s ease, opacity .15s ease;
+  }
+  button:active{transform:scale(.97);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-primary{background:var(--accent);color:#1a0e00;}
+  .btn-primary:hover:not(:disabled){opacity:.9;}
+  .btn-secondary{background:#232d40;color:var(--text);border:1px solid var(--border);}
+  .btn-secondary:hover:not(:disabled){background:#2b3750;}
+  .actions{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;}
+  .hidden{display:none !important;}
+
+  .quote-hero{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap;margin-bottom:14px;}
+  .quote-price{font-size:44px;font-weight:800;color:var(--accent2);}
+  .quote-price small{font-size:16px;color:var(--muted);font-weight:500;margin-left:6px;}
+  .quote-meta{color:var(--muted);font-size:13px;line-height:1.6;}
+  .comparables{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .comp-bar{flex:1;min-width:100px;background:#0f1622;border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+  .comp-bar .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .comp-bar .val{font-size:17px;font-weight:700;margin-top:4px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:0 10px 10px;}
+  td{padding:12px 10px;border-top:1px solid var(--border);vertical-align:middle;}
+  tr.carrier-row{cursor:pointer;}
+  tr.carrier-row:hover td{background:#182236;}
+  tr.selected td{background:#1c2a1f;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;}
+  .badge.ok{background:rgba(61,220,151,.15);color:var(--accent2);}
+  .badge.warn{background:rgba(255,138,61,.15);color:var(--accent);}
+  .badge.bad{background:rgba(255,93,93,.15);color:var(--danger);}
+  .score{font-weight:800;font-size:16px;}
+  .rec-tag{background:var(--accent);color:#1a0e00;font-size:10px;font-weight:800;padding:2px 6px;border-radius:5px;margin-left:6px;letter-spacing:.03em;}
+  .dispatch-btn{padding:6px 14px;font-size:12.5px;}
+
+  .timeline{display:flex;flex-direction:column;gap:0;margin-top:6px;}
+  .tl-step{display:flex;gap:14px;position:relative;padding-bottom:22px;}
+  .tl-step:last-child{padding-bottom:0;}
+  .tl-dot{width:16px;height:16px;border-radius:50%;background:#242f44;border:2px solid var(--border);flex-shrink:0;margin-top:2px;position:relative;z-index:1;transition:background .3s,border-color .3s;}
+  .tl-step.done .tl-dot{background:var(--accent2);border-color:var(--accent2);}
+  .tl-step.active .tl-dot{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px rgba(255,138,61,.2);}
+  .tl-step.problem .tl-dot{background:var(--danger);border-color:var(--danger);}
+  .tl-line{position:absolute;left:7px;top:18px;bottom:-4px;width:2px;background:var(--border);}
+  .tl-step:last-child .tl-line{display:none;}
+  .tl-step.done .tl-line{background:var(--accent2);}
+  .tl-body .tl-title{font-weight:600;font-size:14px;}
+  .tl-body .tl-sub{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .tl-body .tl-log{font-size:12.5px;color:var(--accent);margin-top:4px;font-style:italic;}
+
+  footer{max-width:980px;margin:36px auto 0;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6;}
+  footer a{color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Lane<span>hand</span> — freight quoting sandbox</h1>
+  <p>Pick a lane, get an instant rate benchmarked against synthetic market comparables, then watch an AI vetting pass rank carriers and a load move from pickup to delivery — including a problem it resolves on its own.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2><span class="step">1</span> Quote a lane</h2>
+    <div class="grid">
+      <div>
+        <label for="origin">Origin</label>
+        <select id="origin"></select>
+      </div>
+      <div>
+        <label for="dest">Destination</label>
+        <select id="dest"></select>
+      </div>
+      <div>
+        <label for="equip">Equipment</label>
+        <select id="equip">
+          <option value="van">Dry Van</option>
+          <option value="reefer">Reefer</option>
+          <option value="flatbed">Flatbed</option>
+          <option value="hazmat">Hazmat Tanker</option>
+        </select>
+      </div>
+      <div>
+        <label for="weight">Weight (lbs)</label>
+        <input id="weight" type="number" value="38000" min="1000" max="45000" step="500">
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" id="quoteBtn">Get instant quote</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="quoteCard">
+    <h2><span class="step">2</span> Quote result</h2>
+    <div class="quote-hero">
+      <div>
+        <div class="quote-price" id="quotePrice">$0<small>all-in</small></div>
+      </div>
+      <div class="quote-meta" id="quoteMeta"></div>
+    </div>
+    <div class="comparables" id="comparables"></div>
+    <div class="actions">
+      <button class="btn-primary" id="findCarriersBtn">Find &amp; vet carriers</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="carrierCard">
+    <h2><span class="step">3</span> AI carrier vetting</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:-8px;">
+      Every carrier is re-checked against synthetic authority, insurance, and safety signals for this load — not just at signup. Click a row to dispatch it.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Carrier</th><th>Deadhead</th><th>Safety</th><th>On-time</th><th>Authority</th><th>Match score</th><th></th></tr>
+      </thead>
+      <tbody id="carrierBody"></tbody>
+    </table>
+  </div>
+
+  <div class="card hidden" id="trackCard">
+    <h2><span class="step">4</span> Live tracking</h2>
+    <div id="trackMeta" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Peer (YC S26). Not affiliated with Peer.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- synthetic reference data --------------------------------------
+  var CITIES = {
+    "Los Angeles, CA": {lat:34.05, lon:-118.24},
+    "Dallas, TX":      {lat:32.78, lon:-96.80},
+    "Chicago, IL":     {lat:41.88, lon:-87.63},
+    "Atlanta, GA":     {lat:33.75, lon:-84.39},
+    "New York, NY":    {lat:40.71, lon:-74.01},
+    "Seattle, WA":     {lat:47.61, lon:-122.33},
+    "Miami, FL":       {lat:25.76, lon:-80.19},
+    "Denver, CO":      {lat:39.74, lon:-104.99}
+  };
+
+  var EQUIP = {
+    van:     {label:"Dry Van",     baseRpm:2.05, riskAdj:0},
+    reefer:  {label:"Reefer",      baseRpm:2.55, riskAdj:0.06},
+    flatbed: {label:"Flatbed",     baseRpm:2.40, riskAdj:0.05},
+    hazmat:  {label:"Hazmat Tanker", baseRpm:3.10, riskAdj:0.12}
+  };
+
+  var originSel = document.getElementById("origin");
+  var destSel = document.getElementById("dest");
+  Object.keys(CITIES).forEach(function(c, i){
+    originSel.add(new Option(c, c));
+    destSel.add(new Option(c, c));
+  });
+  originSel.value = "Los Angeles, CA";
+  destSel.value = "Dallas, TX";
+
+  // deterministic pseudo-random from a string seed, so the same lane
+  // always quotes/vets the same way (no hidden randomness pretending to be "AI")
+  function seededRandom(seed){
+    var h = 0;
+    for (var i = 0; i < seed.length; i++){
+      h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    }
+    return function(){
+      h ^= h << 13; h >>>= 0;
+      h ^= h >> 17;
+      h ^= h << 5; h >>>= 0;
+      return (h % 10000) / 10000;
+    };
+  }
+
+  function haversineMiles(a, b){
+    var R = 3958.8;
+    var dLat = (b.lat - a.lat) * Math.PI/180;
+    var dLon = (b.lon - a.lon) * Math.PI/180;
+    var lat1 = a.lat * Math.PI/180, lat2 = b.lat * Math.PI/180;
+    var h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+    return Math.round(R * 2 * Math.asin(Math.sqrt(h)) * 1.18); // *1.18 to approximate road miles over great-circle
+  }
+
+  var currentQuote = null;
+
+  document.getElementById("quoteBtn").addEventListener("click", function(){
+    var o = originSel.value, d = destSel.value, eq = EQUIP[document.getElementById("equip").value];
+    var weight = parseFloat(document.getElementById("weight").value) || 38000;
+
+    if (o === d){
+      alert("Pick two different cities — even an AI broker can't quote a lane with no miles.");
+      return;
+    }
+
+    var miles = haversineMiles(CITIES[o], CITIES[d]);
+    var rnd = seededRandom(o + "|" + d + "|" + eq.label);
+    var marketVol = 0.9 + rnd() * 0.22; // market volatility multiplier
+    var weightFactor = weight > 42000 ? 1.05 : 1;
+    var rpm = eq.baseRpm * marketVol * weightFactor;
+    var linehaul = rpm * miles;
+    var fuelSurcharge = linehaul * 0.16;
+    var total = Math.round(linehaul + fuelSurcharge);
+
+    currentQuote = {origin:o, dest:d, equip:eq, miles:miles, rpm:rpm, total:total, rnd:rnd};
+
+    document.getElementById("quotePrice").innerHTML =
+      "$" + total.toLocaleString() + "<small>all-in, " + miles.toLocaleString() + " mi</small>";
+    document.getElementById("quoteMeta").innerHTML =
+      eq.label + " &middot; " + o + " &rarr; " + d + "<br>" +
+      "$" + rpm.toFixed(2) + "/mi linehaul + 16% fuel surcharge";
+
+    var compsEl = document.getElementById("comparables");
+    compsEl.innerHTML = "";
+    var labels = ["7-day market avg", "30-day market avg", "similar lane, last quarter"];
+    labels.forEach(function(lbl, i){
+      var jitter = (rnd() - 0.5) * 0.14;
+      var val = Math.round(total * (1 + jitter));
+      var div = document.createElement("div");
+      div.className = "comp-bar";
+      div.innerHTML = "<div class='lbl'>" + lbl + "</div><div class='val'>$" + val.toLocaleString() + "</div>";
+      compsEl.appendChild(div);
+    });
+
+    document.getElementById("quoteCard").classList.remove("hidden");
+    document.getElementById("carrierCard").classList.add("hidden");
+    document.getElementById("trackCard").classList.add("hidden");
+    document.getElementById("quoteCard").scrollIntoView({behavior:"smooth", block:"nearest"});
+  });
+
+  // ---- carrier vetting -------------------------------------------------
+  var NAME_POOL = [
+    "Redline Transit", "Summit Haulers", "Basecamp Logistics", "Ironclad Freight",
+    "Northbound Carriers", "Steady State Trucking", "Vantage Line", "Coastal Runners"
+  ];
+
+  document.getElementById("findCarriersBtn").addEventListener("click", function(){
+    if (!currentQuote) return;
+    var rnd = seededRandom(currentQuote.origin + currentQuote.dest + "carriers");
+    var pool = NAME_POOL.slice().sort(function(){ return rnd() - 0.5; }).slice(0, 5);
+
+    var carriers = pool.map(function(name){
+      var deadhead = Math.round(10 + rnd() * 140);
+      var safety = Math.round(70 + rnd() * 30);
+      var onTime = Math.round(80 + rnd() * 19);
+      var authorityOk = rnd() > (0.12 + currentQuote.equip.riskAdj);
+      var fraudFlag = rnd() < 0.08;
+
+      var score = Math.round(
+        (100 - Math.min(deadhead, 150) / 1.5) * 0.25 +
+        safety * 0.3 +
+        onTime * 0.3 +
+        (authorityOk ? 100 : 20) * 0.1 +
+        (fraudFlag ? 0 : 100) * 0.05
+      );
+
+      return {name:name, deadhead:deadhead, safety:safety, onTime:onTime, authorityOk:authorityOk, fraudFlag:fraudFlag, score:score};
+    }).sort(function(a,b){ return b.score - a.score; });
+
+    var body = document.getElementById("carrierBody");
+    body.innerHTML = "";
+    carriers.forEach(function(c, idx){
+      var tr = document.createElement("tr");
+      tr.className = "carrier-row";
+      var authBadge = c.fraudFlag
+        ? "<span class='badge bad'>fraud flag</span>"
+        : (c.authorityOk ? "<span class='badge ok'>verified</span>" : "<span class='badge warn'>pending</span>");
+      tr.innerHTML =
+        "<td>" + c.name + (idx === 0 ? "<span class='rec-tag'>AI PICK</span>" : "") + "</td>" +
+        "<td>" + c.deadhead + " mi</td>" +
+        "<td>" + c.safety + "/100</td>" +
+        "<td>" + c.onTime + "%</td>" +
+        "<td>" + authBadge + "</td>" +
+        "<td class='score'>" + c.score + "</td>" +
+        "<td><button class='btn-secondary dispatch-btn'>Dispatch</button></td>";
+
+      tr.querySelector("button").addEventListener("click", function(e){
+        e.stopPropagation();
+        Array.prototype.forEach.call(body.querySelectorAll("tr"), function(row){ row.classList.remove("selected"); });
+        tr.classList.add("selected");
+        dispatchCarrier(c);
+      });
+      body.appendChild(tr);
+    });
+
+    document.getElementById("carrierCard").classList.remove("hidden");
+    document.getElementById("carrierCard").scrollIntoView({behavior:"smooth", block:"nearest"});
+  });
+
+  // ---- live tracking simulation ----------------------------------------
+  var trackTimer = null;
+
+  function dispatchCarrier(carrier){
+    if (trackTimer) clearInterval(trackTimer);
+    var rnd = seededRandom(carrier.name + currentQuote.origin);
+    var hasProblem = rnd() < 0.5;
+
+    var steps = [
+      {title:"Load booked", sub:"Rate confirmation sent to " + carrier.name + "."},
+      {title:"Carrier confirmed", sub:"Insurance and authority re-checked at dispatch time."},
+      {title:"Picked up", sub:currentQuote.origin + " — trailer sealed, BOL signed."}
+    ];
+    if (hasProblem){
+      steps.push({title:"Exception detected", sub:"Weather delay reported on route.", problem:true,
+                  log:"AI rerouted around the storm cell and re-confirmed a delivery window automatically."});
+    }
+    steps.push({title:"In transit", sub:"Live GPS ping every 15 minutes, no login required."});
+    steps.push({title:"Delivered", sub:currentQuote.dest + " — POD captured, invoice generated."});
+
+    document.getElementById("trackMeta").textContent =
+      carrier.name + " on " + currentQuote.origin + " → " + currentQuote.dest +
+      " (" + currentQuote.equip.label + ", " + currentQuote.miles + " mi)";
+
+    var tl = document.getElementById("timeline");
+    tl.innerHTML = "";
+    steps.forEach(function(){
+      var el = document.createElement("div");
+      el.className = "tl-step";
+      el.innerHTML = "<div class='tl-dot'></div><div class='tl-line'></div>" +
+        "<div class='tl-body'><div class='tl-title'></div><div class='tl-sub'></div><div class='tl-log'></div></div>";
+      tl.appendChild(el);
+    });
+
+    document.getElementById("trackCard").classList.remove("hidden");
+    document.getElementById("trackCard").scrollIntoView({behavior:"smooth", block:"nearest"});
+
+    var i = 0;
+    function advance(){
+      var rows = tl.querySelectorAll(".tl-step");
+      if (i > 0){
+        rows[i-1].classList.remove("active");
+        rows[i-1].classList.add("done");
+      }
+      if (i >= steps.length){
+        clearInterval(trackTimer);
+        return;
+      }
+      var step = steps[i];
+      var row = rows[i];
+      row.classList.add("active");
+      if (step.problem) row.classList.add("problem");
+      row.querySelector(".tl-title").textContent = step.title;
+      row.querySelector(".tl-sub").textContent = step.sub;
+      if (step.log) row.querySelector(".tl-log").textContent = step.log;
+      i++;
+    }
+    advance();
+    trackTimer = setInterval(advance, 1100);
+  }
+
+})();
+</script>
+
+</body>
+</html>
