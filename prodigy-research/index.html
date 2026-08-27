@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Lab — Toy Quant Model Demo</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #10151f;
+    --panel-2: #151b28;
+    --border: #232a38;
+    --text: #e6ebf2;
+    --muted: #8b96a8;
+    --green: #3ddc97;
+    --red: #ff6b6b;
+    --accent: #6ea8fe;
+    --accent-2: #b892ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 12px; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 12px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13.5px; max-width: 560px; line-height: 1.5; }
+  .badge {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--accent); border: 1px solid #2a3550; background: #121a2e;
+    padding: 4px 9px; border-radius: 20px; white-space: nowrap;
+  }
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 20px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 14px; font-weight: 600; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: linear-gradient(135deg, #2f6fed, #6ea8fe); border: none; color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:disabled:hover { border-color: var(--border); color: var(--text); }
+  canvas { width: 100%; display: block; }
+  .legend { display: flex; gap: 18px; font-size: 12px; color: var(--muted); margin-top: 10px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
+  .stat .label { font-size: 10.5px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; margin-bottom: 4px; }
+  .stat .value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .value.pos { color: var(--green); }
+  .stat .value.neg { color: var(--red); }
+  .signal-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+  .sig {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 12px; font-size: 12.5px; animation: slidein 0.35s ease;
+  }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .sig .tick { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sig .dir { font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 11px; }
+  .dir.long { background: rgba(61,220,151,0.14); color: var(--green); }
+  .dir.short { background: rgba(255,107,107,0.14); color: var(--red); }
+  .conf-bar { width: 60px; height: 5px; background: #232a38; border-radius: 3px; overflow: hidden; }
+  .conf-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .conf-val { font-size: 11px; color: var(--muted); margin-left: 6px; width: 30px; text-align: right; }
+  .weights { display: flex; flex-direction: column; gap: 10px; }
+  .w-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .w-row .name { width: 130px; color: var(--muted); flex-shrink: 0; }
+  .w-track { flex: 1; height: 6px; background: #1c2331; border-radius: 3px; overflow: hidden; position: relative; }
+  .w-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+  .w-fill.a { background: var(--accent); }
+  .w-fill.b { background: var(--accent-2); }
+  .w-fill.c { background: var(--green); }
+  .w-fill.d { background: #ffb648; }
+  .w-num { width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11.5px; }
+  .explain { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .explain b { color: var(--text); }
+  footer {
+    max-width: 1080px; margin: 30px auto 0; padding: 16px 24px 28px;
+    color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); text-align: center;
+  }
+  .flash { position: relative; }
+  .flash::after {
+    content: ""; position: absolute; inset: -2px; border-radius: 12px;
+    box-shadow: 0 0 0 1px var(--accent); opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .flash.on::after { opacity: 1; }
+  .empty { color: var(--muted); font-size: 12.5px; text-align: center; padding: 20px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Signal Lab</h1>
+      <div class="sub">A toy version of a market-neutral signal engine: a tiny in-browser "model" scores a synthetic pair of correlated tickers tick by tick, sizes long/short positions from its confidence, and marks live P&amp;L. Nothing here touches real markets or real data.</div>
+    </div>
+    <div class="badge">Simulated · Synthetic Data · No Backend</div>
+  </header>
+
+  <div class="controls">
+    <button class="primary" id="startBtn">▶ Start Live Feed</button>
+    <button id="stopBtn" disabled>⏸ Pause</button>
+    <button id="resetBtn">↺ Reset</button>
+    <button id="speedBtn">Speed: 1×</button>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat">
+      <div class="label">Strategy P&amp;L</div>
+      <div class="value" id="pnlVal">$0.00</div>
+    </div>
+    <div class="stat">
+      <div class="label">Net Exposure (Δ)</div>
+      <div class="value" id="expVal">0.00</div>
+    </div>
+    <div class="stat">
+      <div class="label">Model Confidence</div>
+      <div class="value" id="confVal">—</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel flash" id="chartPanel">
+      <h2>Synthetic Price Feed — ALPH vs BETA</h2>
+      <canvas id="chart" height="260"></canvas>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--accent)"></i> ALPH (base asset)</span>
+        <span><i class="dot" style="background:var(--accent-2)"></i> BETA (correlated hedge leg)</span>
+        <span><i class="dot" style="background:var(--green)"></i> spread z-score entry</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Live Model Signals</h2>
+      <div class="signal-list" id="sigList">
+        <div class="empty">Press "Start Live Feed" to run the model on incoming ticks.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:16px;">
+    <div class="panel">
+      <h2>Feature Weights the Model Is Using Right Now</h2>
+      <div class="weights" id="weights"></div>
+      <div class="explain">
+        This toy model scores each tick on four synthetic features — <b>spread z-score</b>, <b>short-term momentum</b>,
+        <b>mean-reversion pull</b>, and <b>volatility regime</b> — combines them into one confidence number, and only
+        opens a position when confidence clears a threshold. Position size scales with confidence, and the hedge leg
+        (BETA) is sized to keep net delta near zero, mimicking a market-neutral book.
+      </div>
+    </div>
+    <div class="panel">
+      <h2>P&amp;L Curve</h2>
+      <canvas id="pnlChart" height="200"></canvas>
+      <div class="explain">
+        Watch <b>Strategy P&amp;L</b> update as trades close. This is a randomized synthetic walk, not a backtest —
+        it exists to make the sizing/hedging mechanic tangible, not to claim any edge.
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Prodigy Research (YC S26). Not affiliated with Prodigy Research.</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- deterministic-ish PRNG so runs feel lively but stable-ish ----------
+  let seed = 42;
+  function rand() {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return (seed % 10000) / 10000;
+  }
+  function gauss() {
+    let u = 0, v = 0;
+    while (u === 0) u = rand();
+    while (v === 0) v = rand();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // ---------- state ----------
+  const state = {
+    running: false,
+    speed: 1,
+    t: 0,
+    alph: [],
+    beta: [],
+    spread: [],
+    pnlSeries: [{t:0, v:0}],
+    pnl: 0,
+    position: null, // {dir, size, entryAlph, entryBeta, tOpen}
+    signals: [],
+    timer: null,
+    priceA: 100,
+    priceB: 100,
+    volRegime: 0.5,
+  };
+
+  const WEIGHT_NAMES = [
+    {key: "z", label: "Spread z-score", cls: "a"},
+    {key: "mom", label: "Momentum", cls: "b"},
+    {key: "revert", label: "Mean-reversion", cls: "c"},
+    {key: "vol", label: "Vol regime", cls: "d"},
+  ];
+  let weights = { z: 0.5, mom: 0.5, revert: 0.5, vol: 0.5 };
+
+  // ---------- DOM ----------
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const speedBtn = document.getElementById("speedBtn");
+  const pnlVal = document.getElementById("pnlVal");
+  const expVal = document.getElementById("expVal");
+  const confVal = document.getElementById("confVal");
+  const sigList = document.getElementById("sigList");
+  const weightsEl = document.getElementById("weights");
+  const chartPanel = document.getElementById("chartPanel");
+  const chart = document.getElementById("chart");
+  const pnlChart = document.getElementById("pnlChart");
+
+  function initWeightsDom() {
+    weightsEl.innerHTML = "";
+    WEIGHT_NAMES.forEach(w => {
+      const row = document.createElement("div");
+      row.className = "w-row";
+      row.innerHTML = `
+        <div class="name">${w.label}</div>
+        <div class="w-track"><div class="w-fill ${w.cls}" id="wf-${w.key}" style="width:50%"></div></div>
+        <div class="w-num" id="wn-${w.key}">0.50</div>
+      `;
+      weightsEl.appendChild(row);
+    });
+  }
+  initWeightsDom();
+
+  function seedSeries() {
+    state.alph = [100];
+    state.beta = [100.4];
+    state.spread = [0];
+    for (let i = 1; i < 40; i++) step(false);
+  }
+
+  // ---------- model: score a tick, produce confidence + direction ----------
+  function scoreTick() {
+    const n = state.alph.length;
+    const a = state.alph, b = state.beta;
+    const lookback = Math.min(20, n);
+    const recentSpread = state.spread.slice(-lookback);
+    const mean = recentSpread.reduce((s,x)=>s+x,0) / recentSpread.length;
+    const variance = recentSpread.reduce((s,x)=>s+(x-mean)*(x-mean),0) / recentSpread.length;
+    const sd = Math.sqrt(Math.max(variance, 1e-6));
+    const z = (state.spread[n-1] - mean) / sd;
+
+    const momWindow = a.slice(-6);
+    const mom = momWindow.length > 1 ? (momWindow[momWindow.length-1] - momWindow[0]) / momWindow[0] * 100 : 0;
+
+    const revert = -Math.tanh(z / 2); // pulls toward mean
+    const volFeature = state.volRegime;
+
+    // feature values normalized to [-1, 1]-ish
+    const fz = Math.max(-1, Math.min(1, z / 2.5));
+    const fmom = Math.max(-1, Math.min(1, mom / 1.5));
+    const frevert = revert;
+    const fvol = (volFeature - 0.5) * 2;
+
+    // slowly drift weights so the panel feels "live" and model-like
+    weights.z = clamp01(weights.z + gauss()*0.01);
+    weights.mom = clamp01(weights.mom + gauss()*0.01);
+    weights.revert = clamp01(weights.revert + gauss()*0.01);
+    weights.vol = clamp01(weights.vol + gauss()*0.01);
+
+    const wsum = weights.z + weights.mom + weights.revert + weights.vol;
+    const score = (fz*weights.z + fmom*weights.mom + frevert*weights.revert - fvol*weights.vol*0.3) / wsum;
+
+    const confidence = Math.min(0.98, Math.abs(score) * 1.6 + rand()*0.05);
+    const direction = score > 0 ? "short" : "long"; // score>0 means spread too high -> short ALPH/long BETA
+
+    return { z, mom, confidence, direction, score };
+  }
+
+  function clamp01(x){ return Math.max(0.05, Math.min(0.95, x)); }
+
+  function renderWeights() {
+    WEIGHT_NAMES.forEach(w => {
+      const val = weights[w.key];
+      document.getElementById(`wf-${w.key}`).style.width = (val*100).toFixed(0) + "%";
+      document.getElementById(`wn-${w.key}`).textContent = val.toFixed(2);
+    });
+  }
+
+  // ---------- simulate one tick ----------
+  function step(doRender = true) {
+    state.t++;
+    // volatility regime slowly mean-reverts with occasional shocks
+    state.volRegime = clamp01(state.volRegime + gauss()*0.03 + (rand() < 0.02 ? gauss()*0.3 : 0));
+    const vol = 0.15 + state.volRegime * 0.6;
+
+    const commonShock = gauss() * vol * 0.5;
+    state.priceA += commonShock + gauss() * vol * 0.4;
+    state.priceB += commonShock + gauss() * vol * 0.4;
+
+    state.alph.push(Math.max(1, state.priceA));
+    state.beta.push(Math.max(1, state.priceB));
+    const spreadVal = state.alph[state.alph.length-1] - state.beta[state.beta.length-1];
+    state.spread.push(spreadVal);
+
+    if (state.alph.length > 140) { state.alph.shift(); state.beta.shift(); state.spread.shift(); }
+
+    // mark existing position to market
+    if (state.position) {
+      markPosition();
+    }
+
+    if (doRender) {
+      const result = scoreTick();
+      maybeTrade(result);
+      renderWeights();
+      confVal.textContent = (result.confidence*100).toFixed(0) + "%";
+      drawChart();
+      drawPnl();
+      updateStats();
+    }
+  }
+
+  function markPosition() {
+    const p = state.position;
+    const a = state.alph[state.alph.length-1];
+    const b = state.beta[state.beta.length-1];
+    const legA = (a - p.entryAlph) * (p.dir === "long" ? 1 : -1) * p.size;
+    const legB = (b - p.entryBeta) * (p.dir === "long" ? -1 : 1) * p.size;
+    p.unrealized = legA + legB;
+  }
+
+  function maybeTrade(result) {
+    const THRESH = 0.42;
+    if (!state.position) {
+      if (result.confidence > THRESH) {
+        const size = +(1 + result.confidence * 4).toFixed(2);
+        state.position = {
+          dir: result.direction,
+          size,
+          entryAlph: state.alph[state.alph.length-1],
+          entryBeta: state.beta[state.beta.length-1],
+          confidence: result.confidence,
+          unrealized: 0,
+          tOpen: state.t,
+        };
+        pushSignal("OPEN", result.direction, result.confidence, size);
+      }
+    } else {
+      const flipped = (state.position.dir === "long" && result.direction === "short" && result.confidence > THRESH)
+                    || (state.position.dir === "short" && result.direction === "long" && result.confidence > THRESH);
+      const staleness = state.t - state.position.tOpen > 14;
+      if (flipped || staleness || result.confidence < 0.12) {
+        markPosition();
+        state.pnl += state.position.unrealized;
+        pushSignal("CLOSE", state.position.dir, result.confidence, state.position.size, state.position.unrealized);
+        state.position = null;
+      }
+    }
+  }
+
+  function pushSignal(kind, dir, confidence, size, pnl) {
+    state.signals.unshift({ kind, dir, confidence, size, pnl, tick: state.t });
+    state.signals = state.signals.slice(0, 30);
+    renderSignals();
+    chartPanel.classList.add("on");
+    setTimeout(()=>chartPanel.classList.remove("on"), 300);
+  }
+
+  function renderSignals() {
+    if (!state.signals.length) {
+      sigList.innerHTML = '<div class="empty">Press "Start Live Feed" to run the model on incoming ticks.</div>';
+      return;
+    }
+    sigList.innerHTML = state.signals.map(s => {
+      const dirLabel = s.dir === "long" ? "LONG ALPH" : "SHORT ALPH";
+      const dirCls = s.dir === "long" ? "long" : "short";
+      const kindLabel = s.kind === "OPEN" ? "OPEN" : "CLOSE";
+      const pnlText = s.kind === "CLOSE" ? ` <span style="color:${s.pnl>=0?'var(--green)':'var(--red)'}">(${s.pnl>=0?'+':''}${s.pnl.toFixed(2)})</span>` : "";
+      return `<div class="sig">
+        <span class="tick">t${s.tick}</span>
+        <span class="dir ${dirCls}">${kindLabel} · ${dirLabel}</span>
+        <span style="display:flex;align-items:center;">
+          <span class="conf-bar"><span class="conf-fill" style="width:${(s.confidence*100).toFixed(0)}%"></span></span>
+          <span class="conf-val">${(s.confidence*100).toFixed(0)}%</span>
+        </span>
+      </div>${pnlText ? `<div style="text-align:right;font-size:11px;margin-top:-4px;color:var(--muted)">${pnlText}</div>` : ""}`;
+    }).join("");
+  }
+
+  function updateStats() {
+    const unreal = state.position ? state.position.unrealized : 0;
+    const total = state.pnl + unreal;
+    pnlVal.textContent = (total>=0?"$":"-$") + Math.abs(total).toFixed(2);
+    pnlVal.className = "value " + (total >= 0 ? "pos" : "neg");
+    state.pnlSeries.push({ t: state.t, v: total });
+    if (state.pnlSeries.length > 140) state.pnlSeries.shift();
+
+    const exposure = state.position ? (state.position.dir === "long" ? 1 : -1) * state.position.size * 0.05 : 0;
+    expVal.textContent = exposure.toFixed(2);
+    expVal.className = "value " + (Math.abs(exposure) < 0.15 ? "" : (exposure>0?"pos":"neg"));
+  }
+
+  // ---------- drawing ----------
+  function setupCanvas(cv) {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = cv.getBoundingClientRect();
+    const h = cv.height;
+    cv.width = rect.width * dpr;
+    cv.height = h * dpr;
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w: rect.width, h };
+  }
+
+  function drawChart() {
+    const { ctx, w, h } = setupCanvas(chart);
+    ctx.clearRect(0,0,w,h);
+    const pad = 10;
+    const series = [state.alph, state.beta];
+    const colors = ["#6ea8fe", "#b892ff"];
+    const all = state.alph.concat(state.beta);
+    const min = Math.min(...all), max = Math.max(...all);
+    const range = Math.max(max-min, 0.5);
+
+    function plot(arr, color, lw) {
+      ctx.beginPath();
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = color;
+      arr.forEach((v,i) => {
+        const x = pad + (i/(arr.length-1)) * (w - pad*2);
+        const y = h - pad - ((v-min)/range) * (h - pad*2);
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+    series.forEach((s,i)=>plot(s, colors[i], 2));
+
+    // mark position entry point
+    if (state.position) {
+      const idx = state.alph.length - (state.t - state.position.tOpen) - 1;
+      if (idx >= 0 && idx < state.alph.length) {
+        const x = pad + (idx/(state.alph.length-1)) * (w - pad*2);
+        const y = h - pad - ((state.alph[idx]-min)/range) * (h - pad*2);
+        ctx.beginPath();
+        ctx.fillStyle = state.position.dir === "long" ? "#3ddc97" : "#ff6b6b";
+        ctx.arc(x,y,4,0,Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawPnl() {
+    const { ctx, w, h } = setupCanvas(pnlChart);
+    ctx.clearRect(0,0,w,h);
+    const pad = 10;
+    const vals = state.pnlSeries.map(p=>p.v);
+    const min = Math.min(0, ...vals), max = Math.max(0, ...vals);
+    const range = Math.max(max-min, 1);
+
+    // zero line
+    const zeroY = h - pad - ((0-min)/range) * (h - pad*2);
+    ctx.strokeStyle = "#232a38";
+    ctx.beginPath();
+    ctx.moveTo(pad, zeroY);
+    ctx.lineTo(w-pad, zeroY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.lineWidth = 2;
+    const last = vals[vals.length-1] || 0;
+    ctx.strokeStyle = last >= 0 ? "#3ddc97" : "#ff6b6b";
+    state.pnlSeries.forEach((p,i) => {
+      const x = pad + (i/(state.pnlSeries.length-1)) * (w - pad*2);
+      const y = h - pad - ((p.v-min)/range) * (h - pad*2);
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+
+  // ---------- controls ----------
+  function tick() {
+    step(true);
+  }
+
+  function start() {
+    if (state.running) return;
+    state.running = true;
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    state.timer = setInterval(tick, 450 / state.speed);
+  }
+  function stop() {
+    state.running = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    clearInterval(state.timer);
+  }
+  function reset() {
+    stop();
+    state.t = 0;
+    state.pnl = 0;
+    state.position = null;
+    state.signals = [];
+    state.pnlSeries = [{t:0,v:0}];
+    state.priceA = 100;
+    state.priceB = 100;
+    state.volRegime = 0.5;
+    weights = { z: 0.5, mom: 0.5, revert: 0.5, vol: 0.5 };
+    seed = 42;
+    seedSeries();
+    renderWeights();
+    renderSignals();
+    drawChart();
+    drawPnl();
+    updateStats();
+    confVal.textContent = "—";
+  }
+
+  startBtn.addEventListener("click", start);
+  stopBtn.addEventListener("click", stop);
+  resetBtn.addEventListener("click", reset);
+  speedBtn.addEventListener("click", () => {
+    state.speed = state.speed === 1 ? 3 : state.speed === 3 ? 8 : 1;
+    speedBtn.textContent = "Speed: " + state.speed + "×";
+    if (state.running) { stop(); state.running = false; start(); }
+  });
+  window.addEventListener("resize", () => { drawChart(); drawPnl(); });
+
+  reset();
+})();
+</script>
+</body>
+</html>
