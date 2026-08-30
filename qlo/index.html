@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Underwriting Desk — Multi-Agent Submission Triage (Demo)</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#121821;
+    --panel2:#161e2a;
+    --line:#243040;
+    --text:#e6edf5;
+    --muted:#8a97a8;
+    --accent:#4fb0ff;
+    --accent2:#7c5cff;
+    --good:#3ecf8e;
+    --warn:#f4b740;
+    --bad:#ff6b6b;
+    --mono:'SF Mono',Consolas,Monaco,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 800px at 20% -10%, #1a2433 0%, var(--bg) 60%);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:28px 40px 10px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    border-bottom:1px solid var(--line);
+  }
+  header .brand{display:flex;align-items:center;gap:10px;}
+  header .brand .mark{
+    width:30px;height:30px;border-radius:8px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:14px;color:#0b0f14;
+  }
+  header h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px;}
+  header p.tag{margin:2px 0 0;color:var(--muted);font-size:12.5px;}
+  header .status{font-size:12px;color:var(--muted);text-align:right;}
+  header .status b{color:var(--good);}
+
+  .layout{
+    display:grid;
+    grid-template-columns:340px 1fr 360px;
+    gap:0;
+    min-height:calc(100vh - 78px);
+  }
+  .col{padding:20px;border-right:1px solid var(--line);}
+  .col:last-child{border-right:none;}
+
+  h2.section{
+    font-size:11px;text-transform:uppercase;letter-spacing:1px;
+    color:var(--muted);margin:0 0 12px;font-weight:700;
+  }
+
+  .queue-item{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+    margin-bottom:10px;
+    cursor:pointer;
+    transition:border-color .15s, transform .15s;
+  }
+  .queue-item:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .queue-item.active{border-color:var(--accent);background:var(--panel2);}
+  .queue-item .name{font-weight:650;font-size:13.5px;}
+  .queue-item .meta{color:var(--muted);font-size:11.5px;margin-top:3px;}
+  .queue-item .pill{
+    display:inline-block;margin-top:8px;font-size:10.5px;padding:2px 8px;
+    border-radius:20px;font-weight:650;letter-spacing:.3px;
+  }
+  .pill.new{background:rgba(79,176,255,.15);color:var(--accent);}
+  .pill.done{background:rgba(62,207,142,.15);color:var(--good);}
+  .pill.flag{background:rgba(244,183,64,.15);color:var(--warn);}
+
+  #newSubmissionBtn{
+    width:100%;padding:10px;border-radius:8px;border:1px dashed var(--line);
+    background:transparent;color:var(--muted);cursor:pointer;font-size:12.5px;
+    margin-bottom:16px;
+  }
+  #newSubmissionBtn:hover{border-color:var(--accent);color:var(--accent);}
+
+  .agent-feed{display:flex;flex-direction:column;gap:10px;max-height:220px;overflow-y:auto;padding-right:4px;}
+  .agent-feed::-webkit-scrollbar{width:6px;}
+  .agent-feed::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px;}
+
+  .agent-step{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:9px 11px;font-size:12px;opacity:0;transform:translateY(4px);
+    animation:fadein .35s forwards;
+  }
+  @keyframes fadein{to{opacity:1;transform:translateY(0);}}
+  .agent-step .who{font-weight:700;color:var(--accent2);font-size:11px;letter-spacing:.3px;}
+  .agent-step.running .who{color:var(--warn);}
+  .agent-step .msg{color:var(--text);margin-top:2px;}
+  .agent-step .sub{color:var(--muted);font-size:11px;margin-top:2px;}
+  .spinner{
+    display:inline-block;width:9px;height:9px;border:2px solid var(--line);
+    border-top-color:var(--warn);border-radius:50%;
+    animation:spin .7s linear infinite;margin-right:6px;vertical-align:-1px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .doc-view{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:18px;font-family:var(--mono);font-size:12.5px;line-height:1.65;
+    color:#c7d2e0;white-space:pre-wrap;max-height:260px;overflow-y:auto;
+    margin-bottom:18px;
+  }
+  .doc-view mark{background:rgba(79,176,255,.22);color:var(--accent);
+    border-radius:3px;padding:0 3px;font-weight:600;}
+  .doc-view mark.risk{background:rgba(255,107,107,.22);color:#ff9b9b;}
+
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:18px;}
+  .field{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;}
+  .field label{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
+  .field .val{font-size:13px;font-weight:600;}
+  .field.filling .val{color:var(--muted);}
+  .field.filled .val{color:var(--text);}
+
+  .risk-list{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
+  .risk-item{
+    display:flex;gap:10px;align-items:flex-start;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+  }
+  .risk-item .dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none;}
+  .risk-item .dot.high{background:var(--bad);}
+  .risk-item .dot.med{background:var(--warn);}
+  .risk-item .dot.low{background:var(--good);}
+  .risk-item .t{font-size:13px;font-weight:600;}
+  .risk-item .d{font-size:11.5px;color:var(--muted);margin-top:2px;}
+
+  .recommend-card{
+    background:linear-gradient(135deg, rgba(79,176,255,.08), rgba(124,92,255,.08));
+    border:1px solid var(--accent);border-radius:12px;padding:16px;
+  }
+  .recommend-card h3{margin:0 0 6px;font-size:14px;}
+  .recommend-card .price{font-size:28px;font-weight:800;margin:8px 0 4px;}
+  .recommend-card .price span{font-size:13px;color:var(--muted);font-weight:500;}
+  .recommend-card .reason{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px;}
+  .btn-row{display:flex;gap:8px;}
+  button.act{
+    flex:1;padding:10px;border-radius:8px;border:none;font-weight:650;font-size:13px;cursor:pointer;
+    transition:filter .15s;
+  }
+  button.act:hover{filter:brightness(1.12);}
+  button.approve{background:var(--good);color:#04140c;}
+  button.adjust{background:var(--panel2);color:var(--text);border:1px solid var(--line);}
+  button.decline{background:transparent;color:var(--bad);border:1px solid rgba(255,107,107,.4);}
+
+  .empty-state{color:var(--muted);font-size:13px;padding:40px 10px;text-align:center;}
+
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  .slider-row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;}
+
+  footer{
+    padding:16px 40px;text-align:center;color:var(--muted);font-size:11.5px;
+    border-top:1px solid var(--line);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark">UD</div>
+    <div>
+      <h1>Underwriting Desk</h1>
+      <p class="tag">agent-run commercial submission triage — toy demo</p>
+    </div>
+  </div>
+  <div class="status">agents online: <b>4</b> · queue processed today: <b id="processedCount">0</b></div>
+</header>
+
+<div class="layout">
+
+  <div class="col">
+    <h2 class="section">Submission Queue</h2>
+    <button id="newSubmissionBtn">+ drop a new submission in</button>
+    <div id="queueList"></div>
+  </div>
+
+  <div class="col">
+    <h2 class="section">Raw Submission</h2>
+    <div class="doc-view" id="docView">Select a submission from the queue to watch the agents work.</div>
+
+    <h2 class="section">Agent Activity</h2>
+    <div class="agent-feed" id="agentFeed">
+      <div class="empty-state">No activity yet.</div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h2 class="section">Extracted Fields</h2>
+    <div class="field-grid" id="fieldGrid"></div>
+
+    <h2 class="section">Risk Signals</h2>
+    <div class="risk-list" id="riskList"></div>
+
+    <h2 class="section">Supervisor Recommendation</h2>
+    <div id="recommendZone"><div class="empty-state">Waiting on agents...</div></div>
+  </div>
+
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Qlo (YC S26). Not affiliated with Qlo.</footer>
+
+<script>
+(function(){
+
+  // ---------- synthetic submission bank ----------
+  const SUBMISSIONS = [
+    {
+      id: "SUB-2291",
+      insured: "Harlow Fabrication LLC",
+      broker: "Meridian Risk Partners",
+      lineOfBusiness: "Commercial Property + GL",
+      raw:
+`SUBMISSION EMAIL — Meridian Risk Partners
+Re: Harlow Fabrication LLC — new business, eff. 10/01
+
+Insured operates a 41,000 sqft metal fabrication shop in Canton, OH,
+built 1987, unsprinklered in the warehouse bay. Payroll: $6.2M,
+38 FTE welders/machinists. Requesting Property (BI incl.) and
+General Liability. Prior carrier non-renewed after a $310,000
+fire loss in 2023 (electrical, welding sparks near solvent storage).
+No sprinkler retrofit completed yet, contractor quote attached
+for Q1 next year. TIV requested: $9.4M. Insured is requesting
+$1M/$2M GL limits, no umbrella at this time.`,
+      fields: {
+        "Insured": "Harlow Fabrication LLC",
+        "NAICS": "332710 — Machine Shops",
+        "TIV Requested": "$9,400,000",
+        "Building Age": "1987 (38 yrs)",
+        "Sprinklered": "No",
+        "Payroll": "$6,200,000",
+        "Employees": "38",
+        "GL Limits Req.": "$1M / $2M",
+        "Prior Loss": "$310,000 (fire, 2023)"
+      },
+      risks: [
+        {level:"high", t:"Unsprinklered warehouse bay", d:"No suppression system in a 41k sqft metal shop; largest loss driver in the file."},
+        {level:"high", t:"Recent large fire loss", d:"$310K fire loss in 2023 tied to welding near solvent storage — same hazard still present."},
+        {level:"med", t:"Non-renewed by prior carrier", d:"Voluntary non-renewal after the loss suggests prior carrier's risk appetite closed on this class."},
+        {level:"low", t:"Sprinkler retrofit quoted", d:"Contractor quote on file for Q1 — mitigation is in motion but not committed."}
+      ],
+      recommendation: {
+        verdict:"Quote with conditions",
+        premium: 84200,
+        reason:"Property risk is above target for an unsprinklered fabrication shop with a recent fire loss. Model suggests quoting bound to a signed sprinkler-retrofit commitment within 90 days, TIV capped at $8.5M until retrofit completion, and a $50K minimum deductible on fire peril."
+      }
+    },
+    {
+      id: "SUB-2292",
+      insured: "Bright Path Pediatric Group",
+      broker: "Alden & Cole Insurance Services",
+      lineOfBusiness: "Professional Liability (Medical)",
+      raw:
+`SUBMISSION EMAIL — Alden & Cole Insurance Services
+Re: Bright Path Pediatric Group — renewal, eff. 11/15
+
+6-physician pediatric practice, 2 locations (Austin, Round Rock).
+Renewal with incumbent for 4 years. Loss history: zero paid claims,
+one dismissed suit (2021, no indemnity payment). Requesting
+$1M/$3M limits, claims-made, retro date 2016. Practice added
+a telehealth service line in 2024 (approx 12% of visit volume).
+Revenue: $4.1M. No known changes to physician roster this term.`,
+      fields: {
+        "Insured": "Bright Path Pediatric Group",
+        "Specialty": "Pediatrics",
+        "Physicians": "6",
+        "Locations": "2 (Austin, Round Rock)",
+        "Limits Req.": "$1M / $3M claims-made",
+        "Retro Date": "2016",
+        "Revenue": "$4,100,000",
+        "New Service Line": "Telehealth (2024, ~12% of volume)"
+      },
+      risks: [
+        {level:"low", t:"Clean loss history", d:"Zero indemnity payments across a 4-year relationship; one dismissed suit with no payout."},
+        {level:"med", t:"New telehealth service line", d:"Cross-state telehealth exposure wasn't present at last renewal — licensure/venue risk should be re-underwritten."},
+        {level:"low", t:"Stable roster", d:"No physician additions or departures reduces underwriting uncertainty for this term."}
+      ],
+      recommendation: {
+        verdict:"Renew — favorable",
+        premium: 41750,
+        reason:"Strong multi-year loss experience supports a renewal at expiring terms. Telehealth expansion is modest and within typical pediatric norms, but should be flagged for a mid-term endorsement review if volume exceeds 20%."
+      }
+    },
+    {
+      id: "SUB-2293",
+      insured: "Coastal Line Freight Co.",
+      broker: "Vantage Point Underwriters",
+      lineOfBusiness: "Commercial Auto",
+      raw:
+`SUBMISSION EMAIL — Vantage Point Underwriters
+Re: Coastal Line Freight Co. — new business, eff. 09/15
+
+Regional trucking outfit, 22 power units, 19 trailers, radius
+of operation 400mi from Jacksonville FL. Fleet avg age 6.1 years.
+3 DOT recordable accidents in last 3 years, 1 involved a
+rear-end collision with a passenger vehicle ($180K settlement).
+2 drivers with recent (18mo) at-fault violations. CSA scores:
+Unsafe Driving percentile 71 (above threshold). Requesting
+$1M CSL auto liability, $250K cargo.`,
+      fields: {
+        "Insured": "Coastal Line Freight Co.",
+        "Fleet Size": "22 power units / 19 trailers",
+        "Radius": "400 mi (Jacksonville, FL)",
+        "Fleet Avg Age": "6.1 years",
+        "DOT Accidents (3yr)": "3",
+        "CSA Unsafe Driving %ile": "71 (above threshold)",
+        "Liability Req.": "$1M CSL"
+      },
+      risks: [
+        {level:"high", t:"CSA Unsafe Driving score elevated", d:"71st percentile is above the FMCSA intervention threshold — correlates strongly with future loss frequency."},
+        {level:"high", t:"At-fault settlement on file", d:"$180K rear-end settlement with a passenger vehicle within the experience period."},
+        {level:"med", t:"Drivers with recent violations", d:"2 drivers with at-fault violations in the last 18 months; MVR review recommended before binding."}
+      ],
+      recommendation: {
+        verdict:"Refer to senior underwriter",
+        premium: null,
+        reason:"CSA score and recent at-fault loss both exceed automated appetite guardrails for new business. Supervisor agent is routing this file for manual review rather than auto-quoting — recommend requesting updated MVRs and a corrective action plan from the safety director before pricing."
+      }
+    }
+  ];
+
+  const state = {
+    queue: SUBMISSIONS.map(s => ({...s, status:"new"})),
+    activeId: null,
+    processed: 0
+  };
+
+  const queueListEl = document.getElementById('queueList');
+  const docViewEl = document.getElementById('docView');
+  const agentFeedEl = document.getElementById('agentFeed');
+  const fieldGridEl = document.getElementById('fieldGrid');
+  const riskListEl = document.getElementById('riskList');
+  const recommendZoneEl = document.getElementById('recommendZone');
+  const processedCountEl = document.getElementById('processedCount');
+
+  function renderQueue(){
+    queueListEl.innerHTML = '';
+    state.queue.forEach(sub => {
+      const div = document.createElement('div');
+      div.className = 'queue-item' + (sub.id === state.activeId ? ' active' : '');
+      const pillClass = sub.status === 'done' ? 'done' : (sub.status === 'flagged' ? 'flag' : 'new');
+      const pillText = sub.status === 'done' ? 'Reviewed' : (sub.status === 'flagged' ? 'Needs review' : 'New');
+      div.innerHTML = `
+        <div class="name">${sub.insured}</div>
+        <div class="meta">${sub.id} · ${sub.lineOfBusiness}</div>
+        <div class="meta">via ${sub.broker}</div>
+        <span class="pill ${pillClass}">${pillText}</span>
+      `;
+      div.onclick = () => processSubmission(sub.id);
+      queueListEl.appendChild(div);
+    });
+  }
+
+  function typewriterDoc(text, cb){
+    docViewEl.textContent = '';
+    let i = 0;
+    const speed = 4;
+    function step(){
+      docViewEl.textContent = text.slice(0, i);
+      docViewEl.scrollTop = docViewEl.scrollHeight;
+      i += speed;
+      if(i < text.length){
+        requestAnimationFrame(() => setTimeout(step, 4));
+      } else {
+        docViewEl.textContent = text;
+        cb && cb();
+      }
+    }
+    step();
+  }
+
+  function addAgentStep(who, msg, sub, running){
+    const el = document.createElement('div');
+    el.className = 'agent-step' + (running ? ' running' : '');
+    el.innerHTML = `<div class="who">${running ? '<span class="spinner"></span>' : ''}${who}</div>
+      <div class="msg">${msg}</div>
+      ${sub ? `<div class="sub">${sub}</div>` : ''}`;
+    agentFeedEl.appendChild(el);
+    agentFeedEl.scrollTop = agentFeedEl.scrollHeight;
+    return el;
+  }
+
+  function setFieldGridSkeleton(fields){
+    fieldGridEl.innerHTML = '';
+    Object.keys(fields).forEach(key => {
+      const div = document.createElement('div');
+      div.className = 'field filling';
+      div.innerHTML = `<label>${key}</label><div class="val">—</div>`;
+      div.dataset.key = key;
+      fieldGridEl.appendChild(div);
+    });
+  }
+
+  function fillField(key, value){
+    const el = fieldGridEl.querySelector(`.field[data-key="${CSS.escape(key)}"]`);
+    if(!el) return;
+    el.classList.remove('filling');
+    el.classList.add('filled');
+    el.querySelector('.val').textContent = value;
+  }
+
+  function renderRisks(risks){
+    riskListEl.innerHTML = '';
+    risks.forEach(r => {
+      const div = document.createElement('div');
+      div.className = 'risk-item';
+      div.style.opacity = '0';
+      div.innerHTML = `<div class="dot ${r.level}"></div>
+        <div><div class="t">${r.t}</div><div class="d">${r.d}</div></div>`;
+      riskListEl.appendChild(div);
+      requestAnimationFrame(() => {
+        div.style.transition = 'opacity .35s';
+        div.style.opacity = '1';
+      });
+    });
+  }
+
+  function renderRecommendation(sub){
+    const rec = sub.recommendation;
+    if(rec.premium){
+      recommendZoneEl.innerHTML = `
+        <div class="recommend-card">
+          <h3>${rec.verdict}</h3>
+          <div class="price">$${rec.premium.toLocaleString()} <span>/ year, agent-modeled</span></div>
+          <div class="reason">${rec.reason}</div>
+          <div class="slider-row"><span>Adjust premium</span><span id="adjLabel">$${rec.premium.toLocaleString()}</span></div>
+          <input type="range" id="premSlider" min="${Math.round(rec.premium*0.7)}" max="${Math.round(rec.premium*1.4)}" value="${rec.premium}" step="500">
+          <div class="btn-row" style="margin-top:12px;">
+            <button class="act approve" id="approveBtn">Approve &amp; bind</button>
+            <button class="act adjust" id="adjustBtn">Send back to agents</button>
+            <button class="act decline" id="declineBtn">Decline</button>
+          </div>
+        </div>`;
+      const slider = document.getElementById('premSlider');
+      const label = document.getElementById('adjLabel');
+      slider.addEventListener('input', () => {
+        label.textContent = '$' + Number(slider.value).toLocaleString();
+      });
+      document.getElementById('approveBtn').onclick = () => finalizeSubmission(sub.id, 'done');
+      document.getElementById('adjustBtn').onclick = () => {
+        addAgentStep('Supervisor Agent', 'Sent back for re-pricing with adjusted premium of $' + Number(slider.value).toLocaleString() + '.', 'Extraction and risk agents will not re-run; only pricing is refreshed.');
+      };
+      document.getElementById('declineBtn').onclick = () => finalizeSubmission(sub.id, 'flagged');
+    } else {
+      recommendZoneEl.innerHTML = `
+        <div class="recommend-card" style="border-color:var(--warn);">
+          <h3 style="color:var(--warn);">${rec.verdict}</h3>
+          <div class="reason" style="margin-top:8px;">${rec.reason}</div>
+          <div class="btn-row" style="margin-top:12px;">
+            <button class="act adjust" id="ackBtn">Acknowledge referral</button>
+          </div>
+        </div>`;
+      document.getElementById('ackBtn').onclick = () => finalizeSubmission(sub.id, 'flagged');
+    }
+  }
+
+  function finalizeSubmission(id, status){
+    const sub = state.queue.find(s => s.id === id);
+    if(sub && sub.status !== 'done' && sub.status !== 'flagged'){
+      state.processed += 1;
+      processedCountEl.textContent = state.processed;
+    }
+    if(sub) sub.status = status;
+    renderQueue();
+  }
+
+  let runToken = 0;
+
+  function processSubmission(id){
+    const sub = state.queue.find(s => s.id === id);
+    if(!sub) return;
+    state.activeId = id;
+    renderQueue();
+
+    const myToken = ++runToken;
+
+    agentFeedEl.innerHTML = '';
+    riskListEl.innerHTML = '';
+    recommendZoneEl.innerHTML = '<div class="empty-state">Agents are working the file...</div>';
+    setFieldGridSkeleton(sub.fields);
+
+    typewriterDoc(sub.raw, () => {
+      if(myToken !== runToken) return;
+      runAgentPipeline(sub, myToken);
+    });
+  }
+
+  function delay(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+  async function runAgentPipeline(sub, myToken){
+    const intakeStep = addAgentStep('Intake Agent', 'Parsing broker submission and classifying line of business...', null, true);
+    await delay(700);
+    if(myToken !== runToken) return;
+    intakeStep.classList.remove('running');
+    intakeStep.querySelector('.who').textContent = 'Intake Agent';
+    intakeStep.querySelector('.msg').textContent = 'Classified as ' + sub.lineOfBusiness + '. Routing to extraction agent.';
+
+    const extractStep = addAgentStep('Extraction Agent', 'Pulling structured fields from unstructured text...', null, true);
+    const keys = Object.keys(sub.fields);
+    for(let i = 0; i < keys.length; i++){
+      await delay(220);
+      if(myToken !== runToken) return;
+      fillField(keys[i], sub.fields[keys[i]]);
+    }
+    await delay(200);
+    extractStep.classList.remove('running');
+    extractStep.querySelector('.msg').textContent = `Extracted ${keys.length} fields at high confidence. Handing off to risk agent.`;
+
+    const riskStep = addAgentStep('Risk Agent', 'Cross-referencing loss history and hazard indicators...', null, true);
+    await delay(750);
+    if(myToken !== runToken) return;
+    riskStep.classList.remove('running');
+    riskStep.querySelector('.msg').textContent = `Identified ${sub.risks.length} risk signals (${sub.risks.filter(r=>r.level==='high').length} high severity).`;
+    renderRisks(sub.risks);
+
+    const superStep = addAgentStep('Supervisor Agent', 'Synthesizing extraction + risk output into an underwriting recommendation...', null, true);
+    await delay(800);
+    if(myToken !== runToken) return;
+    superStep.classList.remove('running');
+    superStep.querySelector('.msg').textContent = `Recommendation ready: ${sub.recommendation.verdict}.`;
+    renderRecommendation(sub);
+  }
+
+  // ---------- "new submission" simulator ----------
+  const NAMES = ["Ironway Metals","Sunridge Logistics","Palmetto Dental Group","Brightwell Construction","Vale & Thorn Realty","Northgate Manufacturing"];
+  const LOBS = ["Commercial Property","General Liability","Commercial Auto","Professional Liability","Workers' Comp"];
+  document.getElementById('newSubmissionBtn').onclick = () => {
+    const base = SUBMISSIONS[Math.floor(Math.random()*SUBMISSIONS.length)];
+    const name = NAMES[Math.floor(Math.random()*NAMES.length)];
+    const lob = LOBS[Math.floor(Math.random()*LOBS.length)];
+    const newSub = JSON.parse(JSON.stringify(base));
+    newSub.id = 'SUB-' + (2300 + Math.floor(Math.random()*699));
+    newSub.insured = name;
+    newSub.lineOfBusiness = lob;
+    newSub.status = 'new';
+    newSub.raw = newSub.raw.replace(base.insured, name);
+    state.queue.unshift(newSub);
+    renderQueue();
+  };
+
+  renderQueue();
+})();
+</script>
+
+</body>
+</html>

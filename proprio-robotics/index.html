@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vision-Guided Rack Repair — Toy Demo</title>
+<style>
+  :root{
+    --bg: #14110f;
+    --panel: #1d1915;
+    --panel-2: #241f19;
+    --line: #382f26;
+    --amber: #ff9d3d;
+    --amber-dim: #b06a20;
+    --green: #5fd192;
+    --red: #ff5f5f;
+    --text: #f1e9dd;
+    --text-dim: #a49685;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: radial-gradient(circle at 20% -10%, #241d16 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding: 28px 5vw 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size: 1.6rem;
+    letter-spacing: 0.5px;
+  }
+  header h1 span{ color: var(--amber); }
+  header p{
+    margin:0;
+    color: var(--text-dim);
+    max-width: 720px;
+    line-height:1.5;
+    font-size:0.95rem;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 22px;
+    padding: 22px 5vw 10px;
+  }
+  @media (max-width: 900px){
+    main{ grid-template-columns: 1fr; }
+  }
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 18px 22px;
+  }
+  .panel h2{
+    margin: 0 0 4px;
+    font-size: 1.02rem;
+    color: var(--amber);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .panel .sub{
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    margin: 0 0 14px;
+  }
+  .toolbar{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:16px;
+  }
+  button{
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 9px 15px;
+    border-radius: 7px;
+    cursor:pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: border-color .15s, transform .1s;
+  }
+  button:hover:not(:disabled){ border-color: var(--amber-dim); }
+  button:active:not(:disabled){ transform: scale(0.97); }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+  button.primary{ background: var(--amber); color:#241a0d; border-color:var(--amber); }
+  button.primary:hover:not(:disabled){ background:#ffb066; }
+  button.danger{ border-color: var(--red); color:var(--red); }
+
+  #rack{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap:10px;
+  }
+  .slot{
+    position:relative;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    border-radius: 8px;
+    padding: 10px 8px;
+    font-size: 0.72rem;
+    cursor:default;
+    transition: border-color .2s, box-shadow .2s;
+    min-height: 74px;
+  }
+  .slot .id{ color: var(--text-dim); font-size:0.68rem; margin-bottom:4px;}
+  .slot .status{ font-weight:700; letter-spacing:0.3px; }
+  .slot.ok .status{ color: var(--green); }
+  .slot.fault .status{ color: var(--red); }
+  .slot.fault{ box-shadow: 0 0 0 1px rgba(255,95,95,0.25) inset; }
+  .slot.selected{ border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber) inset; }
+  .slot.unscanned .status{ color: var(--text-dim); }
+  .slot .fixing-badge{
+    position:absolute; top:6px; right:6px;
+    font-size:0.6rem; padding:2px 6px; border-radius:10px;
+    background: var(--amber); color:#241a0d; font-weight:700;
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+  #armTrack{
+    position:relative;
+    height: 14px;
+    margin: 16px 0 20px;
+    background: linear-gradient(90deg, transparent, var(--line), transparent);
+    border-radius: 3px;
+  }
+  #arm{
+    position:absolute; top:-9px; left:0;
+    width: 32px; height:32px;
+    transform: translateX(0);
+    transition: left .5s ease;
+    font-size: 1.4rem;
+    line-height:32px;
+    text-align:center;
+  }
+
+  .stats{
+    display:grid;
+    grid-template-columns: repeat(3,1fr);
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .stat{
+    background: var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px;
+    text-align:center;
+  }
+  .stat b{ display:block; font-size:1.25rem; color:var(--amber); }
+  .stat span{ font-size:0.68rem; color:var(--text-dim); }
+
+  #alignBox{
+    position:relative;
+    width:100%;
+    height: 220px;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 21px, rgba(255,255,255,0.04) 22px),
+      repeating-linear-gradient(90deg, transparent, transparent 21px, rgba(255,255,255,0.04) 22px),
+      var(--panel-2);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    overflow:hidden;
+    cursor: crosshair;
+    touch-action:none;
+  }
+  #alignBox.disabled{ cursor:not-allowed; opacity:0.5; }
+  .target{
+    position:absolute;
+    width: 34px; height:34px;
+    border-radius: 6px;
+    background: rgba(255,157,61,0.12);
+    border: 2px solid var(--amber-dim);
+    transform: translate(-50%,-50%);
+  }
+  .target::after{
+    content: attr(data-label);
+    position:absolute; bottom:-20px; left:50%;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    white-space:nowrap;
+  }
+  .reticle{
+    position:absolute;
+    width: 26px; height:26px;
+    margin: -13px 0 0 -13px;
+    border-radius: 50%;
+    border: 2px solid var(--green);
+    box-shadow: 0 0 10px rgba(95,209,146,0.5);
+    pointer-events:none;
+  }
+  .reticle::before, .reticle::after{
+    content:'';
+    position:absolute;
+    background: var(--green);
+  }
+  .reticle::before{ width:2px; height:10px; left:50%; top:-14px; transform:translateX(-1px); }
+  .reticle::after{ width:10px; height:2px; top:50%; left:-14px; transform:translateY(-1px); }
+
+  #alignReadout{
+    display:flex;
+    justify-content:space-between;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin: 10px 0 14px;
+  }
+  #alignReadout b{ color: var(--text); }
+
+  #log{
+    background: #0f0d0b;
+    border:1px solid var(--line);
+    border-radius:8px;
+    height: 150px;
+    overflow-y:auto;
+    padding: 10px 12px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 0.74rem;
+    line-height:1.6;
+  }
+  #log div{ color: var(--text-dim); }
+  #log div.ok{ color: var(--green); }
+  #log div.bad{ color: var(--red); }
+  #log div.sys{ color: var(--amber); }
+
+  footer{
+    text-align:center;
+    padding: 18px 5vw 26px;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    border-top: 1px solid var(--line);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Vision-Guided Rack Repair <span>— toy demo</span></h1>
+  <p>A miniature, synthetic simulation of a robot technician working a server rack: scan for faults, then use vision-guided alignment to grip a delicate component with sub-tolerance precision before executing the fix. Nothing here talks to real hardware — every rack, fault, and camera reading is generated in-browser.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Rack R-04 <span id="rackSummary" style="color:var(--text-dim); font-weight:400; font-size:0.75rem;"></span></h2>
+    <p class="sub">12 field-replaceable slots. Run a scan to surface faults, then dispatch the arm to each one.</p>
+    <div class="toolbar">
+      <button id="scanBtn" class="primary">Scan rack</button>
+      <button id="autoBtn" disabled>Run autonomous mode</button>
+      <button id="resetBtn">Reset rack</button>
+    </div>
+    <div id="armTrack"><div id="arm">🦾</div></div>
+    <div id="rack"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Manipulator control</h2>
+    <p class="sub" id="controlSub">Select a faulted slot to dispatch the arm.</p>
+
+    <div class="stats">
+      <div class="stat"><b id="statFixed">0</b><span>repaired</span></div>
+      <div class="stat"><b id="statRate">—</b><span>success rate</span></div>
+      <div class="stat"><b id="statErr">—</b><span>avg. alignment error</span></div>
+    </div>
+
+    <div id="alignBox" class="disabled"></div>
+    <div id="alignReadout">
+      <span>Component: <b id="readoutComp">—</b></span>
+      <span>Offset: <b id="readoutOffset">—</b></span>
+    </div>
+    <div class="toolbar">
+      <button id="gripBtn" class="primary" disabled>Grip &amp; execute</button>
+      <button id="skipBtn" class="danger" disabled>Abort task</button>
+    </div>
+
+    <div id="log"></div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Proprio Robotics (YC S26). Not affiliated with Proprio Robotics.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var FAULT_TYPES = [
+    {name:"fan insertion", tolerance:16, fragility:0.9},
+    {name:"switch recabling", tolerance:20, fragility:0.7},
+    {name:"RAM extraction", tolerance:11, fragility:1.3},
+    {name:"GPU cabling", tolerance:13, fragility:1.1},
+    {name:"disk hot-swap", tolerance:18, fragility:0.8},
+    {name:"heatsink removal", tolerance:9, fragility:1.5}
+  ];
+
+  var SLOT_COUNT = 12;
+  var slots = [];
+  var scanned = false;
+  var selectedSlot = null;
+  var currentTarget = null;   // {x,y,label,tolerance}
+  var reticleEl = null;
+  var lastOffset = null;
+  var autoRunning = false;
+
+  var fixedCount = 0, attemptCount = 0, successCount = 0, errorSum = 0;
+
+  var rackEl = document.getElementById('rack');
+  var armEl = document.getElementById('arm');
+  var logEl = document.getElementById('log');
+  var alignBox = document.getElementById('alignBox');
+  var scanBtn = document.getElementById('scanBtn');
+  var autoBtn = document.getElementById('autoBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  var gripBtn = document.getElementById('gripBtn');
+  var skipBtn = document.getElementById('skipBtn');
+  var controlSub = document.getElementById('controlSub');
+  var rackSummary = document.getElementById('rackSummary');
+  var readoutComp = document.getElementById('readoutComp');
+  var readoutOffset = document.getElementById('readoutOffset');
+
+  function log(msg, cls){
+    var d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = msg;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function rand(min, max){ return Math.random() * (max - min) + min; }
+  function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function buildRack(){
+    slots = [];
+    for (var i = 0; i < SLOT_COUNT; i++){
+      var hasFault = Math.random() < 0.5;
+      slots.push({
+        id: 'U' + (i + 1).toString().padStart(2, '0'),
+        fault: hasFault ? pick(FAULT_TYPES) : null,
+        status: hasFault ? 'fault' : 'ok',
+        fixed: false
+      });
+    }
+    scanned = false;
+    selectedSlot = null;
+    renderRack();
+    updateSummary();
+  }
+
+  function renderRack(){
+    rackEl.innerHTML = '';
+    slots.forEach(function(s, idx){
+      var el = document.createElement('div');
+      el.className = 'slot ' + (scanned ? s.status : 'unscanned');
+      if (s.fixed) el.className = 'slot ok';
+      if (selectedSlot === idx) el.className += ' selected';
+      var label = !scanned ? 'pending scan'
+        : s.fixed ? 'repaired'
+        : s.status === 'ok' ? 'nominal'
+        : s.fault.name;
+      el.innerHTML =
+        '<div class="id">' + s.id + '</div>' +
+        '<div class="status">' + label + '</div>';
+      if (scanned && !s.fixed && s.status === 'fault'){
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', function(){ selectSlot(idx); });
+      }
+      rackEl.appendChild(el);
+    });
+  }
+
+  function updateSummary(){
+    var faults = slots.filter(function(s){ return s.status === 'fault' && !s.fixed; }).length;
+    rackSummary.textContent = scanned ? ('· ' + faults + ' fault(s) remaining') : '';
+    autoBtn.disabled = !scanned || faults === 0 || autoRunning;
+    scanBtn.disabled = autoRunning;
+  }
+
+  function scanRack(){
+    scanBtn.disabled = true;
+    log('› vision system sweeping rack R-04...', 'sys');
+    var i = 0;
+    var iv = setInterval(function(){
+      if (i >= slots.length){
+        clearInterval(iv);
+        scanned = true;
+        renderRack();
+        updateSummary();
+        var faults = slots.filter(function(s){ return s.status === 'fault'; }).length;
+        log('› scan complete: ' + faults + ' fault(s) detected across ' + slots.length + ' slots.', 'sys');
+        return;
+      }
+      slots[i].revealed = true;
+      i++;
+      renderRack();
+    }, 90);
+  }
+
+  function moveArmTo(idx){
+    var pct = (idx + 0.5) / SLOT_COUNT * 100;
+    armEl.style.left = 'calc(' + pct + '% - 16px)';
+  }
+
+  function selectSlot(idx){
+    if (autoRunning) return;
+    selectedSlot = idx;
+    renderRack();
+    moveArmTo(idx);
+    var s = slots[idx];
+    log('› arm dispatched to ' + s.id + ' for ' + s.fault.name + '.', null);
+    controlSub.textContent = 'Arm positioned at ' + s.id + '. Align the gripper reticle over the target, then execute.';
+    setupAlignment(s);
+  }
+
+  function setupAlignment(s){
+    alignBox.classList.remove('disabled');
+    alignBox.innerHTML = '';
+    var w = alignBox.clientWidth, h = alignBox.clientHeight;
+    var tx = rand(w * 0.3, w * 0.7);
+    var ty = rand(h * 0.3, h * 0.7);
+    currentTarget = { x: tx, y: ty, tolerance: s.fault.tolerance, label: s.fault.name, fragility: s.fault.fragility };
+
+    var targetEl = document.createElement('div');
+    targetEl.className = 'target';
+    targetEl.style.left = tx + 'px';
+    targetEl.style.top = ty + 'px';
+    targetEl.setAttribute('data-label', s.fault.name + ' · tol ' + s.fault.tolerance + 'px');
+    alignBox.appendChild(targetEl);
+
+    reticleEl = document.createElement('div');
+    reticleEl.className = 'reticle';
+    reticleEl.style.left = (w/2) + 'px';
+    reticleEl.style.top = (h/2) + 'px';
+    alignBox.appendChild(reticleEl);
+
+    lastOffset = dist(w/2, h/2, tx, ty);
+    readoutComp.textContent = s.fault.name;
+    updateOffsetReadout();
+
+    gripBtn.disabled = false;
+    skipBtn.disabled = false;
+  }
+
+  function dist(x1,y1,x2,y2){
+    return Math.sqrt(Math.pow(x1-x2,2) + Math.pow(y1-y2,2));
+  }
+
+  function updateOffsetReadout(){
+    readoutOffset.textContent = lastOffset.toFixed(1) + 'px' +
+      (currentTarget && lastOffset <= currentTarget.tolerance ? '  (within tolerance)' : '');
+  }
+
+  function positionReticle(clientX, clientY){
+    if (!reticleEl || !currentTarget) return;
+    var rect = alignBox.getBoundingClientRect();
+    var x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    var y = Math.max(0, Math.min(rect.height, clientY - rect.top));
+    reticleEl.style.left = x + 'px';
+    reticleEl.style.top = y + 'px';
+    lastOffset = dist(x, y, currentTarget.x, currentTarget.y);
+    updateOffsetReadout();
+  }
+
+  var dragging = false;
+  alignBox.addEventListener('pointerdown', function(e){
+    if (autoRunning || !currentTarget) return;
+    dragging = true;
+    positionReticle(e.clientX, e.clientY);
+  });
+  window.addEventListener('pointermove', function(e){
+    if (!dragging) return;
+    positionReticle(e.clientX, e.clientY);
+  });
+  window.addEventListener('pointerup', function(){ dragging = false; });
+
+  function executeGrip(){
+    if (!currentTarget || selectedSlot === null) return;
+    var s = slots[selectedSlot];
+    attemptCount++;
+    // fragile components punish imprecision more sharply
+    var margin = currentTarget.tolerance / currentTarget.fragility;
+    var success = lastOffset <= margin;
+    errorSum += lastOffset;
+
+    if (success){
+      successCount++;
+      fixedCount++;
+      s.fixed = true;
+      log('✓ ' + s.id + ' — ' + s.fault.name + ' completed, alignment error ' + lastOffset.toFixed(1) + 'px.', 'ok');
+    } else {
+      log('✗ ' + s.id + ' — ' + s.fault.name + ' aborted: gripper missed by ' + lastOffset.toFixed(1) + 'px (needed ≤' + margin.toFixed(1) + 'px on this fragile part).', 'bad');
+    }
+    finishTask();
+  }
+
+  function abortTask(){
+    if (selectedSlot === null) return;
+    log('› task at ' + slots[selectedSlot].id + ' aborted by operator.', null);
+    finishTask();
+  }
+
+  function finishTask(){
+    selectedSlot = null;
+    currentTarget = null;
+    reticleEl = null;
+    alignBox.classList.add('disabled');
+    alignBox.innerHTML = '';
+    readoutComp.textContent = '—';
+    readoutOffset.textContent = '—';
+    gripBtn.disabled = true;
+    skipBtn.disabled = true;
+    controlSub.textContent = 'Select a faulted slot to dispatch the arm.';
+    renderRack();
+    updateStats();
+    updateSummary();
+  }
+
+  function updateStats(){
+    document.getElementById('statFixed').textContent = fixedCount;
+    document.getElementById('statRate').textContent = attemptCount ? Math.round(successCount/attemptCount*100) + '%' : '—';
+    document.getElementById('statErr').textContent = attemptCount ? (errorSum/attemptCount).toFixed(1) + 'px' : '—';
+  }
+
+  function runAutonomous(){
+    if (autoRunning) return;
+    autoRunning = true;
+    updateSummary();
+    log('› autonomous mode engaged — working remaining faults in slot order.', 'sys');
+    var pending = slots.map(function(s,i){return i;}).filter(function(i){ return slots[i].status==='fault' && !slots[i].fixed; });
+    var i = 0;
+
+    function step(){
+      if (i >= pending.length){
+        autoRunning = false;
+        log('› autonomous pass complete.', 'sys');
+        updateSummary();
+        return;
+      }
+      var idx = pending[i];
+      var s = slots[idx];
+      selectedSlot = idx;
+      renderRack();
+      moveArmTo(idx);
+      log('› arm dispatched to ' + s.id + ' for ' + s.fault.name + '.', null);
+
+      setTimeout(function(){
+        // simulated vision alignment: small camera/gripper jitter around perfect center
+        var jitter = rand(0, s.fault.tolerance * 1.15);
+        var margin = s.fault.tolerance / s.fault.fragility;
+        attemptCount++;
+        errorSum += jitter;
+        if (jitter <= margin){
+          successCount++;
+          fixedCount++;
+          s.fixed = true;
+          log('✓ ' + s.id + ' — ' + s.fault.name + ' completed, alignment error ' + jitter.toFixed(1) + 'px.', 'ok');
+        } else {
+          log('✗ ' + s.id + ' — ' + s.fault.name + ' failed, alignment error ' + jitter.toFixed(1) + 'px (needed ≤' + margin.toFixed(1) + 'px), queued for retry.', 'bad');
+          pending.push(idx);
+        }
+        selectedSlot = null;
+        renderRack();
+        updateStats();
+        i++;
+        setTimeout(step, 260);
+      }, 420);
+    }
+    step();
+  }
+
+  scanBtn.addEventListener('click', scanRack);
+  autoBtn.addEventListener('click', runAutonomous);
+  resetBtn.addEventListener('click', function(){
+    autoRunning = false;
+    fixedCount = attemptCount = successCount = errorSum = 0;
+    logEl.innerHTML = '';
+    finishTask();
+    buildRack();
+    updateStats();
+    log('› rack R-04 reset with a fresh fault set.', 'sys');
+  });
+  gripBtn.addEventListener('click', executeGrip);
+  skipBtn.addEventListener('click', abortTask);
+
+  buildRack();
+  updateStats();
+  log('› simulated rack loaded. Run a scan to begin.', 'sys');
+})();
+</script>
+
+</body>
+</html>
