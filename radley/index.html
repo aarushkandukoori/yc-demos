@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScanDraft — AI-drafted radiology reports, demo</title>
+<style>
+  :root{
+    --bg:#0f1420;
+    --panel:#161d2e;
+    --panel2:#1c2438;
+    --line:#2a3450;
+    --text:#e7ecf7;
+    --muted:#8a95b3;
+    --accent:#5fb8ff;
+    --accent2:#7ee0b8;
+    --warn:#ffbf6b;
+    --danger:#ff7a7a;
+    --high:#7ee0b8;
+    --mid:#ffbf6b;
+    --low:#ff7a7a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, #1a2338 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:28px 32px 12px;
+    max-width:1180px;
+    margin:0 auto;
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:26px;
+    letter-spacing:-0.01em;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14.5px;
+    max-width:680px;
+    line-height:1.5;
+  }
+  main{
+    max-width:1180px;
+    margin:0 auto;
+    padding:20px 32px 40px;
+    display:grid;
+    grid-template-columns:260px 1fr;
+    gap:20px;
+  }
+  .cases{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px;
+    align-self:start;
+  }
+  .cases h3{
+    margin:4px 6px 10px;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+  }
+  .case-btn{
+    display:block;
+    width:100%;
+    text-align:left;
+    background:transparent;
+    border:1px solid transparent;
+    color:var(--text);
+    padding:10px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:13.5px;
+    margin-bottom:4px;
+    transition:background .15s, border-color .15s;
+  }
+  .case-btn:hover{background:var(--panel2);}
+  .case-btn.active{
+    background:#1e2c47;
+    border-color:#33507e;
+  }
+  .case-btn small{
+    display:block;
+    color:var(--muted);
+    font-size:11.5px;
+    margin-top:2px;
+  }
+  .stage{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:20px;
+  }
+  .study-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .study-head h2{
+    margin:0;
+    font-size:17px;
+  }
+  .study-head .muted{color:var(--muted); font-size:13px;}
+  .timing{
+    display:flex;
+    gap:18px;
+    align-items:center;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 14px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+  }
+  .timing .metric{font-size:13px;}
+  .timing .metric b{
+    display:block;
+    font-size:19px;
+    font-variant-numeric:tabular-nums;
+  }
+  .timing .metric.ai b{color:var(--accent2);}
+  .timing .metric.manual b{color:var(--muted);}
+  .bar-wrap{flex:1; min-width:160px;}
+  .bar-track{
+    height:8px;
+    background:#0e1422;
+    border-radius:6px;
+    overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .bar-fill{
+    height:100%;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    width:2%;
+    transition:width .8s ease;
+  }
+  .imgbox{
+    width:100%;
+    height:150px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0 2px, transparent 2px 26px),
+      radial-gradient(ellipse at 50% 45%, #2a3550 0%, #0c111c 70%);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    font-size:12px;
+    letter-spacing:0.04em;
+    margin-bottom:14px;
+    position:relative;
+    overflow:hidden;
+  }
+  .imgbox .roi{
+    position:absolute;
+    border:1.5px dashed var(--danger);
+    border-radius:6px;
+    opacity:0;
+    transition:opacity .4s ease;
+  }
+  .imgbox .roi.show{opacity:0.85;}
+  .section-label{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:16px 0 8px;
+  }
+  .finding{
+    display:grid;
+    grid-template-columns:1fr auto auto;
+    gap:10px;
+    align-items:start;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:10px 12px;
+    margin-bottom:8px;
+  }
+  .finding textarea{
+    background:transparent;
+    border:none;
+    color:var(--text);
+    font-size:13.5px;
+    font-family:inherit;
+    line-height:1.45;
+    resize:vertical;
+    width:100%;
+    min-height:38px;
+    outline:none;
+  }
+  .finding textarea:focus{
+    background:#0e1422;
+    border-radius:6px;
+    padding:4px;
+  }
+  .conf{
+    font-size:11px;
+    padding:3px 8px;
+    border-radius:20px;
+    white-space:nowrap;
+    height:fit-content;
+    font-variant-numeric:tabular-nums;
+  }
+  .conf.high{background:rgba(126,224,184,0.15); color:var(--high);}
+  .conf.mid{background:rgba(255,191,107,0.15); color:var(--mid);}
+  .conf.low{background:rgba(255,122,122,0.15); color:var(--low);}
+  .status-btn{
+    border:1px solid var(--line);
+    background:#0e1422;
+    color:var(--muted);
+    font-size:11.5px;
+    padding:5px 9px;
+    border-radius:7px;
+    cursor:pointer;
+    height:fit-content;
+    white-space:nowrap;
+  }
+  .status-btn.accepted{
+    background:rgba(126,224,184,0.12);
+    color:var(--accent2);
+    border-color:#33604a;
+  }
+  .impression-box{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:10px 12px;
+  }
+  .impression-box textarea{
+    width:100%;
+    background:transparent;
+    border:none;
+    color:var(--text);
+    font-family:inherit;
+    font-size:14px;
+    line-height:1.55;
+    min-height:70px;
+    resize:vertical;
+    outline:none;
+  }
+  .critical-flag{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:rgba(255,122,122,0.12);
+    color:var(--danger);
+    border:1px solid #6b3838;
+    padding:4px 10px;
+    border-radius:20px;
+    font-size:12px;
+    margin-left:8px;
+  }
+  .sign-row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    margin-top:18px;
+    flex-wrap:wrap;
+  }
+  .sign-row input{
+    background:#0e1422;
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 12px;
+    border-radius:8px;
+    font-size:13.5px;
+    flex:1;
+    min-width:200px;
+  }
+  .sign-btn{
+    background:linear-gradient(90deg,var(--accent),#4a9be0);
+    border:none;
+    color:#08111e;
+    font-weight:600;
+    padding:10px 18px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:13.5px;
+  }
+  .sign-btn:disabled{
+    opacity:0.4;
+    cursor:not-allowed;
+  }
+  .hint{font-size:12px; color:var(--muted); margin-top:6px;}
+  .signed-banner{
+    display:none;
+    margin-top:14px;
+    background:rgba(126,224,184,0.1);
+    border:1px solid #33604a;
+    border-radius:9px;
+    padding:12px 14px;
+    font-size:13px;
+    color:var(--accent2);
+  }
+  .signed-banner.show{display:block;}
+  footer{
+    max-width:1180px;
+    margin:10px auto 30px;
+    padding:0 32px;
+    color:var(--muted);
+    font-size:12px;
+    text-align:center;
+  }
+  @media (max-width:820px){
+    main{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Scan<span>Draft</span></h1>
+  <p>A toy demo of AI-drafted-then-physician-signed reporting: pick a synthetic study, watch a draft report get generated instantly, then edit and sign it like a radiologist would before it routes out. All data below is fabricated for demonstration.</p>
+</header>
+
+<main>
+  <div class="cases">
+    <h3>Incoming studies</h3>
+    <div id="caseList"></div>
+  </div>
+
+  <div class="stage">
+    <div class="card">
+      <div class="study-head">
+        <div>
+          <h2 id="studyTitle">Select a study</h2>
+          <div class="muted" id="studySub">—</div>
+        </div>
+        <div id="criticalFlag"></div>
+      </div>
+
+      <div class="imgbox" id="imgbox">
+        no study loaded
+        <div class="roi" id="roi"></div>
+      </div>
+
+      <div class="timing">
+        <div class="metric ai">AI draft time<b id="aiTime">—</b></div>
+        <div class="metric manual">Manual dictation avg<b>12m 40s</b></div>
+        <div class="bar-wrap">
+          <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+          <div class="hint" id="speedupHint">draft speed vs. manual baseline</div>
+        </div>
+      </div>
+
+      <div class="section-label">Findings (AI-drafted — click a line to edit, then accept)</div>
+      <div id="findingsList"></div>
+
+      <div class="section-label">Impression</div>
+      <div class="impression-box">
+        <textarea id="impressionText" placeholder="Impression will appear here once a study is loaded."></textarea>
+      </div>
+
+      <div class="sign-row">
+        <input type="text" id="radName" placeholder="Type your name to sign as reviewing radiologist (e.g. Dr. A. Kandukoori)">
+        <button class="sign-btn" id="signBtn" disabled>Sign &amp; route report</button>
+      </div>
+      <div class="hint" id="signHint">Load a study, accept every finding, then sign.</div>
+
+      <div class="signed-banner" id="signedBanner"></div>
+    </div>
+  </div>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Radley (YC S26). Not affiliated with Radley.</footer>
+
+<script>
+const CASES = [
+  {
+    id: 'cxr1',
+    label: 'Chest X-ray',
+    sub: 'CXR-2 view · 54M · cough, fever 3 days',
+    modality: 'CXR',
+    roi: {top:'30%', left:'55%', width:'80px', height:'70px'},
+    critical: true,
+    findings: [
+      {text:'Patchy airspace opacity in the right lower lobe, new compared to prior study.', conf:0.91},
+      {text:'Cardiomediastinal silhouette within normal limits.', conf:0.97},
+      {text:'No pleural effusion or pneumothorax identified.', conf:0.88},
+      {text:'Osseous structures grossly unremarkable.', conf:0.95}
+    ],
+    impression: 'Findings compatible with right lower lobe pneumonia. Recommend clinical correlation and follow-up imaging after treatment.',
+    criticalNote: 'Actionable finding — auto-flagged for same-day physician call.'
+  },
+  {
+    id: 'cths',
+    label: 'CT Head, non-contrast',
+    sub: 'CT Head w/o contrast · 71F · fall, on anticoagulation',
+    modality: 'CT',
+    roi: null,
+    critical: false,
+    findings: [
+      {text:'No acute intracranial hemorrhage, mass effect, or midline shift.', conf:0.94},
+      {text:'Ventricles and sulci are age-appropriate in size.', conf:0.9},
+      {text:'Gray-white differentiation preserved.', conf:0.86},
+      {text:'No acute fracture identified on bone windows.', conf:0.93}
+    ],
+    impression: 'No acute intracranial abnormality. No evidence of hemorrhage related to reported fall.',
+    criticalNote: ''
+  },
+  {
+    id: 'ctab',
+    label: 'Abdominal CT w/ contrast',
+    sub: 'CT Abd/Pelvis w/ contrast · 27M · RLQ pain, fever',
+    modality: 'CT',
+    roi: {top:'58%', left:'40%', width:'70px', height:'60px'},
+    critical: true,
+    findings: [
+      {text:'Dilated, thick-walled appendix measuring 1.2 cm with surrounding fat stranding.', conf:0.89},
+      {text:'No free air or drainable fluid collection.', conf:0.82},
+      {text:'Liver, spleen, kidneys unremarkable.', conf:0.9},
+      {text:'No bowel obstruction identified.', conf:0.87}
+    ],
+    impression: 'Findings consistent with acute uncomplicated appendicitis. Recommend surgical consultation.',
+    criticalNote: 'Actionable finding — auto-flagged for same-day physician call.'
+  },
+  {
+    id: 'mrik',
+    label: 'MRI Knee',
+    sub: 'MRI Knee w/o contrast · 33F · twisting injury, effusion',
+    modality: 'MRI',
+    roi: {top:'45%', left:'50%', width:'60px', height:'50px'},
+    critical: false,
+    findings: [
+      {text:'Horizontal tear of the posterior horn of the medial meniscus.', conf:0.78},
+      {text:'Moderate joint effusion.', conf:0.9},
+      {text:'ACL and PCL intact.', conf:0.85},
+      {text:'No acute fracture or marrow edema.', conf:0.92}
+    ],
+    impression: 'Medial meniscal tear, posterior horn, with associated joint effusion. Ligaments intact.',
+    criticalNote: ''
+  }
+];
+
+let current = null;
+let acceptedFlags = [];
+
+const caseListEl = document.getElementById('caseList');
+CASES.forEach(c => {
+  const btn = document.createElement('button');
+  btn.className = 'case-btn';
+  btn.id = 'case-' + c.id;
+  btn.innerHTML = `${c.label}<small>${c.sub}</small>`;
+  btn.onclick = () => loadCase(c.id);
+  caseListEl.appendChild(btn);
+});
+
+function confClass(v){
+  if (v >= 0.88) return 'high';
+  if (v >= 0.8) return 'mid';
+  return 'low';
+}
+
+function loadCase(id){
+  current = CASES.find(c => c.id === id);
+  acceptedFlags = current.findings.map(() => false);
+
+  document.querySelectorAll('.case-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('case-' + id).classList.add('active');
+
+  document.getElementById('studyTitle').textContent = current.label;
+  document.getElementById('studySub').textContent = current.sub;
+
+  const critEl = document.getElementById('criticalFlag');
+  critEl.innerHTML = current.critical
+    ? `<span class="critical-flag">⚠ critical finding · ${current.criticalNote}</span>`
+    : '';
+
+  const imgbox = document.getElementById('imgbox');
+  imgbox.firstChild.textContent = current.modality + ' — synthetic study preview';
+  const roi = document.getElementById('roi');
+  roi.classList.remove('show');
+  if (current.roi){
+    Object.assign(roi.style, current.roi);
+    roi.style.display = 'block';
+  } else {
+    roi.style.display = 'none';
+  }
+
+  document.getElementById('aiTime').textContent = '—';
+  document.getElementById('barFill').style.width = '2%';
+  document.getElementById('speedupHint').textContent = 'drafting…';
+  document.getElementById('findingsList').innerHTML = '';
+  document.getElementById('impressionText').value = '';
+  document.getElementById('signedBanner').classList.remove('show');
+  document.getElementById('radName').value = '';
+  updateSignState();
+
+  const draftMs = 600 + Math.random() * 500;
+  setTimeout(() => renderDraft(draftMs), draftMs);
+}
+
+function renderDraft(draftMs){
+  if (current.roi) document.getElementById('roi').classList.add('show');
+
+  const seconds = (draftMs / 1000).toFixed(1);
+  document.getElementById('aiTime').textContent = seconds + 's';
+  const manualSeconds = 760;
+  const pct = Math.min(100, Math.max(2, (draftMs / 1000 / manualSeconds) * 100 * 40));
+  document.getElementById('barFill').style.width = pct + '%';
+  const speedup = Math.round(manualSeconds / (draftMs / 1000));
+  document.getElementById('speedupHint').textContent = `~${speedup}x faster than manual dictation`;
+
+  const list = document.getElementById('findingsList');
+  list.innerHTML = '';
+  current.findings.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'finding';
+    row.innerHTML = `
+      <textarea data-idx="${i}">${f.text}</textarea>
+      <span class="conf ${confClass(f.conf)}">${Math.round(f.conf * 100)}% conf</span>
+      <button class="status-btn" data-idx="${i}">Accept</button>
+    `;
+    list.appendChild(row);
+  });
+
+  list.querySelectorAll('.status-btn').forEach(btn => {
+    btn.onclick = () => {
+      const idx = +btn.dataset.idx;
+      acceptedFlags[idx] = !acceptedFlags[idx];
+      btn.textContent = acceptedFlags[idx] ? 'Accepted ✓' : 'Accept';
+      btn.classList.toggle('accepted', acceptedFlags[idx]);
+      updateSignState();
+    };
+  });
+
+  document.getElementById('impressionText').value = current.impression;
+  updateSignState();
+}
+
+function updateSignState(){
+  const btn = document.getElementById('signBtn');
+  const hint = document.getElementById('signHint');
+  if (!current){
+    btn.disabled = true;
+    return;
+  }
+  const allAccepted = acceptedFlags.length > 0 && acceptedFlags.every(v => v);
+  const nameFilled = document.getElementById('radName').value.trim().length > 1;
+  btn.disabled = !(allAccepted && nameFilled);
+  if (!allAccepted) hint.textContent = `Accept all ${acceptedFlags.length} finding lines before signing.`;
+  else if (!nameFilled) hint.textContent = 'Type your name in the field to sign.';
+  else hint.textContent = 'Ready to sign.';
+}
+
+document.getElementById('radName').addEventListener('input', updateSignState);
+
+document.getElementById('signBtn').addEventListener('click', () => {
+  if (!current) return;
+  const name = document.getElementById('radName').value.trim();
+  const now = new Date();
+  const stamp = now.toLocaleString();
+  const banner = document.getElementById('signedBanner');
+  banner.classList.add('show');
+  const routeNote = current.critical
+    ? 'Critical result — ordering provider notified immediately, callback logged.'
+    : 'Report routed to ordering provider inbox; follow-up tracked automatically.';
+  banner.innerHTML = `Signed by <strong>${escapeHtml(name)}</strong> at ${stamp}. ${routeNote}`;
+
+  document.querySelectorAll('#findingsList textarea, #impressionText, #radName').forEach(el => el.disabled = true);
+  document.getElementById('signBtn').disabled = true;
+  document.querySelectorAll('.status-btn').forEach(b => b.disabled = true);
+});
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+loadCase(CASES[0].id);
+</script>
+
+</body>
+</html>

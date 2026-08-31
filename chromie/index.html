@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Contract Radar — fit-scoring demo</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #121b2e;
+    --panel-2: #17233a;
+    --border: #24314a;
+    --text: #e7edf7;
+    --muted: #8ea0bd;
+    --accent: #4fd1a5;
+    --accent-dim: #2a5c4a;
+    --warn: #e0b23b;
+    --bad: #e0673b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #16233c 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 40px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.2px;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 720px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+  }
+  .brain-panel {
+    padding: 24px 28px;
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .brain-panel h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  label {
+    display: block;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 14px 0 5px;
+  }
+  input[type="text"], textarea, select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 9px 10px;
+    font-size: 13.5px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  textarea { min-height: 64px; }
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .chip.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  button.primary {
+    margin-top: 20px;
+    width: 100%;
+    background: var(--accent);
+    color: #06251b;
+    border: none;
+    border-radius: 7px;
+    padding: 12px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  button.primary:hover { filter: brightness(1.05); }
+  .scan-status {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 16px;
+  }
+  .results {
+    padding: 24px 32px;
+    overflow-y: auto;
+  }
+  .results-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+  .results-head h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0;
+  }
+  .results-head span { font-size: 12px; color: var(--muted); }
+  .empty-state {
+    color: var(--muted);
+    font-size: 13.5px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: #3a4c6e; }
+  .card.expanded { border-color: var(--accent); }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .card-title {
+    font-size: 14.5px;
+    font-weight: 600;
+  }
+  .card-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .score-badge {
+    flex-shrink: 0;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 15px;
+    border: 3px solid var(--border);
+  }
+  .tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--panel-2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .tag.recompete {
+    color: var(--warn);
+    border-color: #6b5522;
+    background: #241d0d;
+  }
+  .breakdown {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    display: none;
+    font-size: 12.5px;
+  }
+  .card.expanded .breakdown { display: block; }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 40px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .bar-row .label { color: var(--muted); }
+  .bar-track {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2c8f6c, var(--accent));
+  }
+  .bar-row .pct { text-align: right; color: var(--text); }
+  .why {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    color: var(--text);
+    line-height: 1.55;
+  }
+  footer {
+    padding: 16px 40px;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--muted);
+    text-align: center;
+  }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+    .brain-panel { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Contract Radar</h1>
+  <p>A toy fit-scoring engine for government solicitations. Describe your company once — a "brain" — and it scores live-looking opportunities against your actual capabilities and past performance, not just keyword overlap. All data below is synthetic, generated in your browser.</p>
+</header>
+
+<main>
+  <section class="brain-panel">
+    <h2>Your Company Brain</h2>
+
+    <label for="naics">Primary NAICS codes</label>
+    <input type="text" id="naics" value="541512, 541511, 541519">
+
+    <label for="capabilities">Core capabilities</label>
+    <textarea id="capabilities">Cloud migration, DevSecOps pipelines, data pipeline modernization, ATO / RMF support, custom software development</textarea>
+
+    <label>Certifications held</label>
+    <div class="chip-row" id="certChips">
+      <span class="chip active" data-cert="8a">8(a)</span>
+      <span class="chip" data-cert="wosb">WOSB</span>
+      <span class="chip active" data-cert="hubzone">HUBZone</span>
+      <span class="chip" data-cert="sdvosb">SDVOSB</span>
+      <span class="chip active" data-cert="cmmi3">CMMI Level 3</span>
+    </div>
+
+    <label for="pastagency">Past performance agencies</label>
+    <input type="text" id="pastagency" value="DHS, GSA, VA">
+
+    <label for="mincontract">Minimum contract value</label>
+    <select id="mincontract">
+      <option value="0">No minimum</option>
+      <option value="250000" selected>$250,000+</option>
+      <option value="1000000">$1,000,000+</option>
+      <option value="5000000">$5,000,000+</option>
+    </select>
+
+    <button class="primary" id="scanBtn">Scan open solicitations</button>
+    <div class="scan-status" id="scanStatus"></div>
+  </section>
+
+  <section class="results">
+    <div class="results-head">
+      <h2>Opportunity feed</h2>
+      <span id="resultCount"></span>
+    </div>
+    <div id="resultsList">
+      <div class="empty-state">Fill in your company brain on the left, then run a scan. Opportunities will appear here ranked by fit score, with a breakdown of exactly why each one scored the way it did.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Chromie (YC S26). Not affiliated with Chromie.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var AGENCIES = ["DHS", "GSA", "VA", "DoD", "HHS", "DOT", "Treasury", "NASA", "EPA", "State"];
+  var NAICS_POOL = ["541512", "541511", "541519", "541690", "541330", "518210"];
+  var SETASIDES = ["8(a)", "HUBZone", "SDVOSB", "WOSB", "Full & Open", "None"];
+  var VERBS = [
+    "Cloud Infrastructure Modernization", "DevSecOps Pipeline Support", "RMF Assessment & Authorization",
+    "Data Platform Re-architecture", "Legacy System Migration", "AI/ML Enabled Analytics Platform",
+    "Network Operations Support", "Cybersecurity Continuous Monitoring", "Custom Case Management System",
+    "Enterprise Data Warehouse Refresh", "Help Desk & IT Ops Support", "Software Sustainment Services"
+  ];
+
+  var certLabels = { "8a": "8(a)", wosb: "WOSB", hubzone: "HUBZone", sdvosb: "SDVOSB", cmmi3: "CMMI Level 3" };
+
+  function seededRandom(seed) {
+    var s = seed;
+    return function () {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  }
+
+  function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+  function genOpportunities(count) {
+    var rng = seededRandom(4271);
+    var list = [];
+    for (var i = 0; i < count; i++) {
+      var agency = pick(rng, AGENCIES);
+      var naics = pick(rng, NAICS_POOL);
+      var setAside = pick(rng, SETASIDES);
+      var title = pick(rng, VERBS);
+      var value = Math.round((150000 + rng() * 9000000) / 5000) * 5000;
+      var daysToClose = Math.floor(3 + rng() * 40);
+      var isRecompete = rng() > 0.6;
+      var incumbentTenure = isRecompete ? Math.floor(2 + rng() * 6) : 0;
+      list.push({
+        id: "SOL-" + (10000 + i),
+        agency: agency,
+        naics: naics,
+        setAside: setAside,
+        title: title,
+        value: value,
+        daysToClose: daysToClose,
+        isRecompete: isRecompete,
+        incumbentTenure: incumbentTenure
+      });
+    }
+    return list;
+  }
+
+  var OPPORTUNITIES = genOpportunities(14);
+
+  function fmtMoney(v) {
+    if (v >= 1000000) return "$" + (v / 1000000).toFixed(1) + "M";
+    return "$" + Math.round(v / 1000) + "K";
+  }
+
+  function getBrain() {
+    var naics = document.getElementById("naics").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+    var capabilities = document.getElementById("capabilities").value.toLowerCase();
+    var certs = Array.prototype.slice.call(document.querySelectorAll(".chip.active")).map(function (c) { return c.dataset.cert; });
+    var agencies = document.getElementById("pastagency").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+    var minValue = parseInt(document.getElementById("mincontract").value, 10);
+    return { naics: naics, capabilities: capabilities, certs: certs, agencies: agencies, minValue: minValue };
+  }
+
+  var CAP_KEYWORDS = {
+    "541512": ["cloud", "devsecops", "software", "data"],
+    "541511": ["software", "custom software", "development"],
+    "541519": ["it ops", "help desk", "network", "support"],
+    "541690": ["consulting"],
+    "541330": ["engineering"],
+    "518210": ["cloud", "hosting", "data"]
+  };
+
+  function scoreOpportunity(opp, brain) {
+    // NAICS alignment
+    var naicsScore = brain.naics.indexOf(opp.naics) !== -1 ? 100 : 35;
+
+    // capability keyword overlap (very rough toy heuristic)
+    var kws = CAP_KEYWORDS[opp.naics] || [];
+    var hits = kws.filter(function (k) { return brain.capabilities.indexOf(k) !== -1; }).length;
+    var capScore = kws.length ? Math.min(100, 30 + (hits / kws.length) * 70) : 40;
+
+    // set-aside eligibility
+    var setAsideMap = { "8(a)": "8a", "WOSB": "wosb", "HUBZone": "hubzone", "SDVOSB": "sdvosb" };
+    var reqCert = setAsideMap[opp.setAside];
+    var setAsideScore;
+    if (opp.setAside === "None" || opp.setAside === "Full & Open") setAsideScore = 70;
+    else if (reqCert && brain.certs.indexOf(reqCert) !== -1) setAsideScore = 100;
+    else setAsideScore = 5;
+
+    // agency relationship
+    var agencyScore = brain.agencies.indexOf(opp.agency) !== -1 ? 95 : 45;
+
+    // value fit
+    var valueScore = opp.value >= brain.minValue ? 80 : 20;
+    if (opp.value >= brain.minValue * 1.5 && brain.minValue > 0) valueScore = 95;
+
+    var total = naicsScore * 0.3 + capScore * 0.25 + setAsideScore * 0.2 + agencyScore * 0.15 + valueScore * 0.1;
+
+    return {
+      total: Math.round(total),
+      breakdown: [
+        { label: "NAICS alignment", value: Math.round(naicsScore) },
+        { label: "Capability match", value: Math.round(capScore) },
+        { label: "Set-aside eligibility", value: Math.round(setAsideScore) },
+        { label: "Agency relationship", value: Math.round(agencyScore) },
+        { label: "Contract value fit", value: Math.round(valueScore) }
+      ]
+    };
+  }
+
+  function whyText(opp, result, brain) {
+    var parts = [];
+    if (brain.naics.indexOf(opp.naics) !== -1) {
+      parts.push("this solicitation sits squarely in your registered NAICS code " + opp.naics);
+    } else {
+      parts.push("this falls outside your primary NAICS codes, which caps the fit score even if capabilities line up");
+    }
+    var setAsideMap = { "8(a)": "8a", "WOSB": "wosb", "HUBZone": "hubzone", "SDVOSB": "sdvosb" };
+    var reqCert = setAsideMap[opp.setAside];
+    if (reqCert && brain.certs.indexOf(reqCert) !== -1) {
+      parts.push("you hold the required " + opp.setAside + " certification, which most competitors without it cannot even bid");
+    } else if (reqCert) {
+      parts.push("it's set aside for " + opp.setAside + ", which you are not currently certified for");
+    }
+    if (brain.agencies.indexOf(opp.agency) !== -1) {
+      parts.push("you have past performance with " + opp.agency + ", which typically carries real weight in technical evaluation");
+    }
+    if (opp.isRecompete) {
+      parts.push("the incumbent has held this for " + opp.incumbentTenure + " years, so treat this as a recompete where displacing them requires a clear differentiator, not just eligibility");
+    }
+    return "Scored " + result.total + "/100 because " + parts.join("; ") + ".";
+  }
+
+  function render(results, brain) {
+    var container = document.getElementById("resultsList");
+    var countEl = document.getElementById("resultCount");
+    countEl.textContent = results.length + " scored";
+    container.innerHTML = "";
+
+    results.forEach(function (r) {
+      var card = document.createElement("div");
+      card.className = "card";
+
+      var color = r.score.total >= 75 ? "var(--accent)" : (r.score.total >= 45 ? "var(--warn)" : "var(--bad)");
+
+      var top = document.createElement("div");
+      top.className = "card-top";
+      top.innerHTML =
+        '<div>' +
+          '<div class="card-title">' + r.opp.title + '</div>' +
+          '<div class="card-meta">' + r.opp.id + ' · ' + r.opp.agency + ' · NAICS ' + r.opp.naics + ' · ' + fmtMoney(r.opp.value) + ' · closes in ' + r.opp.daysToClose + 'd</div>' +
+          '<div class="tags">' +
+            '<span class="tag">' + r.opp.setAside + '</span>' +
+            (r.opp.isRecompete ? '<span class="tag recompete">Recompete · incumbent ' + r.opp.incumbentTenure + 'y</span>' : '<span class="tag">New requirement</span>') +
+          '</div>' +
+        '</div>' +
+        '<div class="score-badge" style="border-color:' + color + '; color:' + color + '">' + r.score.total + '</div>';
+      card.appendChild(top);
+
+      var breakdown = document.createElement("div");
+      breakdown.className = "breakdown";
+      var rowsHtml = r.score.breakdown.map(function (b) {
+        return '<div class="bar-row"><span class="label">' + b.label + '</span>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + b.value + '%"></div></div>' +
+          '<span class="pct">' + b.value + '%</span></div>';
+      }).join("");
+      breakdown.innerHTML = rowsHtml + '<div class="why">' + r.why + '</div>';
+      card.appendChild(breakdown);
+
+      card.addEventListener("click", function () {
+        card.classList.toggle("expanded");
+      });
+
+      container.appendChild(card);
+    });
+  }
+
+  function runScan() {
+    var brain = getBrain();
+    var statusEl = document.getElementById("scanStatus");
+    var btn = document.getElementById("scanBtn");
+    btn.disabled = true;
+    statusEl.textContent = "Scanning SAM.gov-style feed and state portals...";
+
+    var steps = [
+      "Parsing 14 open solicitations...",
+      "Comparing NAICS codes and set-aside eligibility...",
+      "Cross-referencing past performance and certifications...",
+      "Ranking by fit score..."
+    ];
+    var i = 0;
+    var interval = setInterval(function () {
+      if (i < steps.length) {
+        statusEl.textContent = steps[i];
+        i++;
+      } else {
+        clearInterval(interval);
+        var scored = OPPORTUNITIES.map(function (opp) {
+          var score = scoreOpportunity(opp, brain);
+          return { opp: opp, score: score, why: whyText(opp, score, brain) };
+        });
+        scored.sort(function (a, b) { return b.score.total - a.score.total; });
+        render(scored, brain);
+        statusEl.textContent = "Done. Click any opportunity to see its full score breakdown.";
+        btn.disabled = false;
+      }
+    }, 260);
+  }
+
+  document.querySelectorAll(".chip").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      chip.classList.toggle("active");
+    });
+  });
+
+  document.getElementById("scanBtn").addEventListener("click", runScan);
+})();
+</script>
+
+</body>
+</html>
