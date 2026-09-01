@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Perimeter — Interceptor Cueing Sandbox</title>
+<style>
+  :root {
+    --bg: #0a0d12;
+    --panel: #12161d;
+    --panel-2: #171c25;
+    --line: #232a35;
+    --text: #e7ecf3;
+    --muted: #8894a3;
+    --accent: #3ddc97;
+    --accent-dim: #1f6b4d;
+    --danger: #ff5d5d;
+    --danger-dim: #5c2323;
+    --warn: #ffb454;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 22px 28px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 0 4px; font-size: 20px; letter-spacing: 0.02em;
+  }
+  header p {
+    margin: 0; color: var(--muted); font-size: 13.5px; max-width: 720px; line-height: 1.5;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 18px;
+    padding: 18px 28px 10px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .field-wrap {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  #field {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    display: block;
+    background: radial-gradient(circle at 50% 50%, #0d1420 0%, #090c11 78%);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .field-caption {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; font-size: 12px; color: var(--muted);
+  }
+  .field-caption b { color: var(--text); }
+  .side {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px; font-size: 12.5px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); font-weight: 600;
+  }
+  .roster { display: flex; flex-direction: column; gap: 8px; }
+  .interceptor-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--text); cursor: pointer; font-size: 13px;
+    transition: border-color .15s, background .15s;
+    text-align: left;
+  }
+  .interceptor-btn:hover { border-color: #37414f; }
+  .interceptor-btn.selected {
+    border-color: var(--accent); background: #12241d;
+  }
+  .interceptor-btn .name { font-weight: 600; }
+  .interceptor-btn .spec { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .interceptor-btn .cost { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .interceptor-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .stat-row {
+    display: flex; justify-content: space-between; font-size: 13px;
+    padding: 5px 0; border-bottom: 1px dashed #1c222c;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .v.good { color: var(--accent); }
+  .v.bad { color: var(--danger); }
+
+  .log {
+    font-size: 12px; color: var(--muted); max-height: 150px; overflow-y: auto;
+    display: flex; flex-direction: column-reverse; gap: 4px;
+  }
+  .log div { border-bottom: 1px solid #191f28; padding-bottom: 4px; }
+  .log .win { color: var(--accent); }
+  .log .loss { color: var(--danger); }
+
+  .banner {
+    font-size: 12.5px; padding: 9px 12px; border-radius: 7px;
+    background: #171307; border: 1px solid #3a2f11; color: var(--warn);
+    margin-top: 4px;
+  }
+
+  button.reset {
+    width: 100%; padding: 9px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--muted); font-size: 12.5px; cursor: pointer;
+    margin-top: 4px;
+  }
+  button.reset:hover { color: var(--text); border-color: #37414f; }
+
+  footer {
+    text-align: center; color: var(--muted); font-size: 11.5px;
+    padding: 20px 12px 30px; border-top: 1px solid var(--line); margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Perimeter — a toy cueing &amp; intercept sandbox</h1>
+  <p>
+    Synthetic radar tracks drift toward a protected site. Click a track to select it,
+    pick an effector from the roster, and launch. Each interceptor flies a simple pursuit
+    guidance law (steer at the target's current position, updated every tick) rather than
+    a scripted animation — miss distance genuinely depends on reaction time and closing speed.
+    All data below is fabricated for this demo.
+  </p>
+</header>
+
+<div class="layout">
+  <div class="field-wrap">
+    <canvas id="field" width="800" height="600"></canvas>
+    <div class="field-caption">
+      <span>Click a red track to designate it as the active threat.</span>
+      <span><b id="threatCount">0</b> inbound</span>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>Effector Roster</h2>
+      <div class="roster" id="roster"></div>
+      <div class="banner" id="selectBanner">Select an inbound track on the field to arm launch.</div>
+    </div>
+
+    <div class="card">
+      <h2>Engagement Ledger</h2>
+      <div class="stat-row"><span>Threats neutralized</span><span class="v good" id="kills">0</span></div>
+      <div class="stat-row"><span>Site breaches</span><span class="v bad" id="breaches">0</span></div>
+      <div class="stat-row"><span>Spend, this system</span><span class="v" id="spend">$0</span></div>
+      <div class="stat-row"><span>Spend, legacy battery*</span><span class="v" id="legacySpend">$0</span></div>
+      <div class="stat-row"><span>Savings vs. legacy</span><span class="v good" id="savings">$0</span></div>
+      <button class="reset" id="resetBtn">Reset scenario</button>
+    </div>
+
+    <div class="card">
+      <h2>Engagement Log</h2>
+      <div class="log" id="log"><div>Awaiting first contact…</div></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  *Legacy battery cost modeled at a flat $1,000,000 per shot regardless of outcome, for comparison only — a synthetic figure, not a real quote.<br><br>
+  Independent demo built by Aarush Kandukoori, inspired by IMPACT Drones (YC S26). Not affiliated with IMPACT Drones.
+</footer>
+
+<script>
+(function () {
+  var canvas = document.getElementById('field');
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var site = { x: W / 2, y: H / 2, r: 34 };
+
+  var INTERCEPTORS = [
+    { id: 'hunter', name: 'HUNTER-class', spec: 'quad-rotor · slow/low swarm', cost: 6200, speed: 3.1, turn: 0.16 },
+    { id: 'sable',  name: 'SABLE-class',  spec: 'turbine delta · fast/long-range', cost: 14500, speed: 5.4, turn: 0.10 },
+    { id: 'volley', name: 'Legacy volley', spec: 'ballistic salvo · low precision', cost: 1000000, speed: 4.2, turn: 0.06 }
+  ];
+
+  var threats = [];
+  var interceptorsInFlight = [];
+  var selectedThreatId = null;
+  var selectedEffector = null;
+  var nextId = 1;
+  var stats = { kills: 0, breaches: 0, spend: 0, legacySpend: 0 };
+  var running = true;
+
+  function spawnThreat() {
+    var angle = Math.random() * Math.PI * 2;
+    var dist = 300 + Math.random() * 60;
+    var speedTypes = [
+      { label: 'slow quad', speed: 0.6 },
+      { label: 'fast racer', speed: 1.35 },
+      { label: 'loiterer', speed: 0.85 }
+    ];
+    var t = speedTypes[Math.floor(Math.random() * speedTypes.length)];
+    threats.push({
+      id: nextId++,
+      x: site.x + Math.cos(angle) * dist,
+      y: site.y + Math.sin(angle) * dist,
+      speed: t.speed,
+      label: t.label,
+      alive: true,
+      jinkPhase: Math.random() * 10
+    });
+  }
+
+  for (var i = 0; i < 3; i++) spawnThreat();
+  var spawnTimer = setInterval(function () {
+    if (running && threats.length < 6) spawnThreat();
+  }, 3400);
+
+  function distanceTo(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function launchInterceptor(threat, spec) {
+    interceptorsInFlight.push({
+      x: site.x, y: site.y,
+      targetId: threat.id,
+      spec: spec,
+      trail: []
+    });
+    stats.spend += spec.cost;
+    stats.legacySpend += 1000000;
+    logLine('Launched ' + spec.name + ' at track #' + threat.id + ' (' + threat.label + ')', 'neutral');
+    renderStats();
+  }
+
+  function logLine(text, kind) {
+    var log = document.getElementById('log');
+    var div = document.createElement('div');
+    if (kind === 'win') div.className = 'win';
+    if (kind === 'loss') div.className = 'loss';
+    div.textContent = text;
+    log.appendChild(div);
+    while (log.children.length > 40) log.removeChild(log.firstChild);
+  }
+
+  function renderStats() {
+    document.getElementById('kills').textContent = stats.kills;
+    document.getElementById('breaches').textContent = stats.breaches;
+    document.getElementById('spend').textContent = '$' + stats.spend.toLocaleString();
+    document.getElementById('legacySpend').textContent = '$' + stats.legacySpend.toLocaleString();
+    var saved = stats.legacySpend - stats.spend;
+    var savEl = document.getElementById('savings');
+    savEl.textContent = (saved >= 0 ? '$' : '-$') + Math.abs(saved).toLocaleString();
+    savEl.className = 'v ' + (saved >= 0 ? 'good' : 'bad');
+    document.getElementById('threatCount').textContent = threats.filter(function (t) { return t.alive; }).length;
+  }
+
+  function renderRoster() {
+    var wrap = document.getElementById('roster');
+    wrap.innerHTML = '';
+    INTERCEPTORS.forEach(function (spec) {
+      var btn = document.createElement('button');
+      btn.className = 'interceptor-btn' + (selectedEffector === spec.id ? ' selected' : '');
+      btn.innerHTML =
+        '<div><div class="name">' + spec.name + '</div>' +
+        '<div class="spec">' + spec.spec + '</div></div>' +
+        '<div class="cost">$' + spec.cost.toLocaleString() + '</div>';
+      btn.onclick = function () {
+        selectedEffector = spec.id;
+        renderRoster();
+        tryLaunch();
+      };
+      wrap.appendChild(btn);
+    });
+  }
+
+  function tryLaunch() {
+    if (!selectedThreatId || !selectedEffector) return;
+    var threat = threats.find(function (t) { return t.id === selectedThreatId && t.alive; });
+    var spec = INTERCEPTORS.find(function (s) { return s.id === selectedEffector; });
+    if (!threat || !spec) return;
+    launchInterceptor(threat, spec);
+    selectedThreatId = null;
+    selectedEffector = null;
+    renderRoster();
+    updateBanner();
+  }
+
+  function updateBanner() {
+    var banner = document.getElementById('selectBanner');
+    if (selectedThreatId && !selectedEffector) {
+      banner.textContent = 'Track #' + selectedThreatId + ' designated. Choose an effector to launch.';
+    } else if (!selectedThreatId) {
+      banner.textContent = 'Select an inbound track on the field to arm launch.';
+    }
+  }
+
+  canvas.addEventListener('click', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = W / rect.width, scaleY = H / rect.height;
+    var mx = (e.clientX - rect.left) * scaleX;
+    var my = (e.clientY - rect.top) * scaleY;
+    var closest = null, bestD = 26;
+    threats.forEach(function (t) {
+      if (!t.alive) return;
+      var d = Math.hypot(t.x - mx, t.y - my);
+      if (d < bestD) { bestD = d; closest = t; }
+    });
+    if (closest) {
+      selectedThreatId = closest.id;
+      updateBanner();
+      tryLaunch();
+    }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    threats = [];
+    interceptorsInFlight = [];
+    selectedThreatId = null;
+    selectedEffector = null;
+    stats = { kills: 0, breaches: 0, spend: 0, legacySpend: 0 };
+    document.getElementById('log').innerHTML = '<div>Scenario reset.</div>';
+    for (var i = 0; i < 3; i++) spawnThreat();
+    renderStats();
+    renderRoster();
+    updateBanner();
+  });
+
+  function tick() {
+    threats.forEach(function (t) {
+      if (!t.alive) return;
+      var dx = site.x - t.x, dy = site.y - t.y;
+      var d = Math.hypot(dx, dy) || 1;
+      t.jinkPhase += 0.05;
+      var jink = Math.sin(t.jinkPhase) * 0.4;
+      t.x += (dx / d) * t.speed + Math.cos(t.jinkPhase) * jink;
+      t.y += (dy / d) * t.speed + Math.sin(t.jinkPhase) * jink;
+      if (d < site.r) {
+        t.alive = false;
+        stats.breaches++;
+        logLine('BREACH — track #' + t.id + ' reached the site perimeter.', 'loss');
+        renderStats();
+      }
+    });
+
+    for (var i = interceptorsInFlight.length - 1; i >= 0; i--) {
+      var ic = interceptorsInFlight[i];
+      var target = threats.find(function (t) { return t.id === ic.targetId; });
+      if (!target || !target.alive) {
+        interceptorsInFlight.splice(i, 1);
+        continue;
+      }
+      var dx = target.x - ic.x, dy = target.y - ic.y;
+      var d = Math.hypot(dx, dy) || 1;
+      ic.x += (dx / d) * ic.spec.speed;
+      ic.y += (dy / d) * ic.spec.speed;
+      ic.trail.push({ x: ic.x, y: ic.y });
+      if (ic.trail.length > 14) ic.trail.shift();
+
+      if (d < 12) {
+        target.alive = false;
+        stats.kills++;
+        logLine('INTERCEPT — ' + ic.spec.name + ' neutralized track #' + target.id + '.', 'win');
+        interceptorsInFlight.splice(i, 1);
+        renderStats();
+      }
+    }
+
+    threats = threats.filter(function (t) { return t.alive || interceptorsInFlight.some(function (ic) { return ic.targetId === t.id; }); });
+    renderStats();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    for (var ring = 1; ring <= 3; ring++) {
+      ctx.beginPath();
+      ctx.arc(site.x, site.y, ring * 100, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(61,220,151,0.07)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.arc(site.x, site.y, site.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(61,220,151,0.14)';
+    ctx.fill();
+    ctx.strokeStyle = '#3ddc97';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#3ddc97';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PROTECTED SITE', site.x, site.y + 4);
+
+    interceptorsInFlight.forEach(function (ic) {
+      ctx.beginPath();
+      ic.trail.forEach(function (p, idx) {
+        if (idx === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      });
+      ctx.strokeStyle = 'rgba(255,180,84,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(ic.x, ic.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffb454';
+      ctx.fill();
+    });
+
+    threats.forEach(function (t) {
+      if (!t.alive) return;
+      var isSel = t.id === selectedThreatId;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, isSel ? 10 : 7, 0, Math.PI * 2);
+      ctx.fillStyle = isSel ? '#ff8a8a' : '#ff5d5d';
+      ctx.fill();
+      if (isSel) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#8894a3';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('#' + t.id + ' ' + t.label, t.x + 12, t.y + 3);
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  setInterval(function () { if (running) tick(); }, 45);
+  draw();
+  renderRoster();
+  renderStats();
+})();
+</script>
+
+</body>
+</html>
