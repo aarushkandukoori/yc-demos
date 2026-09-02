@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campaign Bench — autoresearch toy demo</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#12161f; --panel2:#171c27; --line:#232a38;
+    --text:#e7ebf3; --sub:#8a93a6; --accent:#5eead4; --accent2:#a78bfa;
+    --warn:#f5a25d; --good:#5eead4; --bad:#f47174;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%, #16233a 0%, var(--bg) 55%);
+    color:var(--text); min-height:100vh;
+  }
+  header{
+    padding:32px 40px 8px; max-width:1080px; margin:0 auto;
+  }
+  header .kicker{
+    color:var(--accent); font-size:12px; letter-spacing:.14em; text-transform:uppercase; font-weight:700;
+  }
+  header h1{ font-size:28px; margin:8px 0 6px; letter-spacing:-.01em;}
+  header p{ color:var(--sub); font-size:14.5px; line-height:1.5; max-width:680px; margin:0;}
+
+  main{ max-width:1080px; margin:0 auto; padding:20px 40px 60px;}
+
+  .setup{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:20px 22px; margin-bottom:22px;
+    display:grid; grid-template-columns:1.3fr 1fr auto; gap:18px; align-items:end;
+  }
+  .field label{ display:block; font-size:11.5px; color:var(--sub); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px;}
+  .field select, .field input{
+    width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    padding:9px 10px; border-radius:8px; font-size:13.5px; font-family:inherit;
+  }
+  .field .hint{ color:var(--sub); font-size:11.5px; margin-top:5px;}
+
+  button.run{
+    background:linear-gradient(135deg,var(--accent),#38bdf8); color:#04121a; border:none;
+    padding:11px 20px; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;
+    white-space:nowrap; transition:transform .1s ease, opacity .15s ease;
+  }
+  button.run:hover{ transform:translateY(-1px); }
+  button.run:disabled{ opacity:.45; cursor:default; transform:none;}
+  button.reset{
+    background:transparent; border:1px solid var(--line); color:var(--sub);
+    padding:11px 16px; border-radius:8px; font-size:13px; cursor:pointer; margin-left:8px;
+  }
+  button.reset:hover{ color:var(--text); border-color:#3a4356;}
+
+  .grid{
+    display:grid; grid-template-columns:1.15fr .85fr; gap:20px;
+  }
+  @media (max-width:820px){ .grid{ grid-template-columns:1fr; } .setup{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+  }
+  .panel h2{ font-size:13px; margin:0 0 14px; color:var(--sub); text-transform:uppercase; letter-spacing:.08em; font-weight:700;}
+
+  .arm{
+    display:grid; grid-template-columns:20px 1fr auto auto; align-items:center; gap:12px;
+    padding:10px 8px; border-radius:8px; border-bottom:1px solid var(--line);
+    font-size:13.5px;
+  }
+  .arm:last-child{ border-bottom:none; }
+  .arm .dot{
+    width:9px; height:9px; border-radius:50%; background:#3a4356; transition:background .2s;
+  }
+  .arm.running .dot{ background:var(--warn); animation:pulse 1s infinite; }
+  .arm.done .dot{ background:var(--good); }
+  .arm.pruned .dot{ background:#4a5266; }
+  .arm .name{ color:var(--text); }
+  .arm .name small{ display:block; color:var(--sub); font-size:11px; margin-top:2px;}
+  .arm .score{ font-variant-numeric:tabular-nums; font-weight:700; color:var(--sub); min-width:56px; text-align:right;}
+  .arm.done .score{ color:var(--good); }
+  .arm .bar-wrap{ width:90px; height:6px; background:var(--panel2); border-radius:4px; overflow:hidden; }
+  .arm .bar{ height:100%; width:0%; background:linear-gradient(90deg,var(--accent2),var(--accent)); transition:width .5s ease; }
+
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  .log{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px;
+    color:#a9b2c3; background:var(--panel2); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; height:220px; overflow-y:auto; line-height:1.6;
+  }
+  .log .t{ color:#4a5266; margin-right:8px;}
+  .log .tag{ color:var(--accent2); }
+
+  .verdict{
+    margin-top:18px; border-radius:14px; border:1px solid var(--line);
+    background:var(--panel); padding:20px 22px;
+  }
+  .verdict.hidden{ display:none; }
+  .verdict h2{ font-size:13px; margin:0 0 10px; color:var(--sub); text-transform:uppercase; letter-spacing:.08em;}
+  .verdict-main{ display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+  .verdict-main .winner{ font-size:19px; font-weight:700; color:var(--accent);}
+  .verdict-main .delta{ font-size:14px; color:var(--good); font-weight:700; }
+  .verdict-main .ci{ font-size:12.5px; color:var(--sub); }
+  .verdict p.expl{ color:var(--sub); font-size:13px; margin:10px 0 0; line-height:1.6; max-width:700px;}
+  .lineage{ margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }
+  .lineage span{
+    font-size:11.5px; background:var(--panel2); border:1px solid var(--line); color:var(--sub);
+    padding:5px 10px; border-radius:20px;
+  }
+  .lineage span.step{ color:var(--text); }
+  .lineage .arrow{ color:#3a4356; padding:5px 0; }
+
+  footer{
+    max-width:1080px; margin:0 auto; padding:20px 40px 40px; color:var(--sub); font-size:12px;
+    border-top:1px solid var(--line); margin-top:20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Campaign Bench · toy demo</div>
+  <h1>Give it a task, a starting agent, and an eval. Watch it search for the fix.</h1>
+  <p>This is a small working sketch of an "autoresearch" loop: it fans a task out across several improvement strategies at once, scores each one against a synthetic held-out eval, prunes the losers early, and reports back the single verified winner with a confidence interval — not just a leaderboard.</p>
+</header>
+
+<main>
+
+  <div class="setup">
+    <div class="field">
+      <label for="task">Task to improve</label>
+      <select id="task">
+        <option value="sql">Text-to-SQL agent — enterprise schema, 40 tables</option>
+        <option value="support">Support triage agent — routing + tone</option>
+        <option value="extract">Structured extraction from messy PDFs</option>
+      </select>
+      <div class="hint" id="taskHint">Baseline agent: gpt-class model + hand-written prompt, no tools.</div>
+    </div>
+    <div class="field">
+      <label for="budget">Compute budget</label>
+      <select id="budget">
+        <option value="low">Low — 3 rounds</option>
+        <option value="med" selected>Medium — 5 rounds</option>
+        <option value="high">High — 8 rounds</option>
+      </select>
+      <div class="hint">More rounds = more pruning, sharper CI on the winner.</div>
+    </div>
+    <div>
+      <button class="run" id="runBtn" onclick="startCampaign()">Run autoresearch campaign</button>
+      <button class="reset" id="resetBtn" onclick="resetCampaign()">Reset</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Search arms (data, prompt, SFT, tools, harness)</h2>
+      <div id="arms"></div>
+    </div>
+    <div class="panel">
+      <h2>Campaign log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="verdict hidden" id="verdict">
+    <h2>Verified result</h2>
+    <div class="verdict-main">
+      <span class="winner" id="winnerName">—</span>
+      <span class="delta" id="winnerDelta">—</span>
+      <span class="ci" id="winnerCI">—</span>
+    </div>
+    <p class="expl" id="winnerExpl"></p>
+    <div class="lineage" id="lineage"></div>
+  </div>
+
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by hiloop (YC S26). Not affiliated with hiloop.
+</footer>
+
+<script>
+const TASKS = {
+  sql: {
+    baseline: 61.4,
+    hint: "Baseline agent: gpt-class model + hand-written prompt, no tools.",
+    arms: [
+      { name: "Prompt: schema-aware few-shot", short:"prompt", methodTag:"prompts", desc:"injects table/column docs + 4 curated examples", ceiling: 68, volatility: 3 },
+      { name: "Data: synthetic error-correction set", short:"data", methodTag:"data", desc:"2k synthetic (bad SQL, fix) pairs from schema mutations", ceiling: 74, volatility: 4 },
+      { name: "SFT: LoRA on query-repair traces", short:"sft", methodTag:"SFT", desc:"fine-tunes on 6k logged query→correction traces", ceiling: 79, volatility: 5 },
+      { name: "Tools: schema-lookup + dry-run exec", short:"tools", methodTag:"tools", desc:"adds a callable schema browser and EXPLAIN sandbox", ceiling: 82, volatility: 3.5 },
+      { name: "Harness: self-consistency (n=5 vote)", short:"harness", methodTag:"harness", desc:"samples 5 completions, votes on execution match", ceiling: 71, volatility: 2.5 },
+    ]
+  },
+  support: {
+    baseline: 72.0,
+    hint: "Baseline agent: gpt-class model + static routing rules.",
+    arms: [
+      { name: "Prompt: tone + policy rewrite", short:"prompt", methodTag:"prompts", desc:"restructures instructions around escalation policy", ceiling: 77, volatility: 2.5 },
+      { name: "Data: hard-case oversampling", short:"data", methodTag:"data", desc:"oversamples ambiguous historical tickets 3x", ceiling: 80, volatility: 3.5 },
+      { name: "SFT: routing head fine-tune", short:"sft", methodTag:"SFT", desc:"fine-tunes on 9k labeled routing decisions", ceiling: 85, volatility: 4.5 },
+      { name: "Tools: CRM lookup before reply", short:"tools", methodTag:"tools", desc:"adds account-history tool call pre-response", ceiling: 83, volatility: 3 },
+      { name: "Harness: two-stage draft+critic", short:"harness", methodTag:"harness", desc:"drafts a reply, then a critic pass checks policy", ceiling: 81, volatility: 2 },
+    ]
+  },
+  extract: {
+    baseline: 55.8,
+    hint: "Baseline agent: gpt-class model, raw PDF text dump.",
+    arms: [
+      { name: "Prompt: field-by-field decomposition", short:"prompt", methodTag:"prompts", desc:"splits extraction into per-field sub-prompts", ceiling: 63, volatility: 3 },
+      { name: "Data: layout-augmented synthetic docs", short:"data", methodTag:"data", desc:"5k synthetic docs with layout perturbations", ceiling: 72, volatility: 5 },
+      { name: "SFT: fine-tune on corrected extractions", short:"sft", methodTag:"SFT", desc:"fine-tunes on 4k human-corrected extractions", ceiling: 76, volatility: 4 },
+      { name: "Tools: layout parser + bbox grounding", short:"tools", methodTag:"tools", desc:"grounds fields to page coordinates before answering", ceiling: 80, volatility: 3.5 },
+      { name: "Harness: retry-on-schema-violation", short:"harness", methodTag:"harness", desc:"validates JSON schema, retries failed fields", ceiling: 68, volatility: 2 },
+    ]
+  }
+};
+
+let running = false;
+let seed = 1;
+function rand(){ seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+function gauss(mean, sd){
+  let u=1-rand(), v=rand();
+  return mean + sd * Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v);
+}
+
+const armsEl = document.getElementById('arms');
+const logEl = document.getElementById('log');
+const runBtn = document.getElementById('runBtn');
+const verdictEl = document.getElementById('verdict');
+
+document.getElementById('task').addEventListener('change', () => {
+  document.getElementById('taskHint').textContent = TASKS[document.getElementById('task').value].hint;
+  resetCampaign();
+});
+
+function renderArms(state){
+  armsEl.innerHTML = '';
+  state.forEach((a, i) => {
+    const row = document.createElement('div');
+    row.className = 'arm' + (a.status ? ' ' + a.status : '');
+    row.id = 'arm-' + i;
+    const pct = Math.max(0, Math.min(100, (a.score / a.def.ceiling) * 100));
+    row.innerHTML = `
+      <div class="dot"></div>
+      <div class="name">${a.def.name}<small>${a.def.desc}</small></div>
+      <div class="bar-wrap"><div class="bar" style="width:${a.score ? pct : 0}%"></div></div>
+      <div class="score">${a.score ? a.score.toFixed(1) + '%' : '—'}</div>
+    `;
+    armsEl.appendChild(row);
+  });
+}
+
+function log(msg, tag){
+  const line = document.createElement('div');
+  const time = new Date().toLocaleTimeString([], {hour12:false});
+  line.innerHTML = `<span class="t">${time}</span>${tag ? `<span class="tag">[${tag}] </span>` : ''}${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function resetCampaign(){
+  if (running) return;
+  seed = Math.floor(rand()*1000)+1;
+  logEl.innerHTML = '';
+  verdictEl.classList.add('hidden');
+  const taskKey = document.getElementById('task').value;
+  const task = TASKS[taskKey];
+  const state = task.arms.map(def => ({ def, score: 0, status: '', round: 0, history: [] }));
+  window.__state = state;
+  window.__baseline = task.baseline;
+  renderArms(state);
+  log('Campaign ready. Baseline score: ' + task.baseline.toFixed(1) + '%', 'setup');
+}
+
+async function startCampaign(){
+  if (running) return;
+  running = true;
+  runBtn.disabled = true;
+  verdictEl.classList.add('hidden');
+
+  const taskKey = document.getElementById('task').value;
+  const task = TASKS[taskKey];
+  const rounds = { low: 3, med: 5, high: 8 }[document.getElementById('budget').value];
+  const baseline = task.baseline;
+
+  const state = task.arms.map(def => ({ def, score: baseline, status: '', round: 0, active: true, history: [baseline] }));
+  window.__state = state;
+  logEl.innerHTML = '';
+  renderArms(state);
+  log(`Launching ${state.length} parallel arms across data / prompt / SFT / tools / harness against a held-out eval set.`, 'campaign');
+  await sleep(400);
+
+  for (let r = 1; r <= rounds; r++){
+    log(`— round ${r}/${rounds} —`, 'round');
+    const active = state.filter(a => a.active);
+    for (const a of active){
+      a.status = 'running';
+      renderArms(state);
+      await sleep(90 + rand()*120);
+      const progress = r / rounds;
+      const gain = (a.def.ceiling - baseline) * (1 - Math.exp(-2.1 * progress)) * (0.85 + rand()*0.3);
+      const noise = gauss(0, a.def.volatility * (1 - progress*0.5));
+      a.score = Math.max(baseline - 2, Math.min(a.def.ceiling + 2, baseline + gain + noise));
+      a.history.push(a.score);
+      a.status = 'done';
+      a.round = r;
+      renderArms(state);
+    }
+    if (r >= 2){
+      const stillActive = state.filter(s => s.active);
+      const ranked = [...stillActive].sort((x,y) => y.score - x.score);
+      const cut = ranked.slice(Math.max(2, Math.ceil(ranked.length * 0.7)));
+      cut.forEach(a => {
+        if (ranked.length > 2 && a.score < ranked[1].score - 1.5){
+          a.active = false;
+          a.status = 'pruned';
+          log(`pruning "${a.def.name}" — trailing leader by ${(ranked[0].score - a.score).toFixed(1)}pp with low upside`, 'prune');
+        }
+      });
+      renderArms(state);
+    }
+    await sleep(150);
+  }
+
+  const final = [...state].sort((x,y) => y.score - x.score);
+  const winner = final[0];
+  const runnerUp = final[1];
+  const ciWidth = (winner.def.volatility * 0.6) * (1 - (rounds/10));
+  const delta = winner.score - baseline;
+
+  log(`Statistical verification: bootstrapping ${winner.def.name} over held-out eval...`, 'verify');
+  await sleep(500);
+  log(`Verified. 95% CI does not cross the runner-up ("${runnerUp.def.name}") or baseline.`, 'verify');
+
+  document.getElementById('winnerName').textContent = winner.def.name;
+  document.getElementById('winnerDelta').textContent = `+${delta.toFixed(1)}pp vs baseline`;
+  document.getElementById('winnerCI').textContent = `95% CI: [${(winner.score-ciWidth).toFixed(1)}%, ${(winner.score+ciWidth).toFixed(1)}%] · n=${rounds} rounds`;
+  document.getElementById('winnerExpl').textContent =
+    `Out of ${state.length} strategies searched in parallel, "${winner.def.name}" (${winner.def.methodTag}) ended up statistically ahead of "${runnerUp.def.name}" and the ${state.length - final.filter(a=>a.active).length} pruned arms. The campaign kept full lineage — every round, every score, every prune decision — so this result is reproducible, not a lucky seed.`;
+
+  const lineage = document.getElementById('lineage');
+  lineage.innerHTML = '';
+  const steps = [`baseline ${baseline.toFixed(1)}%`, ...winner.history.slice(1).map((s,i) => `r${i+1} ${s.toFixed(1)}%`)];
+  steps.forEach((s, i) => {
+    if (i > 0){
+      const arrow = document.createElement('span');
+      arrow.className = 'arrow'; arrow.textContent = '→';
+      lineage.appendChild(arrow);
+    }
+    const span = document.createElement('span');
+    span.className = 'step';
+    span.textContent = s;
+    lineage.appendChild(span);
+  });
+
+  verdictEl.classList.remove('hidden');
+  running = false;
+  runBtn.disabled = false;
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+resetCampaign();
+</script>
+
+</body>
+</html>

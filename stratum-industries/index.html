@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docket Clear — Backlog Review Agent (Demo)</title>
+<style>
+  :root{
+    --bg:#0f1420;
+    --panel:#161d2e;
+    --panel2:#1c2438;
+    --border:#2a3450;
+    --text:#e7ebf5;
+    --muted:#8b93ab;
+    --accent:#4fd1a5;
+    --accent2:#5b8def;
+    --warn:#f2b84b;
+    --bad:#f2664b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, #1a2338 0%, var(--bg) 60%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 40px 12px;
+    border-bottom:1px solid var(--border);
+  }
+  header .eyebrow{
+    color:var(--accent);
+    font-size:12px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    font-weight:700;
+  }
+  header h1{
+    margin:6px 0 6px;
+    font-size:26px;
+  }
+  header p{
+    margin:0;
+    color:var(--muted);
+    max-width:760px;
+    line-height:1.5;
+    font-size:14px;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:0;
+    min-height:0;
+  }
+  .queue{
+    border-right:1px solid var(--border);
+    padding:20px;
+    overflow-y:auto;
+  }
+  .queue-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:14px;
+  }
+  .queue-head h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--muted);
+    margin:0;
+  }
+  button{
+    font-family:inherit;
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    padding:9px 14px;
+    font-size:13px;
+    font-weight:600;
+  }
+  .run-all{
+    background:linear-gradient(135deg,var(--accent2),var(--accent));
+    color:#0b1220;
+    width:100%;
+    margin-bottom:16px;
+    padding:11px;
+    font-size:13.5px;
+  }
+  .run-all:disabled{opacity:.5;cursor:not-allowed;}
+  .app-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 13px;
+    margin-bottom:10px;
+    cursor:pointer;
+    transition:border-color .15s, transform .1s;
+  }
+  .app-card:hover{border-color:var(--accent2);}
+  .app-card.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .app-card .row1{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:8px;
+  }
+  .app-card .title{font-size:13.5px;font-weight:600;}
+  .app-card .id{font-size:11px;color:var(--muted);}
+  .app-card .sub{font-size:12px;color:var(--muted);margin-top:3px;}
+  .badge{
+    display:inline-block;
+    font-size:10.5px;
+    font-weight:700;
+    padding:3px 8px;
+    border-radius:999px;
+    margin-top:8px;
+    letter-spacing:.3px;
+  }
+  .badge.pending{background:#2a3450;color:var(--muted);}
+  .badge.reviewing{background:#22314f;color:var(--accent2);}
+  .badge.needs_info{background:#3a2f1a;color:var(--warn);}
+  .badge.ready{background:#173a2d;color:var(--accent);}
+  .badge.approved{background:#173a2d;color:var(--accent);}
+  .badge.denied{background:#3a1f1f;color:var(--bad);}
+  .progress-track{
+    height:4px;
+    background:#0e1422;
+    border-radius:4px;
+    margin-top:8px;
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    width:0%;
+    background:var(--accent2);
+    transition:width .3s ease;
+  }
+
+  .detail{
+    padding:24px 40px;
+    overflow-y:auto;
+  }
+  .detail-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:6px;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .detail-head h2{margin:0 0 4px;font-size:20px;}
+  .detail-head .meta{color:var(--muted);font-size:13px;}
+  .doc-box{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px 16px;
+    font-size:12.5px;
+    line-height:1.6;
+    color:#c6cce0;
+    margin:16px 0;
+    max-height:150px;
+    overflow-y:auto;
+    white-space:pre-wrap;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .doc-box .label{
+    font-family:inherit;
+    display:block;
+    color:var(--muted);
+    font-size:11px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .rubric{
+    margin-top:18px;
+  }
+  .rubric h3{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+  .req{
+    display:flex;
+    gap:12px;
+    padding:11px 0;
+    border-bottom:1px solid var(--border);
+    opacity:0;
+    transform:translateY(4px);
+    transition:opacity .3s, transform .3s;
+  }
+  .req.shown{opacity:1;transform:translateY(0);}
+  .req .icon{
+    flex:0 0 22px;
+    height:22px;
+    width:22px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    font-weight:800;
+    margin-top:1px;
+  }
+  .req .icon.pass{background:#173a2d;color:var(--accent);}
+  .req .icon.flag{background:#3a2f1a;color:var(--warn);}
+  .req .icon.wait{background:#1c2438;color:var(--muted);}
+  .req .body{flex:1;}
+  .req .req-title{font-size:13.5px;font-weight:600;}
+  .req .req-note{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.5;}
+  .req .req-cite{
+    font-size:11.5px;
+    color:#9fb3ff;
+    margin-top:5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:#12182a;
+    padding:4px 8px;
+    border-radius:6px;
+    display:inline-block;
+  }
+  .decision-panel{
+    margin-top:22px;
+    padding:16px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+  }
+  .decision-panel h3{
+    margin:0 0 10px;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--muted);
+  }
+  .decision-summary{font-size:13px;color:#c6cce0;line-height:1.6;margin-bottom:12px;}
+  .decision-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .decision-actions button{flex:1;min-width:140px;}
+  .btn-approve{background:var(--accent);color:#0b1220;}
+  .btn-deny{background:var(--bad);color:#1a0d0d;}
+  .btn-info{background:var(--warn);color:#1a1508;}
+  .decision-actions button:disabled{opacity:.4;cursor:not-allowed;}
+  .decided-note{
+    font-size:13px;
+    padding:10px 12px;
+    border-radius:8px;
+    margin-top:8px;
+    font-weight:600;
+  }
+  .decided-note.approved{background:#173a2d;color:var(--accent);}
+  .decided-note.denied{background:#3a1f1f;color:var(--bad);}
+  .decided-note.needs_info{background:#3a2f1a;color:var(--warn);}
+  .empty-state{color:var(--muted);font-size:14px;padding:60px 0;text-align:center;}
+  footer{
+    border-top:1px solid var(--border);
+    padding:16px 40px;
+    font-size:11.5px;
+    color:var(--muted);
+    text-align:center;
+  }
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:#2a3450;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Demo · Not a real product</div>
+  <h1>Docket Clear</h1>
+  <p>A toy version of an agentic reviewer: pick a rubric, drop in an application, and watch the agent check each requirement against the document, cite its evidence, and hand a fully-audited file to a human for the final call. Everything below runs client-side against synthetic applications — nothing leaves your browser.</p>
+</header>
+
+<main>
+  <div class="queue">
+    <div class="queue-head">
+      <h2>Backlog Queue</h2>
+    </div>
+    <button class="run-all" id="runAllBtn">Run agents on entire queue</button>
+    <div id="queueList"></div>
+  </div>
+
+  <div class="detail" id="detail">
+    <div class="empty-state">Select an application from the queue, or click "Run agents on entire queue" to review all of them in parallel.</div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Stratum Industries (YC S26). Not affiliated with Stratum Industries.
+</footer>
+
+<script>
+(function(){
+
+  // ---------- synthetic data ----------
+  const APPLICATIONS = [
+    {
+      id: "PMT-4471",
+      title: "Residential Deck Permit",
+      applicant: "M. Alvarez",
+      program: "City Building Permits",
+      document:
+`Applicant: Maria Alvarez
+Property: 118 Cutter Ln, Parcel 09-224
+Project: 12ft x 16ft raised deck, rear yard
+Contractor License: none listed (owner-build)
+Setback from property line: 6 ft (rear), 4 ft (side)
+Attached structural drawing: yes, stamped by nobody
+Estimated cost: $8,200
+Signature: Maria Alvarez, 03/14`,
+      rubric: [
+        {title:"Setback compliance", check:d=>/side.*4 ?ft/i.test(d), pass:"Rear setback 6ft and side setback 4ft meet the 3ft minimum.", fail:"Side setback of 4ft is below the 5ft minimum for this zone.", cite:"side): 4 ft", forceFail:true, failNote:"Side setback of 4 ft is below the 5 ft minimum required for R-2 zoning."},
+        {title:"Licensed contractor or owner-build affidavit", check:()=>false, pass:"", fail:"No contractor license and no owner-build affidavit attached.", cite:"Contractor License: none listed", forceFlag:true},
+        {title:"Stamped structural drawing", check:()=>false, fail:"Drawing is unstamped; decks over 30in require a stamped drawing.", cite:"stamped by nobody", forceFlag:true},
+        {title:"Applicant signature present", pass:"Signature and date found on file.", cite:"Signature: Maria Alvarez, 03/14", forceFail:false, forcePass:true},
+      ]
+    },
+    {
+      id: "GRT-1182",
+      title: "Small Business Recovery Grant",
+      applicant: "Union Fabrication LLC",
+      program: "Dept. of Economic Development",
+      document:
+`Business: Union Fabrication LLC
+EIN: 47-118****
+Years in operation: 3
+2023 Revenue: $412,000
+2024 Revenue: $301,000 (documented 27% decline)
+Employees (W-2): 6
+Requested amount: $25,000
+Use of funds: equipment replacement, payroll bridge
+Prior grants received: none
+Attachments: 2023 tax return, 2024 P&L, payroll register`,
+      rubric: [
+        {title:"Revenue decline ≥ 20% year-over-year", forcePass:true, pass:"27% documented decline meets the 20% threshold.", cite:"27% decline"},
+        {title:"Employee count within 2-50 range", forcePass:true, pass:"6 W-2 employees, within eligible range.", cite:"Employees (W-2): 6"},
+        {title:"No duplicate grant in program history", forcePass:true, pass:"No prior grants on file for this EIN.", cite:"Prior grants received: none"},
+        {title:"Required attachments present (tax return, P&L, payroll)", forceFlag:true, fail:"Payroll register referenced but the actual register file is missing from the packet.", cite:"payroll register"},
+      ]
+    },
+    {
+      id: "BEN-9903",
+      title: "Disability Benefit Claim",
+      applicant: "T. Okafor",
+      program: "State Disability Services",
+      document:
+`Claimant: Tunde Okafor
+DOB on file: 1986-02-11
+Condition: chronic lumbar impairment, onset 2022
+Physician statement: attached, Dr. R. Singh, dated 2024-11-02
+Work history (last 5yr): forklift operator, warehouse
+Functional capacity exam: attached, dated 2025-01-19
+Prior claim history: denied 2021 (insufficient medical evidence)
+Requested benefit tier: Tier 2 (partial)`,
+      rubric: [
+        {title:"Physician statement within 12 months", forcePass:true, pass:"Statement dated 2024-11-02 is within the required window.", cite:"dated 2024-11-02"},
+        {title:"Functional capacity exam on file", forcePass:true, pass:"Exam attached and dated.", cite:"dated 2025-01-19"},
+        {title:"Condition linked to documented work history", forcePass:true, pass:"Lumbar impairment consistent with forklift/warehouse role.", cite:"forklift operator, warehouse"},
+        {title:"Prior denial reviewed for new evidence", forceFlag:true, fail:"2021 denial cited insufficient medical evidence; new physician statement should be checked against that specific gap before reapproval.", cite:"denied 2021 (insufficient medical evidence)"},
+      ]
+    },
+    {
+      id: "PMT-4502",
+      title: "Food Truck Vending License",
+      applicant: "Sunny Side Kitchen",
+      program: "City Building Permits",
+      document:
+`Business: Sunny Side Kitchen
+Owner: J. Park
+Vehicle inspection: passed, 2025-06-01
+Fire suppression system: installed, inspected 2025-05-28
+Health dept score: 94/100
+Insurance certificate: attached, $1M general liability
+Proposed vending zones: Downtown Corridor, Riverside Park
+Signature: J. Park, 06/03`,
+      rubric: [
+        {title:"Vehicle safety inspection current (12mo)", forcePass:true, pass:"Inspection passed within the last 12 months.", cite:"passed, 2025-06-01"},
+        {title:"Fire suppression inspected", forcePass:true, pass:"Fire suppression inspected 2025-05-28.", cite:"inspected 2025-05-28"},
+        {title:"Health score ≥ 85", forcePass:true, pass:"Health score of 94 clears the 85 minimum.", cite:"94/100"},
+        {title:"Insurance ≥ $1M general liability", forcePass:true, pass:"Certificate shows $1M general liability, meets minimum.", cite:"$1M general liability"},
+      ]
+    },
+  ];
+
+  const state = {};
+  APPLICATIONS.forEach(a=>{
+    state[a.id] = {status:"pending", progress:0, results:[], decided:null};
+  });
+
+  let activeId = null;
+  const queueList = document.getElementById("queueList");
+  const detail = document.getElementById("detail");
+  const runAllBtn = document.getElementById("runAllBtn");
+
+  function statusLabel(s){
+    return {pending:"Pending", reviewing:"Reviewing…", needs_info:"Flags found",
+            ready:"Ready for decision", approved:"Approved", denied:"Denied"}[s] || s;
+  }
+
+  function renderQueue(){
+    queueList.innerHTML = "";
+    APPLICATIONS.forEach(app=>{
+      const s = state[app.id];
+      const card = document.createElement("div");
+      card.className = "app-card" + (app.id===activeId ? " active" : "");
+      card.onclick = ()=>{ activeId = app.id; renderQueue(); renderDetail(); };
+
+      const badgeClass = s.decided ? s.decided : s.status;
+      card.innerHTML = `
+        <div class="row1">
+          <span class="title">${app.title}</span>
+          <span class="id">${app.id}</span>
+        </div>
+        <div class="sub">${app.applicant} · ${app.program}</div>
+        <span class="badge ${badgeClass}">${s.decided ? statusLabel(s.decided) : statusLabel(s.status)}</span>
+        <div class="progress-track"><div class="progress-fill" style="width:${s.progress}%"></div></div>
+      `;
+      queueList.appendChild(card);
+    });
+  }
+
+  function renderDetail(){
+    if(!activeId){
+      detail.innerHTML = `<div class="empty-state">Select an application from the queue, or click "Run agents on entire queue" to review all of them in parallel.</div>`;
+      return;
+    }
+    const app = APPLICATIONS.find(a=>a.id===activeId);
+    const s = state[app.id];
+
+    let reqHtml = app.rubric.map((r,i)=>{
+      const res = s.results[i];
+      if(!res){
+        return `<div class="req"><div class="icon wait">·</div><div class="body"><div class="req-title">${r.title}</div></div></div>`;
+      }
+      const iconClass = res.pass ? "pass" : "flag";
+      const iconChar = res.pass ? "✓" : "!";
+      return `<div class="req shown">
+        <div class="icon ${iconClass}">${iconChar}</div>
+        <div class="body">
+          <div class="req-title">${r.title}</div>
+          <div class="req-note">${res.note}</div>
+          <span class="req-cite">"${res.cite}"</span>
+        </div>
+      </div>`;
+    }).join("");
+
+    const flags = s.results.filter(r=>r && !r.pass).length;
+    const checked = s.results.filter(Boolean).length;
+
+    let decisionHtml = "";
+    if(s.status === "ready" || s.status === "needs_info" || s.decided){
+      const summary = flags === 0
+        ? `All ${app.rubric.length} requirements passed. No gaps found in the submitted file.`
+        : `${flags} of ${app.rubric.length} requirements were flagged. Review the citations above before deciding.`;
+
+      let actionsHtml;
+      if(s.decided){
+        actionsHtml = `<div class="decided-note ${s.decided}">${
+          s.decided==="approved" ? "✓ Approved by reviewer" :
+          s.decided==="denied" ? "✕ Denied by reviewer" :
+          "⚑ Sent back to applicant for more information"
+        } — logged to audit trail.</div>`;
+      } else {
+        actionsHtml = `<div class="decision-actions">
+          <button class="btn-approve" onclick="window.__decide('${app.id}','approved')">Approve</button>
+          <button class="btn-info" onclick="window.__decide('${app.id}','needs_info')">Request more info</button>
+          <button class="btn-deny" onclick="window.__decide('${app.id}','denied')">Deny</button>
+        </div>`;
+      }
+
+      decisionHtml = `<div class="decision-panel">
+        <h3>Human decision</h3>
+        <div class="decision-summary">${summary}</div>
+        ${actionsHtml}
+      </div>`;
+    }
+
+    detail.innerHTML = `
+      <div class="detail-head">
+        <div>
+          <h2>${app.title}</h2>
+          <div class="meta">${app.id} · ${app.applicant} · ${app.program}</div>
+        </div>
+        <span class="badge ${s.decided ? s.decided : s.status}" style="margin-top:2px;">${s.decided ? statusLabel(s.decided) : statusLabel(s.status)}</span>
+      </div>
+
+      <div class="doc-box">
+        <span class="label">Submitted document (excerpt)</span>${app.document}
+      </div>
+
+      <div class="rubric">
+        <h3>Rubric checks ${checked ? `(${checked}/${app.rubric.length})` : ""}</h3>
+        ${reqHtml}
+      </div>
+
+      ${decisionHtml}
+    `;
+  }
+
+  window.__decide = function(id, decision){
+    state[id].decided = decision;
+    if(activeId === id) renderDetail();
+    renderQueue();
+  };
+
+  function runReview(app){
+    return new Promise(resolve=>{
+      const s = state[app.id];
+      if(s.status !== "pending"){ resolve(); return; }
+      s.status = "reviewing";
+      renderQueue();
+      if(activeId===app.id) renderDetail();
+
+      let i = 0;
+      const total = app.rubric.length;
+      const tick = ()=>{
+        if(i >= total){
+          const anyFlag = s.results.some(r=>!r.pass);
+          s.status = anyFlag ? "needs_info" : "ready";
+          s.progress = 100;
+          renderQueue();
+          if(activeId===app.id) renderDetail();
+          resolve();
+          return;
+        }
+        const r = app.rubric[i];
+        const passed = !!r.forcePass && !r.forceFlag && !r.forceFail;
+        s.results[i] = {
+          pass: passed,
+          note: passed ? r.pass : (r.fail || r.failNote || "Flagged for reviewer attention."),
+          cite: r.cite
+        };
+        i++;
+        s.progress = Math.round((i/total)*100);
+        renderQueue();
+        if(activeId===app.id) renderDetail();
+        setTimeout(tick, 380 + Math.random()*260);
+      };
+      setTimeout(tick, 250 + Math.random()*300);
+    });
+  }
+
+  runAllBtn.addEventListener("click", ()=>{
+    runAllBtn.disabled = true;
+    runAllBtn.textContent = "Agents running in parallel…";
+    const pending = APPLICATIONS.filter(a=>state[a.id].status==="pending");
+    if(!activeId && pending.length) { activeId = pending[0].id; }
+    Promise.all(pending.map(app=>runReview(app))).then(()=>{
+      runAllBtn.textContent = "All applications reviewed";
+    });
+  });
+
+  renderQueue();
+  renderDetail();
+})();
+</script>
+
+</body>
+</html>
