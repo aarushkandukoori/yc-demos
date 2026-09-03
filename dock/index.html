@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Crew — a toy multiplayer agent workspace</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0e1116;
+    --panel:#161b22;
+    --panel2:#1c232d;
+    --border:#2a3340;
+    --text:#e6edf3;
+    --muted:#8b98a5;
+    --accent:#5eead4;
+    --accent2:#a78bfa;
+    --warn:#fbbf24;
+    --danger:#f87171;
+    --ok:#4ade80;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    min-height:100vh; display:flex; flex-direction:column;
+  }
+  header{
+    padding:28px 32px 12px; border-bottom:1px solid var(--border);
+  }
+  header h1{margin:0 0 6px; font-size:22px; letter-spacing:-0.02em;}
+  header h1 span{color:var(--accent);}
+  header p{margin:0; color:var(--muted); font-size:14px; max-width:640px; line-height:1.5;}
+
+  main{flex:1; padding:24px 32px 8px; display:flex; flex-direction:column; gap:20px;}
+
+  .goal-bar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px;
+  }
+  .goal-bar input{
+    flex:1; min-width:220px; background:var(--panel2); border:1px solid var(--border);
+    color:var(--text); padding:10px 12px; border-radius:8px; font-size:14px;
+  }
+  .goal-bar button{
+    background:var(--accent); color:#03211c; border:none; font-weight:600;
+    padding:10px 18px; border-radius:8px; cursor:pointer; font-size:14px;
+  }
+  .goal-bar button:hover{filter:brightness(1.08);}
+  .goal-bar button.secondary{
+    background:transparent; color:var(--muted); border:1px solid var(--border); font-weight:500;
+  }
+  .goal-bar .presets{display:flex; gap:8px; flex-wrap:wrap; width:100%;}
+  .goal-bar .presets button{
+    background:var(--panel2); color:var(--muted); border:1px solid var(--border);
+    padding:6px 10px; border-radius:20px; font-size:12px; font-weight:500;
+  }
+
+  .layout{display:grid; grid-template-columns: 220px 1fr 300px; gap:16px; align-items:start;}
+  @media (max-width: 980px){ .layout{grid-template-columns:1fr;} }
+
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px;
+  }
+  .card h2{margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);}
+
+  .agent{
+    display:flex; gap:10px; align-items:flex-start; padding:10px; border-radius:8px;
+    margin-bottom:8px; background:var(--panel2); border:1px solid transparent;
+    transition:border-color .2s;
+  }
+  .agent.active{border-color:var(--accent);}
+  .agent .avatar{
+    width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:14px; flex-shrink:0;
+  }
+  .agent .meta{min-width:0;}
+  .agent .meta .name{font-size:13px; font-weight:600;}
+  .agent .meta .role{font-size:11px; color:var(--muted); margin-bottom:4px;}
+  .status-pill{
+    display:inline-block; font-size:10px; padding:2px 7px; border-radius:20px; font-weight:600;
+    letter-spacing:.03em; text-transform:uppercase;
+  }
+  .status-idle{background:#2a3340; color:var(--muted);}
+  .status-working{background:#123c36; color:var(--accent);}
+  .status-blocked{background:#3d2b12; color:var(--warn);}
+  .status-done{background:#123320; color:var(--ok);}
+
+  .board{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+  @media (max-width:700px){ .board{grid-template-columns:1fr 1fr;} }
+  .col{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px; min-height:160px;}
+  .col h3{margin:0 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);}
+  .task{
+    background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:9px 10px; margin-bottom:8px;
+    font-size:12.5px; line-height:1.4; cursor:default;
+  }
+  .task .tt{font-weight:600; margin-bottom:5px;}
+  .task .owner{display:flex; align-items:center; gap:6px; color:var(--muted); font-size:11px;}
+  .task .dot{width:7px; height:7px; border-radius:50%;}
+  .task.blocked{border-color:#5a4113;}
+  .task.done{opacity:.65;}
+  .task .bar{height:4px; background:#2a3340; border-radius:3px; margin-top:6px; overflow:hidden;}
+  .task .bar i{display:block; height:100%; background:var(--accent); width:0%; transition:width .4s linear;}
+
+  .feed{
+    display:flex; flex-direction:column; gap:8px; max-height:520px; overflow-y:auto; padding-right:2px;
+  }
+  .msg{font-size:12.5px; line-height:1.45; padding:9px 10px; border-radius:8px; background:var(--panel2); border:1px solid var(--border);}
+  .msg b{color:var(--accent2);}
+  .msg .arrow{color:var(--muted); margin:0 4px;}
+  .msg .tag{
+    display:inline-block; margin-left:6px; font-size:9.5px; padding:1px 6px; border-radius:20px;
+    background:#123c36; color:var(--accent); text-transform:uppercase; letter-spacing:.04em;
+  }
+  .msg .tag.block{background:#3d2b12; color:var(--warn);}
+  .msg .tag.done{background:#123320; color:var(--ok);}
+  .msg .t{color:var(--muted); font-size:10.5px; float:right;}
+
+  footer{
+    margin-top:20px; padding:16px 32px; border-top:1px solid var(--border);
+    color:var(--muted); font-size:12px; text-align:center;
+  }
+  footer a{color:var(--accent);}
+
+  .empty{color:var(--muted); font-size:12.5px; padding:20px 8px; text-align:center;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Crew <span>·</span> a toy multiplayer agent workspace</h1>
+  <p>Type a goal, hit launch, and watch a small team of AI teammates split the work, message each other, and unblock one another without you routing a single task by hand. This is a simplified, self-contained simulation built to demonstrate the core mechanic — not a real product.</p>
+</header>
+
+<main>
+  <div class="goal-bar">
+    <input id="goalInput" type="text" placeholder="e.g. Launch a landing page for our new pricing tier" maxlength="80">
+    <button id="launchBtn">Launch team</button>
+    <button id="resetBtn" class="secondary">Reset</button>
+    <div class="presets">
+      <button data-preset="Launch a landing page for our new pricing tier">Launch a landing page</button>
+      <button data-preset="Ship a customer onboarding email sequence">Ship an onboarding sequence</button>
+      <button data-preset="Prepare the Q3 investor update">Prepare an investor update</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Team</h2>
+      <div id="agentList"></div>
+    </div>
+
+    <div class="card">
+      <h2>Task board</h2>
+      <div class="board" id="board">
+        <div class="col" data-col="todo"><h3>To do</h3><div class="colBody"></div></div>
+        <div class="col" data-col="blocked"><h3>Blocked</h3><div class="colBody"></div></div>
+        <div class="col" data-col="doing"><h3>In progress</h3><div class="colBody"></div></div>
+        <div class="col" data-col="done"><h3>Done</h3><div class="colBody"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Team activity</h2>
+      <div class="feed" id="feed"><div class="empty">No team running yet. Launch one above.</div></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Dock (YC S26). Not affiliated with Dock.
+</footer>
+
+<script>
+(function(){
+  const AGENTS = [
+    {id:'scout',   name:'Scout',   role:'Research',  color:'#5eead4', bg:'#123c36'},
+    {id:'drafter', name:'Drafter', role:'Writing',    color:'#a78bfa', bg:'#241c3d'},
+    {id:'critic',  name:'Critic',  role:'Review',     color:'#fbbf24', bg:'#3d2f12'},
+    {id:'ship',    name:'Shipper', role:'Delivery',   color:'#f472b6', bg:'#3d1230'},
+  ];
+
+  // Task templates keyed loosely by goal keywords, each with a dependency chain
+  // across agents so the demo can show real unblocking, not just parallel work.
+  function buildTasks(goal){
+    const g = goal.toLowerCase();
+    let topic = 'the initiative';
+    if (g.includes('landing') || g.includes('page')) topic = 'the landing page';
+    else if (g.includes('onboard') || g.includes('email')) topic = 'the email sequence';
+    else if (g.includes('invest') || g.includes('update')) topic = 'the investor update';
+    else if (goal.trim()) topic = 'the goal';
+
+    return [
+      {id:'t1', title:`Research audience & competitors for ${topic}`, owner:'scout', dependsOn:[], est:4},
+      {id:'t2', title:`Draft outline for ${topic}`,                    owner:'drafter', dependsOn:['t1'], est:5},
+      {id:'t3', title:`Write first full pass of ${topic}`,             owner:'drafter', dependsOn:['t2'], est:6},
+      {id:'t4', title:`Review for gaps & tone`,                        owner:'critic', dependsOn:['t3'], est:4},
+      {id:'t5', title:`Fix issues flagged in review`,                  owner:'drafter', dependsOn:['t4'], est:3},
+      {id:'t6', title:`Package & ship ${topic}`,                       owner:'ship', dependsOn:['t5'], est:3},
+    ];
+  }
+
+  let tasks = [];
+  let feedEl = document.getElementById('feed');
+  let boardEl = document.getElementById('board');
+  let agentListEl = document.getElementById('agentList');
+  let timers = [];
+  let running = false;
+
+  function agentById(id){ return AGENTS.find(a=>a.id===id); }
+
+  function renderAgents(){
+    agentListEl.innerHTML = '';
+    AGENTS.forEach(a=>{
+      const activeTask = tasks.find(t=>t.owner===a.id && t.state==='doing');
+      const div = document.createElement('div');
+      div.className = 'agent' + (activeTask ? ' active':'');
+      const status = activeTask ? 'working' :
+        tasks.some(t=>t.owner===a.id && t.state==='blocked') ? 'blocked' :
+        tasks.every(t=>t.owner!==a.id || t.state==='done') && tasks.some(t=>t.owner===a.id) ? 'done' : 'idle';
+      div.innerHTML = `
+        <div class="avatar" style="background:${a.bg}; color:${a.color}">${a.name[0]}</div>
+        <div class="meta">
+          <div class="name">${a.name}</div>
+          <div class="role">${a.role}</div>
+          <span class="status-pill status-${status}">${status}</span>
+        </div>`;
+      agentListEl.appendChild(div);
+    });
+  }
+
+  function colFor(task){
+    if (task.state==='done') return 'done';
+    if (task.state==='doing') return 'doing';
+    if (task.state==='blocked') return 'blocked';
+    return 'todo';
+  }
+
+  function renderBoard(){
+    ['todo','blocked','doing','done'].forEach(col=>{
+      const body = boardEl.querySelector(`[data-col="${col}"] .colBody`);
+      body.innerHTML = '';
+      const items = tasks.filter(t=>colFor(t)===col);
+      if (!items.length){
+        body.innerHTML = '<div class="empty" style="padding:8px 2px;">—</div>';
+        return;
+      }
+      items.forEach(t=>{
+        const a = agentById(t.owner);
+        const div = document.createElement('div');
+        div.className = 'task' + (t.state==='blocked'?' blocked':'') + (t.state==='done'?' done':'');
+        div.innerHTML = `
+          <div class="tt">${t.title}</div>
+          <div class="owner"><span class="dot" style="background:${a.color}"></span>${a.name}${t.state==='blocked' ? ' · waiting on '+depNames(t):''}</div>
+          <div class="bar"><i style="width:${t.progress||0}%"></i></div>
+        `;
+        body.appendChild(div);
+      });
+    });
+  }
+
+  function depNames(t){
+    return t.dependsOn.filter(id=>{
+      const dt = tasks.find(x=>x.id===id);
+      return dt && dt.state!=='done';
+    }).map(id=>{
+      const dt = tasks.find(x=>x.id===id);
+      return agentById(dt.owner).name;
+    }).join(', ');
+  }
+
+  function pushMsg(from, to, text, tag){
+    const el = document.getElementById('feed');
+    if (el.querySelector('.empty')) el.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'msg';
+    const tagHtml = tag ? `<span class="tag ${tag==='blocked'?'block':tag==='done'?'done':''}">${tag}</span>` : '';
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    if (to){
+      div.innerHTML = `<span class="t">${time}</span><b>${from}</b><span class="arrow">→</span><b>${to}</b>: ${text} ${tagHtml}`;
+    } else {
+      div.innerHTML = `<span class="t">${time}</span><b>${from}</b>: ${text} ${tagHtml}`;
+    }
+    el.prepend(div);
+  }
+
+  function clearTimers(){ timers.forEach(clearTimeout); timers = []; timers.forEach(clearInterval); }
+
+  function isReady(t){
+    return t.dependsOn.every(id=>{
+      const dt = tasks.find(x=>x.id===id);
+      return dt && dt.state==='done';
+    });
+  }
+
+  function tick(){
+    // recompute blocked/todo states based on dependency graph
+    tasks.forEach(t=>{
+      if (t.state==='todo' || t.state==='blocked'){
+        t.state = isReady(t) ? 'todo' : 'blocked';
+      }
+    });
+
+    // start any ready, unstarted task whose owner is free
+    tasks.forEach(t=>{
+      if (t.state==='todo'){
+        const ownerBusy = tasks.some(o=>o.owner===t.owner && o.state==='doing');
+        if (!ownerBusy){
+          t.state = 'doing';
+          t.progress = 0;
+          const a = agentById(t.owner);
+          if (t.dependsOn.length){
+            const dep = tasks.find(x=>x.id===t.dependsOn[t.dependsOn.length-1]);
+            const depAgent = agentById(dep.owner);
+            pushMsg(depAgent.name, a.name, `handing off — ${dep.title.toLowerCase()} is done, you're clear to start.`, null);
+          }
+          pushMsg(a.name, null, `starting: ${t.title.toLowerCase()}`, 'working');
+        }
+      }
+    });
+
+    renderAgents();
+    renderBoard();
+  }
+
+  function progressStep(){
+    let anyDoing = false;
+    tasks.forEach(t=>{
+      if (t.state==='doing'){
+        anyDoing = true;
+        t.progress = Math.min(100, (t.progress||0) + (100/(t.est*2)));
+        if (t.progress >= 100){
+          t.state = 'done';
+          t.progress = 100;
+          const a = agentById(t.owner);
+          pushMsg(a.name, null, `finished: ${t.title.toLowerCase()}`, 'done');
+          const blockedByThis = tasks.filter(x=>x.dependsOn.includes(t.id) && x.state==='blocked');
+          blockedByThis.forEach(bt=>{
+            if (isReady(bt)){
+              const nb = agentById(bt.owner);
+              pushMsg(a.name, nb.name, `unblocking you — I finished my part.`, 'blocked');
+            }
+          });
+        }
+      }
+    });
+    tick();
+    if (tasks.every(t=>t.state==='done')){
+      running = false;
+      clearTimers();
+      pushMsg('Crew', null, 'all tasks shipped. No manual routing needed.', 'done');
+      return;
+    }
+    if (anyDoing || tasks.some(t=>t.state!=='done')){
+      timers.push(setTimeout(progressStep, 550));
+    }
+  }
+
+  function launch(){
+    const goal = document.getElementById('goalInput').value.trim() || 'Launch a landing page for our new pricing tier';
+    clearTimers();
+    tasks = buildTasks(goal).map(t=>({...t, state:'blocked', progress:0}));
+    feedEl.innerHTML = '';
+    pushMsg('Crew', null, `goal received: "${goal}". Breaking it into tasks and assigning owners.`, null);
+    tick();
+    running = true;
+    timers.push(setTimeout(progressStep, 550));
+  }
+
+  function reset(){
+    clearTimers();
+    tasks = [];
+    running = false;
+    renderAgents();
+    renderBoard();
+    feedEl.innerHTML = '<div class="empty">No team running yet. Launch one above.</div>';
+  }
+
+  document.getElementById('launchBtn').addEventListener('click', launch);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+  document.getElementById('goalInput').addEventListener('keydown', e=>{ if(e.key==='Enter') launch(); });
+  document.querySelectorAll('.presets button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.getElementById('goalInput').value = btn.dataset.preset;
+      launch();
+    });
+  });
+
+  renderAgents();
+  renderBoard();
+})();
+</script>
+</body>
+</html>
