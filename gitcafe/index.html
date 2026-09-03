@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stackyard — stacked diffs for human+agent teams (demo)</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b22; --panel2:#1c2330; --border:#2a3140;
+    --text:#e6edf3; --muted:#8b98a8; --accent:#5ee6b0; --accent2:#7aa2ff;
+    --warn:#f2b84b; --bad:#ef6461; --agent:#c792ea; --human:#7aa2ff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%, #16233a 0%, var(--bg) 55%);
+    color:var(--text); min-height:100vh; display:flex; flex-direction:column;
+  }
+  header{padding:28px 36px 8px; max-width:1080px; margin:0 auto; width:100%;}
+  header h1{margin:0 0 6px; font-size:26px; letter-spacing:-0.02em;}
+  header h1 span{color:var(--accent);}
+  header p{margin:0; color:var(--muted); font-size:14.5px; max-width:640px; line-height:1.5;}
+  .badgebar{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+  .badge{
+    font-size:12px; padding:5px 10px; border-radius:999px; border:1px solid var(--border);
+    background:var(--panel); color:var(--muted);
+  }
+  main{flex:1; max-width:1080px; margin:0 auto; padding:10px 36px 40px; width:100%; display:grid; grid-template-columns:1fr 300px; gap:22px;}
+  .stackpanel{display:flex; flex-direction:column; gap:12px;}
+  .toolbar{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  .toolbar button{
+    background:var(--accent); color:#08130f; border:none; font-weight:700;
+    padding:9px 16px; border-radius:8px; cursor:pointer; font-size:13.5px;
+  }
+  .toolbar button.secondary{background:transparent; color:var(--text); border:1px solid var(--border); font-weight:600;}
+  .toolbar button:disabled{opacity:0.4; cursor:not-allowed;}
+  .toolbar .spacer{flex:1;}
+  .toolbar .ticker{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
+
+  .pr{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--border); border-radius:12px; padding:14px 16px;
+    position:relative; transition:transform .18s ease, box-shadow .18s ease, opacity .3s ease;
+  }
+  .pr.merged{opacity:.55;}
+  .pr.blocked{filter:saturate(.8);}
+  .pr::before{
+    content:""; position:absolute; left:-1px; top:14px; bottom:14px; width:3px; border-radius:3px;
+    background:var(--border);
+  }
+  .pr.ready::before{background:var(--accent);}
+  .pr.failing::before{background:var(--bad);}
+  .pr.running::before{background:var(--warn);}
+
+  .prtop{display:flex; align-items:center; gap:10px;}
+  .prnum{color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums;}
+  .prtitle{font-weight:650; font-size:14.5px; flex:1;}
+  .author{
+    font-size:11px; padding:2px 8px; border-radius:999px; font-weight:700; letter-spacing:.02em;
+  }
+  .author.human{background:rgba(122,162,255,.15); color:var(--human); border:1px solid rgba(122,162,255,.35);}
+  .author.agent{background:rgba(199,146,234,.15); color:var(--agent); border:1px solid rgba(199,146,234,.35);}
+
+  .prmeta{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .chip{
+    font-size:11.5px; padding:4px 9px; border-radius:7px; border:1px solid var(--border);
+    color:var(--muted); display:flex; align-items:center; gap:5px; background:rgba(255,255,255,.02);
+  }
+  .chip .dot{width:6px; height:6px; border-radius:50%; background:var(--muted);}
+  .chip.pass .dot{background:var(--accent);} .chip.pass{color:var(--accent);}
+  .chip.fail .dot{background:var(--bad);} .chip.fail{color:var(--bad);}
+  .chip.run .dot{background:var(--warn); animation:pulse 1s infinite;} .chip.run{color:var(--warn);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+  .prfoot{display:flex; align-items:center; justify-content:space-between; margin-top:12px;}
+  .verdict{font-size:12.5px; font-weight:650;}
+  .verdict.ready{color:var(--accent);}
+  .verdict.blocked{color:var(--muted);}
+  .verdict.failing{color:var(--bad);}
+  .mergebtn{
+    font-size:12.5px; font-weight:700; padding:6px 13px; border-radius:7px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); cursor:not-allowed;
+  }
+  .mergebtn.enabled{background:var(--accent); color:#08130f; border-color:var(--accent); cursor:pointer;}
+  .mergebtn.merged{background:transparent; color:var(--muted); border:1px solid var(--border); cursor:default;}
+
+  aside{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;
+    height:fit-content; position:sticky; top:20px; font-size:13px;
+  }
+  aside h3{margin:0 0 10px; font-size:13.5px; color:var(--text);}
+  aside .row{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); color:var(--muted);}
+  aside .row span:last-child{color:var(--text); font-variant-numeric:tabular-nums; font-weight:600;}
+  aside .note{margin-top:14px; padding-top:12px; border-top:1px dashed var(--border); color:var(--muted); font-size:12px; line-height:1.5;}
+  aside code{background:var(--panel2); padding:1px 5px; border-radius:4px; font-size:11.5px;}
+
+  footer{
+    text-align:center; padding:18px 20px 26px; color:var(--muted); font-size:12px;
+    border-top:1px solid var(--border); margin-top:auto;
+  }
+  footer a{color:var(--accent2);}
+  @media (max-width:800px){ main{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Stack<span>yard</span></h1>
+  <p>A toy git forge for teams where humans and agents both push. Pull requests merge <b>as a stack</b> — each one only becomes mergeable once everything below it in the stack is merged and its own checks are clean. Run checks, watch merge-readiness update live, and land the stack in order.</p>
+  <div class="badgebar">
+    <div class="badge">stacked diffs</div>
+    <div class="badge">live merge-readiness</div>
+    <div class="badge">push-time secret scan</div>
+    <div class="badge">human + agent authorship</div>
+  </div>
+</header>
+
+<main>
+  <div class="stackpanel">
+    <div class="toolbar">
+      <button id="runAllBtn" onclick="runAll()">Run checks on stack</button>
+      <button class="secondary" onclick="resetStack()">Reset demo</button>
+      <div class="spacer"></div>
+      <div class="ticker" id="ticker">committed today: 0</div>
+    </div>
+    <div id="stack"></div>
+  </div>
+
+  <aside>
+    <h3>Repo pulse</h3>
+    <div class="row"><span>Open in stack</span><span id="statOpen">0</span></div>
+    <div class="row"><span>Merged</span><span id="statMerged">0</span></div>
+    <div class="row"><span>Blocked</span><span id="statBlocked">0</span></div>
+    <div class="row"><span>Ready to merge</span><span id="statReady">0</span></div>
+    <div class="note">
+      Merge order is enforced bottom-up: <code>PR #1</code> must land before <code>#2</code> can even be considered, no matter how green its own checks are. That's the mechanic real stacked-diff review depends on — this demo computes it live as you merge and re-run checks.
+    </div>
+  </aside>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by GitCafe (YC S26). Not affiliated with GitCafe.
+</footer>
+
+<script>
+(function(){
+  const AGENT_TITLES = [
+    "chore: bump lockfile after nightly agent sweep",
+    "fix: retry flaky upload in ingest worker",
+    "refactor: extract retry policy into shared module",
+    "test: add coverage for cold-start edge case",
+    "perf: batch write calls in indexer"
+  ];
+  const HUMAN_TITLES = [
+    "feat: add per-repo merge-readiness banner",
+    "fix: stack rebase off-by-one on empty base",
+    "feat: passkey login for CLI device flow",
+    "docs: document stacked diff merge order",
+    "fix: secret scan false positive on test fixtures"
+  ];
+
+  function makePR(id, author, title, seed){
+    return {
+      id,
+      author,
+      title,
+      seed,
+      checks: 'idle',      // idle | running | pass | fail
+      secretScan: 'idle',  // idle | running | pass | fail
+      conflicts: 'idle',   // idle | running | clear | conflict
+      merged: false
+    };
+  }
+
+  let stack = [];
+
+  function freshStack(){
+    return [
+      makePR(1, 'agent', AGENT_TITLES[0], 0.95),
+      makePR(2, 'human', HUMAN_TITLES[0], 0.9),
+      makePR(3, 'agent', AGENT_TITLES[1] + ' (touches config/*.env.sample)', 0.55),
+      makePR(4, 'human', HUMAN_TITLES[1], 0.85),
+      makePR(5, 'agent', AGENT_TITLES[2], 0.9),
+    ];
+  }
+
+  function resetStack(){
+    stack = freshStack();
+    committedToday = 214893;
+    render();
+  }
+
+  function belowAllMerged(pr){
+    return stack.filter(p => p.id < pr.id).every(p => p.merged);
+  }
+
+  function verdictFor(pr){
+    if(pr.merged) return {state:'merged', label:'merged'};
+    if(pr.checks === 'fail' || pr.secretScan === 'fail' || pr.conflicts === 'conflict'){
+      return {state:'failing', label:'checks failing — cannot merge'};
+    }
+    if(pr.checks !== 'pass' || pr.secretScan !== 'pass' || pr.conflicts !== 'clear'){
+      return {state:'blocked', label:'checks not run yet'};
+    }
+    if(!belowAllMerged(pr)){
+      return {state:'blocked', label:'blocked — merge earlier PRs in stack first'};
+    }
+    return {state:'ready', label:'ready to merge'};
+  }
+
+  function chip(label, state){
+    // state: idle/running/pass/fail/clear/conflict
+    let cls = 'chip', dotlabel = label;
+    if(state === 'running') cls += ' run';
+    else if(state === 'pass' || state === 'clear') cls += ' pass';
+    else if(state === 'fail' || state === 'conflict') cls += ' fail';
+    let text = label;
+    if(state === 'running') text += ' — running…';
+    else if(state === 'pass') text += ' — pass';
+    else if(state === 'clear') text += ' — clear';
+    else if(state === 'fail') text += ' — failed';
+    else if(state === 'conflict') text += ' — conflict';
+    else text += ' — not run';
+    return `<div class="${cls}"><span class="dot"></span>${text}</div>`;
+  }
+
+  function render(){
+    const el = document.getElementById('stack');
+    el.innerHTML = stack.map(pr => {
+      const v = verdictFor(pr);
+      const prClasses = ['pr'];
+      if(pr.merged) prClasses.push('merged');
+      else if(v.state === 'ready') prClasses.push('ready');
+      else if(v.state === 'failing') prClasses.push('failing');
+      else if(pr.checks === 'running') prClasses.push('running');
+      else prClasses.push('blocked');
+
+      const mergeBtnCls = pr.merged ? 'mergebtn merged' : (v.state === 'ready' ? 'mergebtn enabled' : 'mergebtn');
+      const mergeBtnLabel = pr.merged ? 'merged ✓' : 'merge';
+      const mergeBtnAttr = (v.state === 'ready' && !pr.merged) ? `onclick="mergePR(${pr.id})"` : 'disabled';
+
+      return `
+      <div class="${prClasses.join(' ')}">
+        <div class="prtop">
+          <span class="prnum">#${pr.id}</span>
+          <span class="prtitle">${pr.title}</span>
+          <span class="author ${pr.author}">${pr.author === 'agent' ? 'AGENT' : 'HUMAN'}</span>
+        </div>
+        <div class="prmeta">
+          ${chip('CI checks', pr.checks)}
+          ${chip('secret scan', pr.secretScan)}
+          ${chip('stack rebase', pr.conflicts)}
+        </div>
+        <div class="prfoot">
+          <span class="verdict ${v.state}">${v.label}</span>
+          <button class="${mergeBtnCls}" ${mergeBtnAttr}>${mergeBtnLabel}</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('statOpen').textContent = stack.filter(p=>!p.merged).length;
+    document.getElementById('statMerged').textContent = stack.filter(p=>p.merged).length;
+    document.getElementById('statBlocked').textContent = stack.filter(p=>!p.merged && verdictFor(p).state !== 'ready').length;
+    document.getElementById('statReady').textContent = stack.filter(p=>!p.merged && verdictFor(p).state === 'ready').length;
+    document.getElementById('ticker').textContent = 'committed today: ' + committedToday.toLocaleString();
+
+    const anyIdle = stack.some(p => !p.merged && p.checks === 'idle');
+    document.getElementById('runAllBtn').disabled = !anyIdle;
+    document.getElementById('runAllBtn').textContent = anyIdle ? 'Run checks on stack' : 'Checks up to date';
+  }
+
+  function runOne(pr){
+    if(pr.merged || pr.checks === 'running') return;
+    pr.checks = 'running'; pr.secretScan = 'running'; pr.conflicts = 'running';
+    render();
+    setTimeout(() => {
+      const roll = Math.random();
+      pr.checks = roll < pr.seed ? 'pass' : 'fail';
+      // PR #3 is scripted to demonstrate the secret scan catching something real
+      if(pr.id === 3){
+        pr.secretScan = 'fail';
+      } else {
+        pr.secretScan = Math.random() < 0.97 ? 'pass' : 'fail';
+      }
+      pr.conflicts = belowAllMerged(pr) || Math.random() < 0.9 ? 'clear' : 'conflict';
+      render();
+    }, 700 + pr.id * 220);
+  }
+
+  function runAll(){
+    stack.forEach(pr => { if(!pr.merged && pr.checks === 'idle') runOne(pr); });
+  }
+
+  function mergePR(id){
+    const pr = stack.find(p => p.id === id);
+    if(!pr) return;
+    const v = verdictFor(pr);
+    if(v.state !== 'ready') return;
+    pr.merged = true;
+    committedToday += Math.floor(20 + Math.random()*60);
+    render();
+  }
+
+  let committedToday = 214893;
+  window.runAll = runAll;
+  window.resetStack = resetStack;
+  window.mergePR = mergePR;
+
+  resetStack();
+
+  // ambient ticker to sell "hundreds of billions of commits" scale without any network calls
+  setInterval(() => {
+    committedToday += Math.floor(Math.random()*4);
+    document.getElementById('ticker').textContent = 'committed today: ' + committedToday.toLocaleString();
+  }, 1400);
+})();
+</script>
+
+</body>
+</html>
