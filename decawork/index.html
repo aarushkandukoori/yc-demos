@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fleet Deck — Agent Governance Sandbox</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#151b23;
+    --panel2:#1b232d;
+    --border:#293341;
+    --text:#e6edf3;
+    --muted:#8b98a5;
+    --accent:#4fd1c5;
+    --accent2:#7c9aff;
+    --warn:#f2b950;
+    --bad:#f2555a;
+    --good:#4fd18c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #16202b 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 36px 18px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:0.2px;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:680px;
+    line-height:1.5;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:320px 1fr 320px;
+    gap:1px;
+    background:var(--border);
+  }
+  @media (max-width: 1000px){
+    main{grid-template-columns:1fr;}
+  }
+  section{
+    background:var(--bg);
+    padding:20px;
+  }
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--border);
+    border-bottom:1px solid var(--border);
+  }
+  .stat{
+    background:var(--panel);
+    padding:14px 18px;
+  }
+  .stat .n{font-size:24px;font-weight:700;}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
+  h2{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0 0 14px;
+  }
+  .agent-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:12px;
+    cursor:pointer;
+    transition:border-color .15s;
+  }
+  .agent-card:hover{border-color:var(--accent2);}
+  .agent-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .agent-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:8px;
+  }
+  .agent-name{font-weight:600;font-size:14px;}
+  .agent-purpose{color:var(--muted);font-size:12px;margin-top:2px;}
+  .badge{
+    font-size:10px;
+    padding:3px 8px;
+    border-radius:20px;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    white-space:nowrap;
+    font-weight:600;
+  }
+  .badge.active{background:rgba(79,209,140,0.15);color:var(--good);}
+  .badge.pending{background:rgba(242,185,80,0.15);color:var(--warn);}
+  .badge.flagged{background:rgba(242,85,90,0.15);color:var(--bad);}
+  .badge.retired{background:rgba(139,152,165,0.15);color:var(--muted);}
+  .scopes{
+    display:flex;
+    flex-wrap:wrap;
+    gap:5px;
+    margin-top:10px;
+  }
+  .scope-pill{
+    font-size:10px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    padding:3px 7px;
+    border-radius:6px;
+    color:var(--accent2);
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .agent-meta{
+    margin-top:10px;
+    font-size:11px;
+    color:var(--muted);
+    display:flex;
+    justify-content:space-between;
+  }
+  .retire-btn{
+    margin-top:10px;
+    width:100%;
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--muted);
+    font-size:11px;
+    padding:6px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .retire-btn:hover{border-color:var(--bad);color:var(--bad);}
+  .run-controls{
+    display:flex;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  button.primary{
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#04141a;
+    border:none;
+    font-weight:700;
+    font-size:13px;
+    padding:10px 16px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  button.primary:disabled{opacity:0.4;cursor:not-allowed;}
+  button.ghost{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text);
+    font-size:13px;
+    padding:10px 14px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  #log{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    max-height:560px;
+    overflow-y:auto;
+    padding-right:4px;
+  }
+  .log-empty{color:var(--muted);font-size:13px;padding:20px 0;}
+  .step{
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 12px;
+    background:var(--panel);
+    font-size:12.5px;
+    animation:slidein .25s ease;
+  }
+  @keyframes slidein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .step .row1{display:flex;justify-content:space-between;gap:10px;align-items:center;}
+  .step .action{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text);}
+  .tag{font-size:10px;padding:2px 7px;border-radius:20px;text-transform:uppercase;font-weight:700;letter-spacing:0.04em;}
+  .tag.allowed{background:rgba(79,209,140,0.15);color:var(--good);}
+  .tag.blocked{background:rgba(242,85,90,0.15);color:var(--bad);}
+  .tag.review{background:rgba(242,185,80,0.15);color:var(--warn);}
+  .tag.approved{background:rgba(79,209,140,0.15);color:var(--good);}
+  .tag.denied{background:rgba(242,85,90,0.15);color:var(--bad);}
+  .step .why{color:var(--muted);margin-top:4px;}
+  .approve-row{
+    margin-top:8px;
+    display:flex;
+    gap:8px;
+  }
+  .approve-row button{
+    flex:1;
+    font-size:12px;
+    padding:7px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    cursor:pointer;
+    font-weight:600;
+  }
+  .approve-row .approve{background:rgba(79,209,140,0.12);color:var(--good);border-color:rgba(79,209,140,0.4);}
+  .approve-row .deny{background:rgba(242,85,90,0.12);color:var(--bad);border-color:rgba(242,85,90,0.4);}
+  #audit{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    max-height:640px;
+    overflow-y:auto;
+  }
+  .audit-row{
+    font-size:11.5px;
+    padding:8px 10px;
+    border-radius:6px;
+    background:var(--panel);
+    border-left:3px solid var(--border);
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+  }
+  .audit-row.allowed{border-left-color:var(--good);}
+  .audit-row.blocked{border-left-color:var(--bad);}
+  .audit-row.approved{border-left-color:var(--good);}
+  .audit-row.denied{border-left-color:var(--bad);}
+  .audit-time{color:var(--muted);white-space:nowrap;}
+  footer{
+    border-top:1px solid var(--border);
+    padding:16px 36px;
+    color:var(--muted);
+    font-size:12px;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fleet Deck <span>/</span> agent governance sandbox</h1>
+  <p>A toy control plane for internal AI agents. Every agent runs with a scoped credential set. Actions inside scope go straight through; actions that touch something sensitive stop and wait for a human sign-off before the agent is allowed to continue. Nothing here calls a real system — pick an agent and hit run.</p>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<main>
+  <section>
+    <h2>Registered agents</h2>
+    <div id="agentList"></div>
+  </section>
+
+  <section>
+    <h2>Run simulator</h2>
+    <div class="run-controls">
+      <button class="primary" id="runBtn">Run selected agent</button>
+      <button class="ghost" id="clearBtn">Clear log</button>
+    </div>
+    <div id="log"><div class="log-empty">Select an agent on the left, then hit "Run selected agent" to watch its actions get checked against its scope in real time.</div></div>
+  </section>
+
+  <section>
+    <h2>Org-wide audit trail</h2>
+    <div id="audit"><div class="log-empty">Actions across every agent land here, most recent first.</div></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Decawork (YC S26). Not affiliated with Decawork.</footer>
+
+<script>
+(function(){
+
+  // ---- synthetic fleet ----
+  const agents = [
+    {
+      id: 'a1', name: 'Invoice Reconciler', purpose: 'Matches vendor invoices to POs in the ERP',
+      status: 'active', scopes: ['read:erp', 'write:finance-notes'], lastRun: '2h ago', failStreak: 0,
+      script: [
+        {action:'read erp.invoices.list(status=open)', scope:'read:erp', kind:'in-scope', why:'Within read:erp — auto-approved.'},
+        {action:'write finance-notes.append(note="3 invoices flagged")', scope:'write:finance-notes', kind:'in-scope', why:'Within write:finance-notes — auto-approved.'},
+        {action:'write erp.payments.issue(amount=$18,400)', scope:'write:payments', kind:'sensitive', why:'Payment issuance is outside this agent\'s granted scope — needs a human sign-off.'},
+        {action:'read slack.channel("#finance").post_summary()', scope:'write:slack', kind:'blocked', why:'No slack scope on this identity — request denied automatically, no human needed.'}
+      ]
+    },
+    {
+      id: 'a2', name: 'Onboarding Concierge', purpose: 'Provisions accounts for new hires on day one',
+      status: 'active', scopes: ['read:hris', 'write:okta-groups'], lastRun: '19m ago', failStreak: 0,
+      script: [
+        {action:'read hris.newHires(startDate=today)', scope:'read:hris', kind:'in-scope', why:'Within read:hris — auto-approved.'},
+        {action:'write okta.groups.add(user="j.reyes", group="eng-base")', scope:'write:okta-groups', kind:'in-scope', why:'Base group add is pre-approved for this scope.'},
+        {action:'write okta.groups.add(user="j.reyes", group="prod-admin")', scope:'write:okta-groups', kind:'sensitive', why:'Requesting an elevated/admin group — flagged for review even though the scope technically covers group writes.'}
+      ]
+    },
+    {
+      id: 'a3', name: 'Support Ticket Triage', purpose: 'Labels and routes inbound Zendesk tickets',
+      status: 'pending', scopes: ['read:zendesk', 'write:zendesk-labels'], lastRun: 'never', failStreak: 0,
+      script: [
+        {action:'read zendesk.tickets.new()', scope:'read:zendesk', kind:'in-scope', why:'Within read:zendesk — auto-approved.'},
+        {action:'write zendesk.ticket.label(id=8841, label="billing")', scope:'write:zendesk-labels', kind:'in-scope', why:'Labeling is pre-approved for this scope.'},
+        {action:'write zendesk.ticket.refund(id=8841, amount=$120)', scope:'write:refunds', kind:'blocked', why:'This identity was never granted write:refunds — blocked before it reaches Zendesk.'}
+      ]
+    },
+    {
+      id: 'a4', name: 'Legacy Report Bot', purpose: 'Nightly SQL export nobody remembers requesting',
+      status: 'flagged', scopes: ['read:warehouse'], lastRun: '41 days ago', failStreak: 3,
+      script: [
+        {action:'read warehouse.query(sql="SELECT * FROM orders")', scope:'read:warehouse', kind:'in-scope', why:'Within read:warehouse — auto-approved.'},
+        {action:'connect warehouse.export(destination=unknown_ftp)', scope:'write:external-export', kind:'blocked', why:'Unrecognized destination and no export scope — blocked and flagged for retirement review.'}
+      ]
+    }
+  ];
+
+  let selectedId = agents[0].id;
+  let auditEvents = [];
+  let running = false;
+
+  const agentListEl = document.getElementById('agentList');
+  const logEl = document.getElementById('log');
+  const auditEl = document.getElementById('audit');
+  const statsEl = document.getElementById('stats');
+  const runBtn = document.getElementById('runBtn');
+
+  function fmtTime(){
+    const d = new Date();
+    return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
+  function renderStats(){
+    const active = agents.filter(a=>a.status==='active').length;
+    const pending = agents.filter(a=>a.status==='pending').length;
+    const blocked = auditEvents.filter(e=>e.kind==='blocked'||e.kind==='denied').length;
+    statsEl.innerHTML = `
+      <div class="stat"><div class="n">${active}</div><div class="l">Active agents</div></div>
+      <div class="stat"><div class="n">${pending}</div><div class="l">Awaiting approval</div></div>
+      <div class="stat"><div class="n">${blocked}</div><div class="l">Actions stopped today</div></div>
+    `;
+  }
+
+  function renderAgents(){
+    agentListEl.innerHTML = '';
+    agents.forEach(a => {
+      const card = document.createElement('div');
+      card.className = 'agent-card' + (a.id===selectedId ? ' selected' : '');
+      card.innerHTML = `
+        <div class="agent-top">
+          <div>
+            <div class="agent-name">${a.name}</div>
+            <div class="agent-purpose">${a.purpose}</div>
+          </div>
+          <span class="badge ${a.status}">${a.status}</span>
+        </div>
+        <div class="scopes">${a.scopes.map(s=>`<span class="scope-pill">${s}</span>`).join('')}</div>
+        <div class="agent-meta"><span>Last run: ${a.lastRun}</span><span>${a.failStreak>0 ? a.failStreak+' fail streak' : ''}</span></div>
+        ${a.status==='flagged' ? '<button class="retire-btn" data-id="'+a.id+'">Retire this agent</button>' : ''}
+      `;
+      card.addEventListener('click', (e) => {
+        if (e.target.classList.contains('retire-btn')) return;
+        selectedId = a.id;
+        renderAgents();
+      });
+      agentListEl.appendChild(card);
+      const retireBtn = card.querySelector('.retire-btn');
+      if (retireBtn){
+        retireBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          a.status = 'retired';
+          pushAudit({agent:a.name, action:'identity.revoke() — retired by IT', kind:'blocked'});
+          renderAgents();
+          renderStats();
+        });
+      }
+    });
+  }
+
+  function pushAudit(evt){
+    evt.time = fmtTime();
+    auditEvents.unshift(evt);
+    auditEvents = auditEvents.slice(0, 40);
+    auditEl.innerHTML = auditEvents.map(e => `
+      <div class="audit-row ${e.kind}">
+        <span>${e.agent}: ${e.action}</span>
+        <span class="audit-time">${e.time}</span>
+      </div>
+    `).join('');
+    renderStats();
+  }
+
+  function addLogStep(html){
+    const empty = logEl.querySelector('.log-empty');
+    if (empty) empty.remove();
+    const div = document.createElement('div');
+    div.className = 'step';
+    div.innerHTML = html;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+    return div;
+  }
+
+  function tagFor(kind){
+    if (kind==='in-scope') return '<span class="tag allowed">allowed</span>';
+    if (kind==='blocked') return '<span class="tag blocked">blocked</span>';
+    if (kind==='sensitive') return '<span class="tag review">needs approval</span>';
+    return '';
+  }
+
+  function runAgent(agent){
+    running = true;
+    runBtn.disabled = true;
+    let i = 0;
+
+    function next(){
+      if (i >= agent.script.length){
+        running = false;
+        runBtn.disabled = false;
+        agent.lastRun = 'just now';
+        renderAgents();
+        return;
+      }
+      const step = agent.script[i];
+      i++;
+
+      const stepEl = addLogStep(`
+        <div class="row1">
+          <span class="action">${step.action}</span>
+          ${tagFor(step.kind)}
+        </div>
+        <div class="why">${step.why}</div>
+      `);
+
+      if (step.kind === 'in-scope'){
+        pushAudit({agent: agent.name, action: step.action, kind: 'allowed'});
+        setTimeout(next, 450);
+      } else if (step.kind === 'blocked'){
+        pushAudit({agent: agent.name, action: step.action, kind: 'blocked'});
+        setTimeout(next, 450);
+      } else if (step.kind === 'sensitive'){
+        const rowEl = document.createElement('div');
+        rowEl.className = 'approve-row';
+        rowEl.innerHTML = `<button class="approve">Approve</button><button class="deny">Deny</button>`;
+        stepEl.appendChild(rowEl);
+
+        rowEl.querySelector('.approve').addEventListener('click', () => {
+          rowEl.remove();
+          const badge = document.createElement('div');
+          badge.innerHTML = '<span class="tag approved">approved by IT</span>';
+          stepEl.appendChild(badge);
+          pushAudit({agent: agent.name, action: step.action, kind: 'approved'});
+          next();
+        });
+        rowEl.querySelector('.deny').addEventListener('click', () => {
+          rowEl.remove();
+          const badge = document.createElement('div');
+          badge.innerHTML = '<span class="tag denied">denied by IT</span>';
+          stepEl.appendChild(badge);
+          pushAudit({agent: agent.name, action: step.action, kind: 'denied'});
+          agent.failStreak += 1;
+          next();
+        });
+      }
+    }
+    next();
+  }
+
+  runBtn.addEventListener('click', () => {
+    if (running) return;
+    const agent = agents.find(a => a.id === selectedId);
+    if (!agent || agent.status === 'retired') return;
+    runAgent(agent);
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    logEl.innerHTML = '<div class="log-empty">Select an agent on the left, then hit "Run selected agent" to watch its actions get checked against its scope in real time.</div>';
+  });
+
+  renderAgents();
+  renderStats();
+})();
+</script>
+
+</body>
+</html>
