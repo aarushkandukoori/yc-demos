@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trailmark — Agent Trust Trace</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --panel-2: #171b24;
+    --border: #232833;
+    --text: #e7e9ee;
+    --muted: #8a92a3;
+    --accent: #5eead4;
+    --accent-dim: #1d3b36;
+    --warn: #f5b942;
+    --warn-dim: #3a2f13;
+    --bad: #f0665e;
+    --bad-dim: #3a1a17;
+    --good: #6ee7a0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #16202a 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 36px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 640px;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    min-height: 0;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .transcript-panel {
+    padding: 24px 32px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  select, button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button.primary {
+    background: var(--accent);
+    color: #06231d;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  .turn {
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    position: relative;
+    transition: border-color .2s, background .2s;
+    cursor: pointer;
+  }
+  .turn .role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .turn.user { background: var(--panel); }
+  .turn.agent { background: var(--panel-2); }
+  .turn .text { font-size: 14px; line-height: 1.5; }
+  .turn .signal-tag {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .turn.flag-friction { border-color: var(--warn); }
+  .turn.flag-friction .signal-tag { background: var(--warn-dim); color: var(--warn); }
+  .turn.flag-breakdown { border-color: var(--bad); }
+  .turn.flag-breakdown .signal-tag { background: var(--bad-dim); color: var(--bad); }
+  .turn.flag-recovery { border-color: var(--good); }
+  .turn.flag-recovery .signal-tag { background: rgba(110,231,160,0.12); color: var(--good); }
+  .turn.highlighted { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .side-panel {
+    padding: 24px 24px 40px;
+    overflow-y: auto;
+    background: var(--panel);
+  }
+  .side-panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  .empty-state {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 20px 0;
+  }
+  .issue-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: transform .15s, border-color .15s;
+  }
+  .issue-card:hover { transform: translateY(-1px); border-color: #384056; }
+  .issue-card .rank-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .issue-card .rank {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--bg);
+    background: var(--accent);
+    border-radius: 6px;
+    padding: 2px 7px;
+  }
+  .issue-card .severity {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .sev-high { background: var(--bad-dim); color: var(--bad); }
+  .sev-med { background: var(--warn-dim); color: var(--warn); }
+  .issue-card h3 {
+    font-size: 14px;
+    margin: 0 0 6px;
+  }
+  .issue-card p {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 0 0 8px;
+    line-height: 1.5;
+  }
+  .issue-card .meta {
+    font-size: 11px;
+    color: #5f6779;
+    display: flex;
+    justify-content: space-between;
+  }
+  .issue-card .repro {
+    margin-top: 8px;
+    font-size: 11px;
+    font-family: "SF Mono", Menlo, monospace;
+    background: #0e1015;
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #9aa4b8;
+    display: none;
+  }
+  .issue-card.expanded .repro { display: block; }
+
+  .score-bar {
+    margin-bottom: 22px;
+  }
+  .score-bar .label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .score-track {
+    height: 8px;
+    border-radius: 999px;
+    background: #1b1f28;
+    overflow: hidden;
+  }
+  .score-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--good), var(--warn), var(--bad));
+    width: 0%;
+    transition: width 1s ease;
+  }
+
+  footer {
+    text-align: center;
+    padding: 14px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  .analyzing {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent);
+    font-size: 13px;
+    padding: 10px 0;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1s infinite ease-in-out;
+  }
+  .dot:nth-child(2) { animation-delay: .15s; }
+  .dot:nth-child(3) { animation-delay: .3s; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Trail<span>mark</span></h1>
+  <p>Point this at a transcript between a user and an AI agent. It traces where user trust actually breaks — not where the agent's tool calls technically succeeded — and turns each break into a ranked, reproducible issue.</p>
+</header>
+
+<main>
+  <section class="transcript-panel">
+    <div class="controls">
+      <select id="scenario-select">
+        <option value="refund">Scenario: Refund agent stalls on a policy exception</option>
+        <option value="onboarding">Scenario: Onboarding copilot buries a blocking step</option>
+        <option value="scheduling">Scenario: Scheduling agent double-books silently</option>
+      </select>
+      <button class="primary" id="run-btn">Trace this transcript</button>
+      <button id="reset-btn" disabled>Reset</button>
+    </div>
+    <div id="transcript"></div>
+  </section>
+
+  <section class="side-panel">
+    <div class="score-bar">
+      <div class="label"><span>Trust trajectory</span><span id="score-label">—</span></div>
+      <div class="score-track"><div class="score-fill" id="score-fill"></div></div>
+    </div>
+    <h2 id="side-title">Ranked issues</h2>
+    <div id="side-content">
+      <div class="empty-state">Pick a scenario and click "Trace this transcript." Trailmark replays the conversation turn by turn, scores user trust after every agent action, and clusters the drops into reproducible issues — click any turn or issue to see how they connect.</div>
+    </div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Buildbox (YC S26). Not affiliated with Buildbox.</footer>
+
+<script>
+const SCENARIOS = {
+  refund: {
+    name: "Refund agent stalls on a policy exception",
+    turns: [
+      { role: "user", text: "My order #48213 arrived damaged. I'd like a refund." , trust: 0},
+      { role: "agent", text: "I found order #48213. I can process a refund of $86.40 to your original payment method. Confirm?", trust: 4 },
+      { role: "user", text: "Yes, please confirm.", trust: 4 },
+      { role: "agent", text: "Refund initiated. It should reflect in 5-7 business days.", trust: 6 },
+      { role: "user", text: "Wait, it's been 9 days and I still don't see it. What's going on?", trust: 2, signal: "friction", tag: "Follow-up ignored initial promise" },
+      { role: "agent", text: "I can see the refund was initiated on the 4th. It is within the standard processing window.", trust: -3, signal: "breakdown", tag: "Agent restates policy instead of resolving discrepancy" },
+      { role: "user", text: "You just told me 5-7 days, it's day 9. Is this actually going to happen or not?", trust: -6, signal: "breakdown", tag: "User trust drops sharply — same claim repeated without new info" },
+      { role: "agent", text: "I understand the frustration. Refunds outside the window require escalation to a specialist, which I can start for you.", trust: -3, signal: "recovery", tag: "Agent finally offers a concrete next step" },
+      { role: "user", text: "Fine, escalate it. This should have happened three messages ago.", trust: -5 }
+    ]
+  },
+  onboarding: {
+    name: "Onboarding copilot buries a blocking step",
+    turns: [
+      { role: "user", text: "Help me get my team workspace set up.", trust: 0 },
+      { role: "agent", text: "Sure — I've created your workspace 'Acme Team' and invited no members yet. You can start adding integrations.", trust: 3 },
+      { role: "user", text: "Great, let's connect our GitHub org.", trust: 3 },
+      { role: "agent", text: "GitHub connection requires admin approval on your org's side first. I've sent a request — once approved, I'll finish the connection automatically.", trust: 4 },
+      { role: "user", text: "Okay, connect Slack in the meantime.", trust: 4 },
+      { role: "agent", text: "Slack connected successfully.", trust: 5 },
+      { role: "user", text: "Has GitHub been approved yet? I approved it on my end an hour ago.", trust: 2, signal: "friction", tag: "User expects async step to have resolved" },
+      { role: "agent", text: "GitHub connection requires admin approval on your org's side first. I've sent a request.", trust: -4, signal: "breakdown", tag: "Agent repeats stale status, doesn't re-check current state" },
+      { role: "user", text: "I just said I approved it. Are you actually checking, or just repeating yourself?", trust: -7, signal: "breakdown", tag: "User explicitly flags the agent isn't updating its own state" },
+      { role: "agent", text: "You're right to push on that — let me re-check the approval status now. It's confirmed approved; finishing the connection.", trust: -2, signal: "recovery", tag: "Agent re-checks and resolves once challenged directly" },
+      { role: "user", text: "Good, but it shouldn't take three messages to get you to look again.", trust: -4 }
+    ]
+  },
+  scheduling: {
+    name: "Scheduling agent double-books silently",
+    turns: [
+      { role: "user", text: "Book a 2pm call with the Meridian team on Thursday.", trust: 0 },
+      { role: "agent", text: "Booked: Meridian sync, Thursday 2:00-2:30pm. Invite sent to 4 attendees.", trust: 4 },
+      { role: "user", text: "Perfect, also move my 1:1 with Dana to 3pm same day.", trust: 4 },
+      { role: "agent", text: "Done — Dana 1:1 moved to Thursday 3:00-3:30pm.", trust: 5 },
+      { role: "user", text: "Wait, Dana just messaged saying she has two invites for 3pm now. Did you double-book her?", trust: 1, signal: "friction", tag: "User surfaces a conflict the agent didn't flag" },
+      { role: "agent", text: "The 1:1 was moved to 3:00pm as requested. I don't see a conflict on my end.", trust: -5, signal: "breakdown", tag: "Agent denies a conflict the user is directly reporting" },
+      { role: "user", text: "She's sending me a screenshot right now with two events. Please actually look.", trust: -8, signal: "breakdown", tag: "User has to prove the failure the agent should have caught" },
+      { role: "agent", text: "Checking Dana's calendar directly — confirmed, there's a leftover hold from the original 1:1 time that didn't clear. Removing it now.", trust: -3, signal: "recovery", tag: "Root cause found only after user forced a direct check" },
+      { role: "user", text: "Thanks, but I shouldn't be the one debugging your calendar sync.", trust: -6 }
+    ]
+  }
+};
+
+const transcriptEl = document.getElementById('transcript');
+const sideContent = document.getElementById('side-content');
+const sideTitle = document.getElementById('side-title');
+const scoreFill = document.getElementById('score-fill');
+const scoreLabel = document.getElementById('score-label');
+const runBtn = document.getElementById('run-btn');
+const resetBtn = document.getElementById('reset-btn');
+const scenarioSelect = document.getElementById('scenario-select');
+
+let currentIssues = [];
+
+function clearTranscript() {
+  transcriptEl.innerHTML = '';
+}
+
+function trustToScorePct(trust) {
+  // trust ranges roughly -10..10 -> map to 0..100 (100 = trust intact)
+  const clamped = Math.max(-10, Math.min(10, trust));
+  return ((clamped + 10) / 20) * 100;
+}
+
+function renderEmptyState() {
+  sideContent.innerHTML = '<div class="empty-state">Pick a scenario and click "Trace this transcript." Trailmark replays the conversation turn by turn, scores user trust after every agent action, and clusters the drops into reproducible issues — click any turn or issue to see how they connect.</div>';
+  sideTitle.textContent = 'Ranked issues';
+  scoreFill.style.width = '0%';
+  scoreLabel.textContent = '—';
+}
+
+function deriveIssues(scenario) {
+  // Cluster consecutive breakdown/friction signals into issues, ranked by trust delta
+  const issues = [];
+  scenario.turns.forEach((turn, i) => {
+    if (turn.signal === 'breakdown') {
+      const prevTrust = i > 0 ? scenario.turns[i - 1].trust : 0;
+      const delta = prevTrust - turn.trust;
+      issues.push({
+        turnIndex: i,
+        title: turn.tag,
+        severity: delta >= 6 ? 'high' : 'med',
+        delta: delta,
+        quote: turn.text,
+        userAsk: scenario.turns[i - 1] ? scenario.turns[i - 1].text : '',
+      });
+    }
+  });
+  issues.sort((a, b) => b.delta - a.delta);
+  return issues.map((issue, idx) => ({ ...issue, rank: idx + 1 }));
+}
+
+function renderTranscript(scenario) {
+  clearTranscript();
+  scenario.turns.forEach((turn, i) => {
+    const div = document.createElement('div');
+    div.className = 'turn ' + turn.role + (turn.signal ? ' flag-' + turn.signal : '');
+    div.dataset.index = i;
+    let tagHtml = '';
+    if (turn.signal) {
+      const label = turn.signal === 'friction' ? 'Friction detected' : turn.signal === 'breakdown' ? 'Trust breakdown' : 'Recovery';
+      tagHtml = `<span class="signal-tag">${label}</span>`;
+    }
+    div.innerHTML = `<div class="role">${turn.role}</div><div class="text">${turn.text}</div>${tagHtml}`;
+    div.addEventListener('click', () => highlightTurn(i));
+    transcriptEl.appendChild(div);
+  });
+}
+
+function highlightTurn(index) {
+  document.querySelectorAll('.turn').forEach(t => t.classList.remove('highlighted'));
+  const el = transcriptEl.querySelector(`[data-index="${index}"]`);
+  if (el) {
+    el.classList.add('highlighted');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function renderIssues(issues) {
+  sideTitle.textContent = `Ranked issues (${issues.length})`;
+  if (issues.length === 0) {
+    sideContent.innerHTML = '<div class="empty-state">No trust breakdowns detected in this transcript.</div>';
+    return;
+  }
+  sideContent.innerHTML = '';
+  issues.forEach(issue => {
+    const card = document.createElement('div');
+    card.className = 'issue-card';
+    card.innerHTML = `
+      <div class="rank-row">
+        <span class="rank">#${issue.rank}</span>
+        <span class="severity sev-${issue.severity}">${issue.severity === 'high' ? 'High severity' : 'Medium severity'}</span>
+      </div>
+      <h3>${issue.title}</h3>
+      <p>Trust dropped ${issue.delta} pts right after this agent turn.</p>
+      <div class="meta"><span>Turn ${issue.turnIndex + 1}</span><span>Δ trust: ${issue.delta > 0 ? '-' : ''}${Math.abs(issue.delta)}</span></div>
+      <div class="repro">User: "${issue.userAsk}"<br><br>Agent: "${issue.quote}"<br><br>Reproduces whenever the agent re-asserts a prior claim without re-checking current state.</div>
+    `;
+    card.addEventListener('click', () => {
+      card.classList.toggle('expanded');
+      highlightTurn(issue.turnIndex);
+    });
+    sideContent.appendChild(card);
+  });
+}
+
+function animateScore(scenario) {
+  const finalTrust = scenario.turns[scenario.turns.length - 1].trust;
+  const pct = trustToScorePct(finalTrust);
+  requestAnimationFrame(() => {
+    scoreFill.style.width = pct + '%';
+  });
+  const label = finalTrust <= -3 ? 'Degraded' : finalTrust >= 3 ? 'Healthy' : 'Mixed';
+  scoreLabel.textContent = `${label} (${finalTrust > 0 ? '+' : ''}${finalTrust})`;
+}
+
+function runTrace() {
+  const key = scenarioSelect.value;
+  const scenario = SCENARIOS[key];
+  runBtn.disabled = true;
+  scenarioSelect.disabled = true;
+  resetBtn.disabled = true;
+  renderTranscript(scenario);
+  sideContent.innerHTML = '<div class="analyzing">Tracing trust trajectory<span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+  sideTitle.textContent = 'Analyzing…';
+  scoreFill.style.width = '0%';
+  scoreLabel.textContent = '…';
+
+  const turnEls = transcriptEl.querySelectorAll('.turn');
+  turnEls.forEach(el => el.style.opacity = '0');
+
+  let i = 0;
+  function revealNext() {
+    if (i >= turnEls.length) {
+      currentIssues = deriveIssues(scenario);
+      renderIssues(currentIssues);
+      animateScore(scenario);
+      resetBtn.disabled = false;
+      return;
+    }
+    turnEls[i].style.transition = 'opacity .25s';
+    turnEls[i].style.opacity = '1';
+    i++;
+    setTimeout(revealNext, 220);
+  }
+  setTimeout(revealNext, 200);
+}
+
+function resetDemo() {
+  clearTranscript();
+  renderEmptyState();
+  runBtn.disabled = false;
+  scenarioSelect.disabled = false;
+  resetBtn.disabled = true;
+  currentIssues = [];
+}
+
+runBtn.addEventListener('click', runTrace);
+resetBtn.addEventListener('click', resetDemo);
+</script>
+
+</body>
+</html>

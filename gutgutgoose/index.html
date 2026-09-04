@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Niche Sim — a toy gut-colonization simulator</title>
+<style>
+  :root {
+    --bg: #0f1410;
+    --panel: #161d18;
+    --panel-2: #1c2420;
+    --line: #2a352d;
+    --text: #e9efe8;
+    --muted: #8fa093;
+    --accent: #6ee7a0;
+    --accent-2: #f5c469;
+    --bad: #ef7b6b;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #1a2420 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 20px 60px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 34px; }
+  header h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    color: var(--muted);
+    max-width: 620px;
+    margin: 0 auto;
+    line-height: 1.5;
+    font-size: 14.5px;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid #2e5a41;
+    background: #12251a;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  .sample-btn {
+    width: 100%;
+    text-align: left;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    font-size: 13.5px;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .sample-btn:hover { border-color: var(--accent); }
+  .sample-btn.active { border-color: var(--accent); background: #16281d; }
+  .sample-btn small { display: block; color: var(--muted); margin-top: 3px; font-size: 11.5px; }
+  .divider { border-top: 1px solid var(--line); margin: 18px 0; }
+  .strain-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--line);
+    font-size: 13px;
+  }
+  .strain-row:last-child { border-bottom: none; }
+  .strain-name { font-weight: 600; }
+  .strain-niche { color: var(--muted); font-size: 11.5px; }
+  .pill {
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+  }
+  .pill.open { background: #163a26; color: var(--accent); }
+  .pill.closed { background: #3a1f1c; color: var(--bad); }
+  #runBtn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 13px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #0b1a10;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #runBtn:disabled { opacity: 0.5; cursor: default; }
+  #runBtn:hover:not(:disabled) { filter: brightness(1.08); }
+  .pathways {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .pw {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .pw .label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .bar-track {
+    height: 6px;
+    background: #2a352d;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar-fill { height: 100%; border-radius: 999px; background: var(--accent-2); }
+  .pw .val { font-size: 11px; color: var(--muted); margin-top: 5px; }
+  #results { min-height: 40px; }
+  .result-card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    background: var(--panel-2);
+    animation: fadein 0.35s ease;
+  }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .result-card.formulated { border-color: #2e5a41; }
+  .result-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .result-top .name { font-weight: 700; font-size: 14.5px; }
+  .result-top .score { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .verdict { font-size: 12px; line-height: 1.5; color: var(--muted); }
+  .verdict b { color: var(--text); }
+  .empty-hint {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 30px 10px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+  }
+  .bottle-summary {
+    margin-top: 18px;
+    padding: 16px;
+    border-radius: 8px;
+    background: #12251a;
+    border: 1px solid #2e5a41;
+  }
+  .bottle-summary h3 { margin: 0 0 8px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+  .bottle-summary .strains { font-size: 14px; line-height: 1.7; }
+  .bottle-summary .strains span {
+    display: inline-block;
+    background: #163a26;
+    color: var(--accent);
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin: 2px 4px 2px 0;
+    font-size: 12px;
+  }
+  footer {
+    text-align: center;
+    margin-top: 44px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge">toy simulation · synthetic data</div>
+    <h1>Niche Sim</h1>
+    <p>Pick a synthetic gut sample, then run 8 candidate probiotic strains against its metabolic model. Each strain only "takes" if it finds an open niche — an unused resource lane the resident microbes aren't already saturating.</p>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>1. Choose a gut sample</h2>
+      <button class="sample-btn" data-id="a">
+        Sample A — Low fiber diet
+        <small>Depleted fermentation capacity, high pH variance</small>
+      </button>
+      <button class="sample-btn" data-id="b">
+        Sample B — Post-antibiotic
+        <small>Wide open niches, low competitor density</small>
+      </button>
+      <button class="sample-btn" data-id="c">
+        Sample C — High diversity baseline
+        <small>Most lanes already saturated by residents</small>
+      </button>
+
+      <div class="divider"></div>
+      <h2>2. Sample's active pathways</h2>
+      <div class="pathways" id="pathways"></div>
+
+      <button id="runBtn" disabled>Run colonization simulation</button>
+    </div>
+
+    <div class="panel">
+      <h2>3. Per-strain niche results</h2>
+      <div id="results"><div class="empty-hint">Select a sample on the left to see its resident strains, then run the simulation.</div></div>
+      <div id="bottleWrap"></div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Gutgutgoose (YC S26). Not affiliated with Gutgutgoose.
+  </footer>
+</div>
+
+<script>
+(function () {
+  // ---- synthetic data ----
+  var PATHWAYS = ["SCFA synthesis", "Bile acid metab.", "Mucin degradation", "Amino acid ferm.", "Vitamin K synth.", "Lactate cross-feed"];
+
+  var SAMPLES = {
+    a: {
+      label: "Low fiber diet",
+      pathwayActivity: [0.22, 0.55, 0.30, 0.68, 0.40, 0.25],
+      residents: [
+        { name: "Bacteroides thetaiotaomicron", niche: "fiber fermentation", occupancy: 0.85 },
+        { name: "Escherichia coli", niche: "amino acid fermentation", occupancy: 0.72 },
+        { name: "Ruminococcus bromii", niche: "resistant starch", occupancy: 0.20 }
+      ]
+    },
+    b: {
+      label: "Post-antibiotic",
+      pathwayActivity: [0.15, 0.20, 0.18, 0.30, 0.10, 0.12],
+      residents: [
+        { name: "Enterococcus faecalis", niche: "opportunistic amino acid", occupancy: 0.35 },
+        { name: "Escherichia coli", niche: "amino acid fermentation", occupancy: 0.25 }
+      ]
+    },
+    c: {
+      label: "High diversity baseline",
+      pathwayActivity: [0.78, 0.82, 0.70, 0.75, 0.80, 0.77],
+      residents: [
+        { name: "Bacteroides thetaiotaomicron", niche: "fiber fermentation", occupancy: 0.90 },
+        { name: "Faecalibacterium prausnitzii", niche: "butyrate lane", occupancy: 0.88 },
+        { name: "Akkermansia muciniphila", niche: "mucin degradation", occupancy: 0.83 },
+        { name: "Ruminococcus bromii", niche: "resistant starch", occupancy: 0.80 }
+      ]
+    }
+  };
+
+  // 8 candidate strains, each with a resource niche and a base colonization strength
+  var CANDIDATES = [
+    { name: "Akkermansia muciniphila", niche: "mucin degradation", strength: 0.75 },
+    { name: "Faecalibacterium prausnitzii", niche: "butyrate lane", strength: 0.70 },
+    { name: "Bifidobacterium longum", niche: "resistant starch", strength: 0.65 },
+    { name: "Ruminococcus bromii", niche: "resistant starch", strength: 0.60 },
+    { name: "Lactobacillus plantarum", niche: "lactate cross-feed", strength: 0.68 },
+    { name: "Roseburia intestinalis", niche: "fiber fermentation", strength: 0.55 },
+    { name: "Bacteroides thetaiotaomicron", niche: "fiber fermentation", strength: 0.72 },
+    { name: "Enterococcus faecalis", niche: "opportunistic amino acid", strength: 0.40 }
+  ];
+
+  var state = { sampleId: null };
+
+  var pathwaysEl = document.getElementById("pathways");
+  var resultsEl = document.getElementById("results");
+  var bottleWrapEl = document.getElementById("bottleWrap");
+  var runBtn = document.getElementById("runBtn");
+
+  document.querySelectorAll(".sample-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".sample-btn").forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      selectSample(btn.getAttribute("data-id"));
+    });
+  });
+
+  runBtn.addEventListener("click", runSimulation);
+
+  function selectSample(id) {
+    state.sampleId = id;
+    renderPathways(SAMPLES[id]);
+    resultsEl.innerHTML = '<div class="empty-hint">Sample loaded. Click "Run colonization simulation" to test 8 candidate strains against this gut model.</div>';
+    bottleWrapEl.innerHTML = "";
+    runBtn.disabled = false;
+  }
+
+  function renderPathways(sample) {
+    pathwaysEl.innerHTML = "";
+    PATHWAYS.forEach(function (name, i) {
+      var val = sample.pathwayActivity[i];
+      var div = document.createElement("div");
+      div.className = "pw";
+      div.innerHTML =
+        '<div class="label">' + name + '</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + Math.round(val * 100) + '%"></div></div>' +
+        '<div class="val">' + Math.round(val * 100) + '% saturated</div>';
+      pathwaysEl.appendChild(div);
+    });
+  }
+
+  // core mechanic: does a candidate strain find an "open niche"?
+  // occupancy of the resident strain in the same niche (0 if no resident there)
+  // reduces the effective colonization probability. strength vs. remaining
+  // open capacity determines the verdict.
+  function simulateStrain(sample, candidate) {
+    var resident = sample.residents.find(function (r) { return r.niche === candidate.niche; });
+    var occupancy = resident ? resident.occupancy : 0.05 + Math.random() * 0.05; // near-empty niche
+    var openCapacity = 1 - occupancy;
+    var score = candidate.strength * openCapacity;
+    // deterministic-ish jitter seeded by name+sample so re-runs on same sample are stable-ish
+    var jitter = (hashCode(candidate.name + sample.label) % 10) / 100;
+    score = Math.max(0, Math.min(1, score + jitter - 0.05));
+
+    var threshold = 0.30;
+    var colonizes = score >= threshold;
+    return { candidate: candidate, resident: resident, occupancy: occupancy, score: score, colonizes: colonizes };
+  }
+
+  function hashCode(str) {
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  }
+
+  function runSimulation() {
+    var sample = SAMPLES[state.sampleId];
+    if (!sample) return;
+
+    var runs = CANDIDATES.map(function (c) { return simulateStrain(sample, c); });
+    runs.sort(function (a, b) { return b.score - a.score; });
+
+    resultsEl.innerHTML = "";
+    runs.forEach(function (r, idx) {
+      var card = document.createElement("div");
+      card.className = "result-card" + (r.colonizes ? " formulated" : "");
+      card.style.animationDelay = (idx * 40) + "ms";
+
+      var verdictText;
+      if (r.colonizes) {
+        verdictText = r.resident
+          ? '<b>Open niche found.</b> Competes with resident ' + r.resident.name + ' (' + Math.round(r.occupancy * 100) + '% occupancy) but still clears threshold. Selected for formulation.'
+          : '<b>Open niche found.</b> No strong resident competitor in this lane. Selected for formulation.';
+      } else {
+        verdictText = r.resident
+          ? '<b>Niche closed.</b> Resident ' + r.resident.name + ' already holds ' + Math.round(r.occupancy * 100) + '% of this lane — not enough room to establish. Excluded.'
+          : '<b>Niche closed.</b> Colonization strength too low for this gut model even with an open lane. Excluded.';
+      }
+
+      card.innerHTML =
+        '<div class="result-top"><span class="name">' + r.candidate.name + '</span>' +
+        '<span class="score">niche score ' + r.score.toFixed(2) + '</span></div>' +
+        '<div class="strain-niche" style="margin-bottom:6px;">targets: ' + r.candidate.niche + '</div>' +
+        '<div class="verdict">' + verdictText + '</div>' +
+        '<span class="pill ' + (r.colonizes ? "open" : "closed") + '" style="margin-top:8px;display:inline-block;">' +
+        (r.colonizes ? "colonizes" : "no niche") + '</span>';
+      resultsEl.appendChild(card);
+    });
+
+    var winners = runs.filter(function (r) { return r.colonizes; });
+    if (winners.length) {
+      var box = document.createElement("div");
+      box.className = "bottle-summary";
+      box.innerHTML =
+        '<h3>Formulated bottle — ' + winners.length + ' strain' + (winners.length > 1 ? "s" : "") + '</h3>' +
+        '<div class="strains">' +
+        winners.map(function (r) { return "<span>" + r.candidate.name + "</span>"; }).join("") +
+        '</div>';
+      bottleWrapEl.innerHTML = "";
+      bottleWrapEl.appendChild(box);
+    } else {
+      bottleWrapEl.innerHTML = '<div class="empty-hint">No candidate cleared an open niche in this gut. Nothing gets bottled.</div>';
+    }
+  }
+
+  // preselect sample b for an immediate "wow" on load
+  document.querySelector('.sample-btn[data-id="b"]').click();
+})();
+</script>
+</body>
+</html>
