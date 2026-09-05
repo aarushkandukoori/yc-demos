@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Signalcast — Taste Matching Demo</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #131722;
+    --panel2: #1a1f2e;
+    --border: #262c3d;
+    --text: #e6e9f2;
+    --muted: #8891a8;
+    --accent: #ff6b4a;
+    --accent2: #4ade80;
+    --accent3: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 800px at 20% -10%, #1a2233 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 40px 24px 20px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 0 8px;
+    font-size: 30px;
+    letter-spacing: -0.5px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0 auto;
+    max-width: 560px;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 20px 24px 60px;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+  }
+  .card h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+  }
+  .card h2 small {
+    display: block;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+    font-size: 13px;
+    margin-top: 6px;
+    font-weight: 400;
+  }
+  textarea {
+    width: 100%;
+    min-height: 110px;
+    margin-top: 14px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  textarea:focus { outline: 1px solid var(--accent); }
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .chip {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--text); }
+
+  .creator-list {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .creator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+    color: #0b0e14;
+  }
+  .creator-meta { flex: 1; min-width: 0; }
+  .creator-meta .name { font-size: 14px; font-weight: 600; }
+  .creator-meta .tags { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .match-score {
+    font-size: 18px;
+    font-weight: 700;
+    min-width: 58px;
+    text-align: right;
+  }
+  .bar-track {
+    height: 6px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+  button.run {
+    margin-top: 16px;
+    width: 100%;
+    background: var(--accent);
+    border: none;
+    color: #16110d;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 13px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  button.run:hover { filter: brightness(1.08); }
+  button.run:active { transform: scale(0.99); }
+
+  .trait-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 40px;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .trait-row .label { color: var(--muted); }
+  .trait-row .val { text-align: right; font-weight: 600; }
+
+  .result-panel {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+  .result-panel.show { display: block; }
+  .top-match {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .top-match .big-score {
+    font-size: 34px;
+    font-weight: 800;
+  }
+  .top-match .big-label {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .note {
+    margin-top: 14px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #cbd2e6;
+    background: rgba(255,107,74,0.08);
+    border: 1px solid rgba(255,107,74,0.25);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .growth-wrap {
+    margin-top: 14px;
+  }
+  .growth-legend {
+    display: flex;
+    gap: 18px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  svg { display: block; width: 100%; height: 160px; }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12.5px;
+    padding: 24px;
+    border-top: 1px solid var(--border);
+  }
+  footer strong { color: #b7bfd6; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Signal<span>cast</span></h1>
+  <p>A toy taste-matching engine: paste a piece of content, and it's scored against
+     synthetic creator audience "taste fingerprints" to predict who it actually
+     resonates with — and why.</p>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>Content input <small>Paste a hook, caption, or short script</small></h2>
+    <textarea id="content-input" placeholder="e.g. POV: you tell your mom you're quitting your job to become a full-time streamer and she just... stares at you for 10 seconds straight 😭">POV: you tell your mom you're quitting your job to become a full-time streamer and she just... stares at you for 10 seconds straight 😭</textarea>
+    <div class="chip-row">
+      <div class="chip" data-sample="0">try: relatable family bit</div>
+      <div class="chip" data-sample="1">try: shocking prank hook</div>
+      <div class="chip" data-sample="2">try: heartfelt story</div>
+      <div class="chip" data-sample="3">try: fast hot-take rant</div>
+    </div>
+    <button class="run" id="run-btn">Match to creator audiences →</button>
+
+    <div class="result-panel" id="trait-panel">
+      <h2 style="margin-top:0">Detected content signal</h2>
+      <div id="trait-rows"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Creator audience fingerprints <small>5 synthetic taste profiles, built from fake watch-history + comment data</small></h2>
+    <div class="creator-list" id="creator-list"></div>
+
+    <div class="result-panel" id="result-panel">
+      <h2 style="margin-top:0">Best-fit distribution</h2>
+      <div class="top-match">
+        <div class="big-score" id="big-score">—</div>
+        <div class="big-label" id="big-label">Run a match to see the top audience fit.</div>
+      </div>
+      <div class="note" id="note-box"></div>
+
+      <div class="growth-wrap">
+        <div class="growth-legend">
+          <span><span class="dot" style="background:var(--accent2)"></span>posted to best-fit audience</span>
+          <span><span class="dot" style="background:#5a6178"></span>posted to worst-fit audience</span>
+        </div>
+        <svg id="growth-svg" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by <strong>Aarush Kandukoori</strong>, inspired by Grocalo (YC S26).
+  Not affiliated with Grocalo.
+</footer>
+
+<script>
+(function () {
+  // ---- Synthetic taste-trait model ----
+  // Traits detected from raw text via keyword buckets (stand-in for "video understanding").
+  const TRAIT_KEYS = ["humor", "emotion", "shock", "authenticity", "pace"];
+
+  const TRAIT_KEYWORDS = {
+    humor: ["lol", "lmao", "funny", "joke", "prank", "meme", "ridiculous", "😂", "😭", "hilarious", "roast"],
+    emotion: ["mom", "dad", "family", "cry", "heartfelt", "love", "miss", "story", "feel", "grateful", "emotional"],
+    shock: ["quit", "shocking", "insane", "can't believe", "wild", "prank", "exposed", "secret", "never", "shocked", "!!"],
+    authenticity: ["pov", "real talk", "honestly", "no cap", "actually", "true story", "unfiltered", "raw", "day in my life"],
+    pace: ["fast", "rant", "quick", "wait for it", "hot take", "immediately", "asap", "in 10 seconds", "right now"],
+  };
+
+  const CREATORS = [
+    { name: "Jae Osaki",     tags: "sketch comedy · family bits",     color: "#ff6b4a",
+      traits: { humor: 0.9, emotion: 0.55, shock: 0.3, authenticity: 0.5, pace: 0.6 } },
+    { name: "Marisol Vega",  tags: "storytime · emotional vlogs",     color: "#4ade80",
+      traits: { humor: 0.25, emotion: 0.9, shock: 0.2, authenticity: 0.75, pace: 0.3 } },
+    { name: "Denny Cho",     tags: "pranks · shock stunts",           color: "#60a5fa",
+      traits: { humor: 0.6, emotion: 0.15, shock: 0.95, authenticity: 0.35, pace: 0.8 } },
+    { name: "Aliyah Brooks", tags: "day-in-the-life · authentic POV",  color: "#f5c453",
+      traits: { humor: 0.35, emotion: 0.6, shock: 0.15, authenticity: 0.95, pace: 0.4 } },
+    { name: "Ravi Thakkar",  tags: "hot takes · fast commentary",      color: "#c084fc",
+      traits: { humor: 0.5, emotion: 0.2, shock: 0.55, authenticity: 0.6, pace: 0.95 } },
+  ];
+
+  const SAMPLES = [
+    "POV: you tell your mom you're quitting your job to become a full-time streamer and she just... stares at you for 10 seconds straight 😭",
+    "I can't believe what happened when I pranked my roommate at 3am, this is INSANE, wait for it...",
+    "true story: my dad drove 6 hours just to bring me soup when I was sick and I'm still not over it, honestly",
+    "hot take: quiet quitting is a scam and I need to say this fast before I lose my nerve, no cap",
+  ];
+
+  function scoreTraits(text) {
+    const lower = text.toLowerCase();
+    const scores = {};
+    TRAIT_KEYS.forEach(function (t) {
+      let hits = 0;
+      TRAIT_KEYWORDS[t].forEach(function (kw) {
+        if (lower.indexOf(kw) !== -1) hits++;
+      });
+      // normalize: cap contribution, add small baseline so nothing is ever exactly zero
+      scores[t] = Math.min(1, hits / 3.2 + 0.05);
+    });
+    return scores;
+  }
+
+  function similarity(a, b) {
+    // 1 - normalized euclidean distance across 5 dims, mapped to 0-100
+    let sumSq = 0;
+    TRAIT_KEYS.forEach(function (t) {
+      const d = a[t] - b[t];
+      sumSq += d * d;
+    });
+    const dist = Math.sqrt(sumSq);          // max possible dist = sqrt(5) ≈ 2.236
+    const norm = dist / Math.sqrt(TRAIT_KEYS.length);
+    return Math.round((1 - norm) * 100);
+  }
+
+  function hashSeed(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return h;
+  }
+
+  function seededRand(seed) {
+    let s = seed;
+    return function () {
+      s = (s * 1103515245 + 12345) >>> 0;
+      return (s % 10000) / 10000;
+    };
+  }
+
+  // ---- Render creator list ----
+  const creatorListEl = document.getElementById("creator-list");
+  function renderCreators(matches) {
+    creatorListEl.innerHTML = "";
+    const list = CREATORS.map(function (c, i) {
+      return { c: c, score: matches ? matches[i] : null };
+    });
+    if (matches) list.sort(function (a, b) { return b.score - a.score; });
+
+    list.forEach(function (item) {
+      const c = item.c;
+      const row = document.createElement("div");
+      row.className = "creator";
+      const initials = c.name.split(" ").map(function (w) { return w[0]; }).join("");
+      row.innerHTML =
+        '<div class="avatar" style="background:' + c.color + '">' + initials + '</div>' +
+        '<div class="creator-meta">' +
+          '<div class="name">' + c.name + '</div>' +
+          '<div class="tags">' + c.tags + '</div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + (item.score !== null ? item.score : 0) + '%;background:' + c.color + '"></div></div>' +
+        '</div>' +
+        '<div class="match-score" style="color:' + c.color + '">' + (item.score !== null ? item.score + '%' : '—') + '</div>';
+      creatorListEl.appendChild(row);
+    });
+  }
+  renderCreators(null);
+
+  // ---- Trait bar rendering ----
+  const traitRowsEl = document.getElementById("trait-rows");
+  const TRAIT_LABELS = { humor: "Humor", emotion: "Emotion", shock: "Shock", authenticity: "Authenticity", pace: "Pace" };
+  function renderTraits(scores) {
+    traitRowsEl.innerHTML = "";
+    TRAIT_KEYS.forEach(function (t) {
+      const pct = Math.round(scores[t] * 100);
+      const row = document.createElement("div");
+      row.className = "trait-row";
+      row.innerHTML =
+        '<div class="label">' + TRAIT_LABELS[t] + '</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:var(--accent3)"></div></div>' +
+        '<div class="val">' + pct + '%</div>';
+      traitRowsEl.appendChild(row);
+    });
+  }
+
+  // ---- Growth curve (fake but seeded, so it's stable per input) ----
+  function renderGrowth(seed, bestMatch, worstMatch) {
+    const svg = document.getElementById("growth-svg");
+    svg.innerHTML = "";
+    const rand = seededRand(seed);
+    const days = 14;
+    const w = 400, h = 160, pad = 10;
+
+    function buildPath(matchPct, jitterAmt) {
+      const pts = [];
+      let val = 2;
+      for (let d = 0; d <= days; d++) {
+        const growthRate = 1 + (matchPct / 100) * 0.55 + (rand() - 0.5) * jitterAmt;
+        val = val * Math.max(1.02, growthRate);
+        pts.push(val);
+      }
+      const maxVal = Math.max.apply(null, pts);
+      return pts.map(function (v, i) {
+        const x = pad + (i / days) * (w - pad * 2);
+        const y = h - pad - (v / maxVal) * (h - pad * 2);
+        return [x, y];
+      });
+    }
+
+    // recompute so both share the same visual max scale
+    const bestPts = buildPath(bestMatch, 0.12);
+    const worstPts = buildPath(worstMatch, 0.08);
+    const allVals = bestPts.concat(worstPts).map(function (p) { return p[1]; });
+    void allVals;
+
+    function toPath(pts) {
+      return pts.map(function (p, i) { return (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ");
+    }
+
+    const gridColor = "#262c3d";
+    for (let i = 1; i < 4; i++) {
+      const y = (h / 4) * i;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", 0); line.setAttribute("x2", w);
+      line.setAttribute("y1", y); line.setAttribute("y2", y);
+      line.setAttribute("stroke", gridColor); line.setAttribute("stroke-width", "1");
+      svg.appendChild(line);
+    }
+
+    const worstPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    worstPath.setAttribute("d", toPath(worstPts));
+    worstPath.setAttribute("fill", "none");
+    worstPath.setAttribute("stroke", "#5a6178");
+    worstPath.setAttribute("stroke-width", "2.5");
+    svg.appendChild(worstPath);
+
+    const bestPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    bestPath.setAttribute("d", toPath(bestPts));
+    bestPath.setAttribute("fill", "none");
+    bestPath.setAttribute("stroke", "#4ade80");
+    bestPath.setAttribute("stroke-width", "3");
+    svg.appendChild(bestPath);
+  }
+
+  // ---- Main run handler ----
+  const input = document.getElementById("content-input");
+  const runBtn = document.getElementById("run-btn");
+  const traitPanel = document.getElementById("trait-panel");
+  const resultPanel = document.getElementById("result-panel");
+  const bigScore = document.getElementById("big-score");
+  const bigLabel = document.getElementById("big-label");
+  const noteBox = document.getElementById("note-box");
+
+  function run() {
+    const text = input.value.trim();
+    if (!text) return;
+
+    const contentTraits = scoreTraits(text);
+    renderTraits(contentTraits);
+    traitPanel.classList.add("show");
+
+    const matches = CREATORS.map(function (c) { return similarity(contentTraits, c.traits); });
+    renderCreators(matches);
+
+    const bestIdx = matches.indexOf(Math.max.apply(null, matches));
+    const worstIdx = matches.indexOf(Math.min.apply(null, matches));
+    const best = CREATORS[bestIdx];
+    const worst = CREATORS[worstIdx];
+
+    bigScore.style.color = best.color;
+    bigScore.textContent = matches[bestIdx] + "%";
+    bigLabel.textContent = "match with " + best.name + "'s audience (" + best.tags + "). Weakest fit: " + worst.name + " at " + matches[worstIdx] + "%.";
+
+    // dominant trait explanation
+    let topTrait = TRAIT_KEYS[0];
+    TRAIT_KEYS.forEach(function (t) { if (contentTraits[t] > contentTraits[topTrait]) topTrait = t; });
+    noteBox.innerHTML = "Strongest detected signal: <strong>" + TRAIT_LABELS[topTrait] + "</strong>. " +
+      "That's why it leans toward " + best.name + "'s audience, which historically over-indexes on " + TRAIT_LABELS[topTrait].toLowerCase() + "-driven content. " +
+      "Posting the same clip to " + worst.name + "'s feed would fight the algorithm instead of riding it — same content, opposite outcome.";
+
+    const seed = hashSeed(text);
+    renderGrowth(seed, matches[bestIdx], matches[worstIdx]);
+
+    resultPanel.classList.add("show");
+  }
+
+  runBtn.addEventListener("click", run);
+
+  document.querySelectorAll(".chip").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      const idx = parseInt(chip.getAttribute("data-sample"), 10);
+      input.value = SAMPLES[idx];
+      run();
+    });
+  });
+
+  // run once on load for an instant "wow" on first view
+  run();
+})();
+</script>
+
+</body>
+</html>

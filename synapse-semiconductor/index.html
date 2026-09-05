@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pixel-Native Filtering — Toy Demo</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #14171c;
+    --edge: #262b33;
+    --text: #e6e9ee;
+    --muted: #8b93a1;
+    --accent: #4fd1a5;
+    --accent-dim: #245d49;
+    --warn: #e0a94f;
+    --danger: #d96262;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 36px 12px;
+    border-bottom: 1px solid var(--edge);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.3px;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 720px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: flex;
+    gap: 24px;
+    padding: 28px 36px;
+    flex-wrap: wrap;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .stage {
+    flex: 2;
+    min-width: 420px;
+  }
+  .stage h2, .controls h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .grid-wrap {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .grid-block {
+    text-align: center;
+  }
+  .grid-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .pixel-grid {
+    display: grid;
+    grid-template-columns: repeat(24, 12px);
+    grid-template-rows: repeat(18, 12px);
+    gap: 1px;
+    background: #050607;
+    padding: 4px;
+    border-radius: 6px;
+    border: 1px solid var(--edge);
+  }
+  .px {
+    width: 12px;
+    height: 12px;
+    background: #1a1e24;
+    transition: background 120ms linear, box-shadow 120ms linear;
+  }
+  .px.fired {
+    background: var(--accent);
+    box-shadow: 0 0 4px rgba(79, 209, 165, 0.7);
+  }
+  .px.rawlit {
+    background: #4a5568;
+  }
+  .controls {
+    flex: 1;
+    min-width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  select, button {
+    width: 100%;
+    background: #1a1e24;
+    color: var(--text);
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+    padding: 9px 10px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: #d8fff0;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+  button:hover { filter: brightness(1.15); }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--edge);
+    font-size: 13px;
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-row .val {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .val.good { color: var(--accent); }
+  .val.warn { color: var(--warn); }
+  .val.bad { color: var(--danger); }
+  .bar-outer {
+    height: 8px;
+    background: #1a1e24;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .bar-inner {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 200ms ease;
+  }
+  .bar-inner.bad { background: var(--danger); }
+  .explain {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.55;
+    background: #0f1216;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .explain b { color: var(--text); }
+  footer {
+    padding: 16px 36px 22px;
+    border-top: 1px solid var(--edge);
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+  code {
+    background: #1a1e24;
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pixel-Native Filtering — a toy simulation</h1>
+  <p>
+    A conventional edge camera captures a full frame, ships every pixel to a GPU, and only then
+    decides what mattered. This demo simulates an alternate architecture: a tiny neural filter
+    runs <b>inside each pixel</b>, so the sensor itself decides what's worth reporting — and only
+    that sparse signal ever leaves the chip. Synthetic data only; nothing here talks to a network.
+  </p>
+</header>
+
+<main>
+  <div class="panel stage">
+    <h2>Sensor Array (24 × 18 synthetic photosites)</h2>
+    <div class="grid-wrap">
+      <div class="grid-block">
+        <div class="grid-label">Raw capture (every pixel, always transmitted)</div>
+        <div class="pixel-grid" id="rawGrid"></div>
+      </div>
+      <div class="grid-block">
+        <div class="grid-label">In-pixel filter output (only fired pixels transmitted)</div>
+        <div class="pixel-grid" id="filteredGrid"></div>
+      </div>
+    </div>
+    <div style="margin-top:16px;" class="explain" id="sceneExplain"></div>
+  </div>
+
+  <div class="panel controls">
+    <h2>Scene &amp; Filter Controls</h2>
+    <div>
+      <label for="sceneSelect">Synthetic scene</label>
+      <select id="sceneSelect">
+        <option value="drift">Drifting object (drone inspection)</option>
+        <option value="sparse">Sparse starfield (space-based sensor)</option>
+        <option value="crowd">Dense clutter (indoor robot)</option>
+      </select>
+    </div>
+    <div>
+      <label for="threshold">Filter sensitivity (activation threshold): <span id="threshVal"></span></label>
+      <input type="range" id="threshold" min="1" max="95" value="55">
+    </div>
+    <div>
+      <label for="noise">Sensor noise floor: <span id="noiseVal"></span></label>
+      <input type="range" id="noise" min="0" max="40" value="8">
+    </div>
+    <button id="stepBtn">Advance one frame ▶</button>
+    <button id="runBtn" style="background:#1a1e24; border-color:var(--edge); color:var(--text);">Run continuously</button>
+
+    <h2 style="margin-top:6px;">What actually leaves the chip</h2>
+    <div class="panel" style="padding:12px 14px;">
+      <div class="metric-row">
+        <span>Pixels captured / frame</span>
+        <span class="val" id="mCaptured">432</span>
+      </div>
+      <div class="metric-row">
+        <span>Pixels transmitted (filtered)</span>
+        <span class="val good" id="mFired">–</span>
+      </div>
+      <div class="metric-row">
+        <span>Data reduction vs. raw stream</span>
+        <span class="val good" id="mReduction">–</span>
+      </div>
+      <div class="metric-row">
+        <span>Est. link power (raw vs. filtered)</span>
+        <span class="val" id="mPower">–</span>
+      </div>
+      <div class="bar-outer"><div class="bar-inner" id="mBar"></div></div>
+    </div>
+
+    <div class="explain">
+      <b>The mechanic:</b> each of the 432 photosites has its own toy activation function
+      <code>fire = f(intensity, local_contrast) &gt; threshold</code>, evaluated locally, in parallel,
+      before anything reaches an output bus. Raise sensitivity and the filter fires on more marginal
+      pixels, catching subtler signal at the cost of bandwidth. Raise noise and you'll see the filter
+      start false-firing on sensor grain — the same tradeoff a real in-pixel classifier has to make.
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Synapse Semiconductor (YC S26). Not affiliated with Synapse Semiconductor.
+</footer>
+
+<script>
+(function () {
+  const COLS = 24, ROWS = 18, N = COLS * ROWS;
+  const rawGrid = document.getElementById('rawGrid');
+  const filteredGrid = document.getElementById('filteredGrid');
+  const sceneSelect = document.getElementById('sceneSelect');
+  const thresholdInput = document.getElementById('threshold');
+  const noiseInput = document.getElementById('noise');
+  const threshVal = document.getElementById('threshVal');
+  const noiseVal = document.getElementById('noiseVal');
+  const stepBtn = document.getElementById('stepBtn');
+  const runBtn = document.getElementById('runBtn');
+  const sceneExplain = document.getElementById('sceneExplain');
+  const mCaptured = document.getElementById('mCaptured');
+  const mFired = document.getElementById('mFired');
+  const mReduction = document.getElementById('mReduction');
+  const mPower = document.getElementById('mPower');
+  const mBar = document.getElementById('mBar');
+
+  mCaptured.textContent = N;
+
+  const rawCells = [];
+  const filteredCells = [];
+  for (let i = 0; i < N; i++) {
+    const r = document.createElement('div');
+    r.className = 'px';
+    rawGrid.appendChild(r);
+    rawCells.push(r);
+    const f = document.createElement('div');
+    f.className = 'px';
+    filteredGrid.appendChild(f);
+    filteredCells.push(f);
+  }
+
+  let frame = 0;
+  let running = false;
+  let runTimer = null;
+
+  const scenes = {
+    drift: {
+      label: 'Drifting object — a single bright body crossing the field of view, like a drone tracking a package.',
+      intensity(x, y, t) {
+        const cx = COLS * 0.5 + Math.sin(t * 0.12) * (COLS * 0.38);
+        const cy = ROWS * 0.5 + Math.cos(t * 0.09) * (ROWS * 0.28);
+        const d = Math.hypot(x - cx, y - cy);
+        return Math.max(0, 100 - d * 22);
+      }
+    },
+    sparse: {
+      label: 'Sparse starfield — a handful of fixed bright points against near-total darkness, like a star tracker.',
+      intensity(x, y, t) {
+        const seed = (x * 928371 + y * 12923) % 97;
+        const twinkle = 0.7 + 0.3 * Math.sin(t * 0.3 + seed);
+        return seed < 5 ? 90 * twinkle : 2;
+      }
+    },
+    crowd: {
+      label: 'Dense clutter — many overlapping bright regions, like an indoor robot in a busy room.',
+      intensity(x, y, t) {
+        let v = 0;
+        for (let k = 0; k < 4; k++) {
+          const cx = (COLS * (0.15 + 0.22 * k)) + Math.sin(t * 0.05 + k) * 2;
+          const cy = (ROWS * (0.2 + 0.18 * k)) + Math.cos(t * 0.07 + k) * 2;
+          const d = Math.hypot(x - cx, y - cy);
+          v += Math.max(0, 70 - d * 14);
+        }
+        return Math.min(100, v);
+      }
+    }
+  };
+
+  function render() {
+    const scene = scenes[sceneSelect.value];
+    const threshold = parseInt(thresholdInput.value, 10);
+    const noise = parseInt(noiseInput.value, 10);
+    threshVal.textContent = threshold;
+    noiseVal.textContent = noise;
+    sceneExplain.innerHTML = '<b>Scene:</b> ' + scene.label;
+
+    let fired = 0;
+    let idx = 0;
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++, idx++) {
+        const base = scene.intensity(x, y, frame);
+        const grain = (Math.random() - 0.5) * noise;
+        const value = Math.max(0, Math.min(100, base + grain));
+
+        const rc = rawCells[idx];
+        rc.style.opacity = String(0.15 + (value / 100) * 0.85);
+        rc.className = 'px rawlit';
+
+        const fc = filteredCells[idx];
+        if (value > threshold) {
+          fc.className = 'px fired';
+          fired++;
+        } else {
+          fc.className = 'px';
+        }
+      }
+    }
+
+    const reduction = ((1 - fired / N) * 100).toFixed(1);
+    mFired.textContent = fired + ' / ' + N;
+    mReduction.textContent = reduction + '%';
+    mBar.style.width = reduction + '%';
+    mBar.className = 'bar-inner' + (fired / N > 0.6 ? ' bad' : '');
+
+    const rawPower = N;
+    const filteredPower = Math.max(fired, 1);
+    const ratio = (rawPower / filteredPower).toFixed(1);
+    mPower.textContent = '1x  vs.  ~' + ratio + 'x less link traffic';
+    mPower.className = 'val ' + (ratio > 4 ? 'good' : ratio > 1.5 ? 'warn' : 'bad');
+
+    frame++;
+  }
+
+  stepBtn.addEventListener('click', render);
+  sceneSelect.addEventListener('change', render);
+  thresholdInput.addEventListener('input', render);
+  noiseInput.addEventListener('input', render);
+
+  runBtn.addEventListener('click', function () {
+    running = !running;
+    if (running) {
+      runBtn.textContent = 'Stop';
+      runTimer = setInterval(render, 140);
+    } else {
+      runBtn.textContent = 'Run continuously';
+      clearInterval(runTimer);
+    }
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
