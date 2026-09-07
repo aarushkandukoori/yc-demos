@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sea Reactor Sim — Floating Compute Ballast Demo</title>
+<style>
+  :root {
+    --bg: #05131c;
+    --panel: #0b202e;
+    --panel-2: #0f2a3c;
+    --border: #1c3c50;
+    --text: #d9ecf5;
+    --muted: #7fa3b8;
+    --accent: #3fd0c9;
+    --accent-2: #ffb347;
+    --danger: #ff6b6b;
+    --good: #5be38a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% 0%, #0a2431, var(--bg) 60%);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 36px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 1.6rem;
+    letter-spacing: 0.5px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 780px;
+    line-height: 1.5;
+    font-size: 0.95rem;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 24px;
+    padding: 24px 36px;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .panel h2 {
+    margin: 0 0 14px;
+    font-size: 1rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .control {
+    margin-bottom: 18px;
+  }
+  .control label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .control label b { color: var(--text); }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .toggle-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .toggle-btn {
+    flex: 1;
+    padding: 8px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.15s;
+  }
+  .toggle-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(63, 208, 201, 0.1);
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .stat .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 1.3rem; font-weight: 600; margin-top: 2px; }
+  .stat .value.good { color: var(--good); }
+  .stat .value.warn { color: var(--accent-2); }
+  .stat .value.bad { color: var(--danger); }
+
+  .viz-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .fleet {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .barge {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .barge .name { font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; display:flex; justify-content:space-between;}
+  .barge .load-bar {
+    height: 10px;
+    border-radius: 6px;
+    background: #06161f;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .barge .load-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.4s ease, background 0.4s ease;
+  }
+  .barge .temp {
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .barge .status-pill {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .status-pill.ok { color: var(--good); border-color: var(--good); }
+  .status-pill.throttled { color: var(--accent-2); border-color: var(--accent-2); }
+  .status-pill.offline { color: var(--danger); border-color: var(--danger); }
+
+  .log {
+    background: #04121a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    height: 160px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .log div { margin-bottom: 4px; }
+  .log .warn-line { color: var(--accent-2); }
+  .log .bad-line { color: var(--danger); }
+  .log .good-line { color: var(--good); }
+
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .comp-box {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .comp-box h3 {
+    margin: 0 0 8px;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .comp-box .metric {
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .comp-box .sub { font-size: 0.75rem; color: var(--muted); }
+
+  footer {
+    text-align: center;
+    padding: 18px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sea Reactor <span>Sim</span></h1>
+  <p>
+    A toy simulation of a marine-based reactor feeding a fleet of floating compute barges.
+    Drag the demand and sea-state sliders and watch the reactor route power and seawater cooling
+    across the fleet in real time — including what happens when one barge overheats and the
+    dispatcher has to shed or shift load.
+  </p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Controls</h2>
+
+    <div class="control">
+      <label>Compute demand <b id="demandLabel">62%</b></label>
+      <input type="range" id="demandSlider" min="10" max="100" value="62">
+    </div>
+
+    <div class="control">
+      <label>Sea state (cooling capacity) <b id="seaLabel">Calm</b></label>
+      <input type="range" id="seaSlider" min="0" max="100" value="80">
+    </div>
+
+    <div class="control">
+      <label>Reactor output cap <b id="reactorLabel">100 MW</b></label>
+      <input type="range" id="reactorSlider" min="40" max="100" value="100">
+    </div>
+
+    <div class="control">
+      <label>Fault injection</label>
+      <div class="toggle-row">
+        <button class="toggle-btn active" data-fault="none">Nominal</button>
+        <button class="toggle-btn" data-fault="cooling">Cooling loss</button>
+        <button class="toggle-btn" data-fault="reactor">Reactor trip</button>
+      </div>
+    </div>
+
+    <h2 style="margin-top:24px;">Fleet Summary</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="label">Power delivered</div>
+        <div class="value good" id="powerDelivered">0 MW</div>
+      </div>
+      <div class="stat">
+        <div class="label">Compute online</div>
+        <div class="value good" id="computeOnline">0%</div>
+      </div>
+      <div class="stat">
+        <div class="label">Avg core temp</div>
+        <div class="value good" id="avgTemp">--°C</div>
+      </div>
+      <div class="stat">
+        <div class="label">Barges throttled</div>
+        <div class="value good" id="throttledCount">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="viz-wrap">
+    <div class="panel">
+      <h2>Compute Barge Fleet (6 units, powered &amp; cooled by one reactor ship)</h2>
+      <div class="fleet" id="fleet"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Dispatcher Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Why this matters on land vs. at sea</h2>
+      <div class="comparison">
+        <div class="comp-box">
+          <h3>Land datacenter, same demand spike</h3>
+          <div class="metric" id="landMetric">--</div>
+          <div class="sub" id="landSub">Cooling fixed by grid + municipal water rights; can't flex.</div>
+        </div>
+        <div class="comp-box">
+          <h3>Sea-cooled fleet (this sim)</h3>
+          <div class="metric" id="seaMetric">--</div>
+          <div class="sub" id="seaSub">Cooling scales with sea state, not local permits.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Atomarine (YC S26). Not affiliated with Atomarine.
+</footer>
+
+<script>
+(function() {
+  const NUM_BARGES = 6;
+  const barges = [];
+  for (let i = 0; i < NUM_BARGES; i++) {
+    barges.push({
+      id: i,
+      name: 'Barge ' + String.fromCharCode(65 + i),
+      baseDemand: 0.7 + Math.random() * 0.6, // relative appetite for power
+      load: 0,
+      temp: 28,
+      status: 'ok'
+    });
+  }
+
+  const demandSlider = document.getElementById('demandSlider');
+  const seaSlider = document.getElementById('seaSlider');
+  const reactorSlider = document.getElementById('reactorSlider');
+  const demandLabel = document.getElementById('demandLabel');
+  const seaLabel = document.getElementById('seaLabel');
+  const reactorLabel = document.getElementById('reactorLabel');
+  const fleetEl = document.getElementById('fleet');
+  const logEl = document.getElementById('log');
+  const powerDeliveredEl = document.getElementById('powerDelivered');
+  const computeOnlineEl = document.getElementById('computeOnline');
+  const avgTempEl = document.getElementById('avgTemp');
+  const throttledCountEl = document.getElementById('throttledCount');
+  const landMetric = document.getElementById('landMetric');
+  const landSub = document.getElementById('landSub');
+  const seaMetric = document.getElementById('seaMetric');
+  const seaSub = document.getElementById('seaSub');
+
+  let fault = 'none';
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      fault = btn.dataset.fault;
+      log('Fault injection set to: ' + btn.textContent, 'warn-line');
+    });
+  });
+
+  function log(msg, cls) {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    const t = new Date();
+    const stamp = t.toLocaleTimeString('en-US', { hour12: false });
+    line.textContent = '[' + stamp + '] ' + msg;
+    logEl.prepend(line);
+    while (logEl.children.length > 40) logEl.removeChild(logEl.lastChild);
+  }
+
+  function seaStateLabel(v) {
+    if (v > 75) return 'Calm';
+    if (v > 45) return 'Moderate swell';
+    if (v > 20) return 'Rough';
+    return 'Storm';
+  }
+
+  demandSlider.addEventListener('input', () => {
+    demandLabel.textContent = demandSlider.value + '%';
+  });
+  seaSlider.addEventListener('input', () => {
+    seaLabel.textContent = seaStateLabel(+seaSlider.value);
+  });
+  reactorSlider.addEventListener('input', () => {
+    reactorLabel.textContent = reactorSlider.value + ' MW';
+  });
+
+  // build barge DOM once
+  barges.forEach(b => {
+    const div = document.createElement('div');
+    div.className = 'barge';
+    div.id = 'barge-' + b.id;
+    div.innerHTML =
+      '<div class="status-pill ok" id="pill-' + b.id + '">OK</div>' +
+      '<div class="name"><span>' + b.name + '</span><span id="loadnum-' + b.id + '">0%</span></div>' +
+      '<div class="load-bar"><div class="load-fill" id="fill-' + b.id + '" style="width:0%"></div></div>' +
+      '<div class="temp" id="temp-' + b.id + '">core 28°C</div>';
+    fleetEl.appendChild(div);
+  });
+
+  let lastThrottled = new Set();
+
+  function step() {
+    const demandPct = +demandSlider.value / 100;
+    const seaState = +seaSlider.value; // 0-100, cooling capacity proxy
+    let reactorCap = +reactorSlider.value; // MW cap, 40-100
+
+    let coolingFactor = seaState / 100; // 0..1
+    if (fault === 'cooling') coolingFactor *= 0.35;
+    if (fault === 'reactor') reactorCap *= 0.4;
+
+    // total desired power = demand * sum of base appetites * 20 MW per unit appetite
+    const totalAppetite = barges.reduce((s, b) => s + b.baseDemand, 0);
+    const desiredTotal = demandPct * totalAppetite * 20; // MW
+
+    const availablePower = Math.min(reactorCap, desiredTotal + 5);
+    let remainingPower = availablePower;
+
+    let totalDelivered = 0;
+    let totalTemp = 0;
+    let throttledCount = 0;
+    let onlineWeight = 0;
+
+    barges.forEach(b => {
+      const wantMW = demandPct * b.baseDemand * 20;
+      // cooling headroom limits how much load a barge can sustain before throttling
+      const coolingHeadroom = coolingFactor * 22 + 3; // MW this barge's cooling can dissipate
+      let allocated = Math.min(wantMW, remainingPower, coolingHeadroom * 1.15);
+      remainingPower -= Math.max(allocated, 0);
+
+      // temperature model: rises with load beyond cooling headroom, decays otherwise
+      const overload = Math.max(0, wantMW - coolingHeadroom);
+      const targetTemp = 28 + (allocated / (coolingHeadroom + 0.001)) * 18 + overload * 1.4;
+      b.temp += (targetTemp - b.temp) * 0.18;
+
+      let status = 'ok';
+      if (b.temp > 68) {
+        status = 'offline';
+        allocated *= 0.15;
+      } else if (b.temp > 52) {
+        status = 'throttled';
+        allocated *= 0.6;
+        throttledCount++;
+      }
+
+      b.load = wantMW > 0 ? Math.min(1, allocated / wantMW) : 0;
+      b.status = status;
+      totalDelivered += allocated;
+      totalTemp += b.temp;
+      onlineWeight += (status === 'offline') ? 0 : (status === 'throttled' ? 0.6 : 1);
+
+      // render
+      const fill = document.getElementById('fill-' + b.id);
+      const loadnum = document.getElementById('loadnum-' + b.id);
+      const tempEl = document.getElementById('temp-' + b.id);
+      const pill = document.getElementById('pill-' + b.id);
+      const pct = Math.round(b.load * 100);
+      fill.style.width = pct + '%';
+      loadnum.textContent = pct + '%';
+      tempEl.textContent = 'core ' + b.temp.toFixed(1) + '°C';
+      pill.className = 'status-pill ' + status;
+      pill.textContent = status === 'ok' ? 'OK' : (status === 'throttled' ? 'THROTTLED' : 'OFFLINE');
+      fill.style.background = status === 'ok'
+        ? 'linear-gradient(90deg,#3fd0c9,#5be38a)'
+        : status === 'throttled'
+          ? 'linear-gradient(90deg,#ffb347,#ff9147)'
+          : 'linear-gradient(90deg,#ff6b6b,#c23f3f)';
+
+      if (status !== 'ok' && !lastThrottled.has(b.id)) {
+        log(b.name + ' hit ' + b.temp.toFixed(0) + '°C — dispatcher shedding load (' + status + ')',
+          status === 'offline' ? 'bad-line' : 'warn-line');
+        lastThrottled.add(b.id);
+      } else if (status === 'ok' && lastThrottled.has(b.id)) {
+        log(b.name + ' back within thermal margin, load restored', 'good-line');
+        lastThrottled.delete(b.id);
+      }
+    });
+
+    powerDeliveredEl.textContent = totalDelivered.toFixed(1) + ' MW';
+    const onlinePct = Math.round((onlineWeight / NUM_BARGES) * 100);
+    computeOnlineEl.textContent = onlinePct + '%';
+    computeOnlineEl.className = 'value ' + (onlinePct > 80 ? 'good' : onlinePct > 45 ? 'warn' : 'bad');
+    const avgT = totalTemp / NUM_BARGES;
+    avgTempEl.textContent = avgT.toFixed(1) + '°C';
+    avgTempEl.className = 'value ' + (avgT < 45 ? 'good' : avgT < 60 ? 'warn' : 'bad');
+    throttledCountEl.textContent = throttledCount;
+    throttledCountEl.className = 'value ' + (throttledCount === 0 ? 'good' : throttledCount < 3 ? 'warn' : 'bad');
+
+    // land vs sea comparison, purely illustrative
+    const landCoolingCap = 55; // fixed, can't respond to sea state
+    const landOnline = Math.max(10, Math.min(100, 100 - Math.max(0, (desiredTotal - landCoolingCap)) * 3));
+    landMetric.textContent = Math.round(landOnline) + '% capacity';
+    landSub.textContent = desiredTotal > landCoolingCap
+      ? 'Water rights / grid limits mean this spike would trigger a brownout.'
+      : 'Comfortably within fixed cooling budget right now.';
+
+    seaMetric.textContent = onlinePct + '% capacity';
+    seaSub.textContent = coolingFactor > 0.5
+      ? 'Open-ocean cooling gives headroom the land site does not have.'
+      : 'Rough seas are the real constraint here, not permits or grid draw.';
+
+    requestAnimationFrame(loopTick);
+  }
+
+  let acc = 0;
+  let last = performance.now();
+  function loopTick(now) {
+    const dt = now - last;
+    last = now;
+    acc += dt;
+    if (acc > 120) {
+      acc = 0;
+      step();
+      return;
+    }
+    requestAnimationFrame(loopTick);
+  }
+
+  seaLabel.textContent = seaStateLabel(+seaSlider.value);
+  log('Reactor online. Dispatcher initialized across ' + NUM_BARGES + ' barges.', 'good-line');
+  requestAnimationFrame(loopTick);
+})();
+</script>
+
+</body>
+</html>
