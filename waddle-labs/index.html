@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GantryLoop — self-improving manipulation policies</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1c2430;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --muted: #8b96a5;
+    --accent: #4fd1c5;
+    --accent-2: #f2a154;
+    --bad: #f26d6d;
+    --good: #6ee7a0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at 20% -10%, #1a2230 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 16px;
+  }
+  header { max-width: 920px; text-align: center; margin-bottom: 22px; }
+  header h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p { color: var(--muted); font-size: 15px; max-width: 640px; margin: 0 auto; line-height: 1.5; }
+
+  .app {
+    display: grid;
+    grid-template-columns: 320px 460px 300px;
+    gap: 16px;
+    max-width: 1120px;
+    width: 100%;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+
+  .task-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+    transition: border-color .15s, background .15s;
+  }
+  .task-btn:hover { border-color: var(--accent); }
+  .task-btn.active { border-color: var(--accent); background: #142521; }
+
+  textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    resize: none;
+    height: 56px;
+    font-family: inherit;
+  }
+
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  button.action {
+    flex: 1;
+    background: var(--accent);
+    color: #072826;
+    border: none;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.action.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  button.action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .stat-line { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: var(--muted); }
+  .stat-line b { color: var(--text); font-weight: 600; }
+
+  canvas { display: block; width: 100%; background: #0a1420; border-radius: 8px; border: 1px solid var(--border); }
+
+  .status-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .status-idle { background: #2a3441; color: var(--muted); }
+  .status-running { background: #3a3220; color: var(--accent-2); }
+  .status-fail { background: #3a2323; color: var(--bad); }
+  .status-success { background: #1e3a2a; color: var(--good); }
+
+  .log {
+    height: 260px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .log-entry {
+    border-left: 3px solid var(--border);
+    padding: 6px 0 6px 10px;
+    line-height: 1.45;
+  }
+  .log-entry.fail { border-color: var(--bad); }
+  .log-entry.success { border-color: var(--good); }
+  .log-entry .tag { color: var(--muted); display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px;}
+
+  footer {
+    margin-top: 26px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    max-width: 640px;
+    padding-bottom: 20px;
+  }
+
+  @media (max-width: 980px) {
+    .app { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Gantry<span>Loop</span></h1>
+  <p>Type a manipulation task in plain language. An agent drafts a motion policy, executes it on a
+  simulated arm, watches whether it actually worked, and rewrites the policy on failure — no human
+  in the loop. This is a toy stand-in for the write&nbsp;&rarr;&nbsp;test&nbsp;&rarr;&nbsp;improve
+  cycle behind agents that control real robots.</p>
+</header>
+
+<div class="app">
+
+  <div class="panel">
+    <h2>1. Pick a task</h2>
+    <button class="task-btn active" data-task="0">Pick up the block and place it on the marker</button>
+    <button class="task-btn" data-task="1">Move the block to the far target, avoiding the obstacle</button>
+    <button class="task-btn" data-task="2">Place the block gently on the elevated platform</button>
+
+    <h2 style="margin-top:18px;">Instruction to the agent</h2>
+    <textarea id="instruction" readonly></textarea>
+
+    <div class="row">
+      <button class="action" id="generateBtn">Generate policy</button>
+    </div>
+    <div class="row">
+      <button class="action secondary" id="autoBtn">Auto-improve until success</button>
+    </div>
+    <div class="row">
+      <button class="action secondary" id="resetBtn">Reset</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Simulated execution</h2>
+    <canvas id="stage" width="460" height="340"></canvas>
+    <div style="margin-top:12px;">
+      <div class="stat-line"><span>Status</span><span id="statusBadge" class="status-badge status-idle">idle</span></div>
+      <div class="stat-line"><span>Attempt</span><b id="attemptNum">0</b></div>
+      <div class="stat-line"><span>Grasp error</span><b id="graspErr">—</b></div>
+      <div class="stat-line"><span>Placement error</span><b id="placeErr">—</b></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>3. Agent's run log</h2>
+    <div class="log" id="log">
+      <div class="log-entry"><span class="tag">system</span>Select a task and click "Generate policy" to draft the first attempt.</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Waddle Labs (YC S26). Not affiliated with Waddle Labs.
+</footer>
+
+<script>
+(function () {
+  const tasks = [
+    {
+      instruction: "Pick up the block and place it on the marker.",
+      block: { x: 120, y: 250 },
+      target: { x: 330, y: 250, w: 46, h: 46 },
+      obstacle: null,
+      baseErr: 46
+    },
+    {
+      instruction: "Move the block to the far target, avoiding the obstacle in the middle of the table.",
+      block: { x: 100, y: 260 },
+      target: { x: 380, y: 90, w: 46, h: 46 },
+      obstacle: { x: 210, y: 140, w: 60, h: 90 },
+      baseErr: 58
+    },
+    {
+      instruction: "Place the block gently on the elevated platform without knocking it off.",
+      block: { x: 130, y: 270 },
+      target: { x: 300, y: 130, w: 40, h: 40 },
+      obstacle: null,
+      baseErr: 52
+    }
+  ];
+
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const instructionBox = document.getElementById('instruction');
+  const generateBtn = document.getElementById('generateBtn');
+  const autoBtn = document.getElementById('autoBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusBadge = document.getElementById('statusBadge');
+  const attemptNumEl = document.getElementById('attemptNum');
+  const graspErrEl = document.getElementById('graspErr');
+  const placeErrEl = document.getElementById('placeErr');
+  const logEl = document.getElementById('log');
+
+  const BASE = { x: 40, y: 300 };
+  const L1 = 140, L2 = 130;
+
+  let taskIndex = 0;
+  let attempt = 0;
+  let errorMag = 0;
+  let running = false;
+  let autoMode = false;
+  let blockPos = null;
+  let gripperPos = null;
+  let holdingBlock = false;
+
+  function setTask(i) {
+    taskIndex = i;
+    document.querySelectorAll('.task-btn').forEach(b => b.classList.toggle('active', +b.dataset.task === i));
+    instructionBox.value = tasks[i].instruction;
+    resetRun();
+  }
+
+  function resetRun() {
+    attempt = 0;
+    errorMag = tasks[taskIndex].baseErr;
+    running = false;
+    autoMode = false;
+    holdingBlock = false;
+    blockPos = { ...tasks[taskIndex].block };
+    gripperPos = { x: BASE.x + L1, y: BASE.y };
+    attemptNumEl.textContent = '0';
+    graspErrEl.textContent = '—';
+    placeErrEl.textContent = '—';
+    setStatus('idle', 'idle');
+    generateBtn.disabled = false;
+    autoBtn.disabled = false;
+    logEl.innerHTML = '<div class="log-entry"><span class="tag">system</span>Ready. Click "Generate policy" to draft the first attempt.</div>';
+    draw();
+  }
+
+  function setStatus(cls, text) {
+    statusBadge.className = 'status-badge status-' + cls;
+    statusBadge.textContent = text;
+  }
+
+  function log(tag, text, cls) {
+    const div = document.createElement('div');
+    div.className = 'log-entry' + (cls ? ' ' + cls : '');
+    div.innerHTML = '<span class="tag">' + tag + '</span>' + text;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // Build a keyframe policy with injected noise representing an imperfect draft.
+  function draftPolicy() {
+    const t = tasks[taskIndex];
+    const noise = () => (Math.random() * 2 - 1) * errorMag;
+    const graspOffset = { x: noise(), y: noise() * 0.6 };
+    const placeOffset = { x: noise(), y: noise() * 0.6 };
+
+    const above = (p) => ({ x: p.x, y: p.y - 70 });
+    const grasp = { x: t.block.x + graspOffset.x, y: t.block.y + graspOffset.y };
+    const place = { x: t.target.x + placeOffset.x, y: t.target.y + placeOffset.y };
+
+    const kf = [
+      { p: above(t.block), grip: false },
+      { p: grasp, grip: false },
+      { p: grasp, grip: true },
+      { p: above(grasp), grip: true },
+    ];
+    if (t.obstacle) {
+      kf.push({ p: { x: t.obstacle.x + t.obstacle.w / 2, y: 60 }, grip: true });
+    }
+    kf.push({ p: above(place), grip: true });
+    kf.push({ p: place, grip: true });
+    kf.push({ p: place, grip: false });
+    kf.push({ p: above(place), grip: false });
+
+    return { keyframes: kf, graspOffset, placeOffset };
+  }
+
+  function drawArm(gp) {
+    // simple 2-link IK, elbow-down solution
+    const dx = gp.x - BASE.x, dy = gp.y - BASE.y;
+    let dist = Math.sqrt(dx * dx + dy * dy);
+    dist = Math.min(dist, L1 + L2 - 1);
+    const a = Math.acos(Math.min(1, Math.max(-1, (L1 * L1 + dist * dist - L2 * L2) / (2 * L1 * dist))));
+    const base = Math.atan2(dy, dx);
+    const shoulderAngle = base - a;
+    const elbowX = BASE.x + L1 * Math.cos(shoulderAngle);
+    const elbowY = BASE.y + L1 * Math.sin(shoulderAngle);
+
+    ctx.strokeStyle = '#4fd1c5';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(BASE.x, BASE.y);
+    ctx.lineTo(elbowX, elbowY);
+    ctx.lineTo(gp.x, gp.y);
+    ctx.stroke();
+
+    ctx.fillStyle = '#2a3441';
+    ctx.beginPath();
+    ctx.arc(BASE.x, BASE.y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = holdingBlock ? '#f2a154' : '#8b96a5';
+    ctx.beginPath();
+    ctx.arc(gp.x, gp.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function draw() {
+    const t = tasks[taskIndex];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // table
+    ctx.fillStyle = '#0a1420';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#1c2430';
+    for (let x = 0; x < canvas.width; x += 20) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.strokeStyle='#101823'; ctx.stroke(); }
+
+    // target zone
+    ctx.strokeStyle = '#f2a154';
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(t.target.x - t.target.w/2, t.target.y - t.target.h/2, t.target.w, t.target.h);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f2a15422';
+    ctx.fillRect(t.target.x - t.target.w/2, t.target.y - t.target.h/2, t.target.w, t.target.h);
+
+    // obstacle
+    if (t.obstacle) {
+      ctx.fillStyle = '#3a2323';
+      ctx.strokeStyle = '#f26d6d';
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(t.obstacle.x, t.obstacle.y, t.obstacle.w, t.obstacle.h);
+      ctx.strokeRect(t.obstacle.x, t.obstacle.y, t.obstacle.w, t.obstacle.h);
+    }
+
+    // block
+    if (!holdingBlock) {
+      ctx.fillStyle = '#6ee7a0';
+      ctx.fillRect(blockPos.x - 12, blockPos.y - 12, 24, 24);
+    } else {
+      ctx.fillStyle = '#6ee7a0';
+      ctx.fillRect(gripperPos.x - 12, gripperPos.y - 12, 24, 24);
+    }
+
+    drawArm(gripperPos);
+  }
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function animatePolicy(policy, onDone) {
+    const kf = policy.keyframes;
+    let segment = 0;
+    let segT = 0;
+    const speed = 0.035;
+
+    function step() {
+      if (segment >= kf.length - 1) {
+        gripperPos = { ...kf[kf.length - 1].p };
+        if (holdingBlock) blockPos = { ...gripperPos };
+        draw();
+        onDone();
+        return;
+      }
+      const from = kf[segment], to = kf[segment + 1];
+      segT += speed;
+      if (segT >= 1) { segT = 0; segment++; }
+      const cur = {
+        x: lerp(from.p.x, to.p.x, Math.min(segT,1)),
+        y: lerp(from.p.y, to.p.y, Math.min(segT,1))
+      };
+      gripperPos = cur;
+      holdingBlock = to.grip && from.grip ? true : (to.grip && segment > 0 ? holdingBlock || false : holdingBlock);
+      // grip toggles happen exactly at a zero-length segment (grasp/place hold points)
+      if (from.p.x === to.p.x && from.p.y === to.p.y) {
+        holdingBlock = to.grip;
+      }
+      if (holdingBlock) blockPos = { ...cur };
+      draw();
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+  function runAttempt() {
+    if (running) return;
+    running = true;
+    attempt++;
+    attemptNumEl.textContent = attempt;
+    setStatus('running', 'running');
+    generateBtn.disabled = true;
+    autoBtn.disabled = true;
+
+    const t = tasks[taskIndex];
+    const policy = draftPolicy();
+    const graspErr = Math.hypot(policy.graspOffset.x, policy.graspOffset.y);
+    const placeErr = Math.hypot(policy.placeOffset.x, policy.placeOffset.y);
+    graspErrEl.textContent = graspErr.toFixed(1) + 'px';
+    placeErrEl.textContent = placeErr.toFixed(1) + 'px';
+
+    holdingBlock = false;
+    blockPos = { ...t.block };
+    gripperPos = { x: BASE.x + L1, y: BASE.y };
+
+    log('attempt ' + attempt, 'Drafting policy — grasp offset ' + graspErr.toFixed(1) +
+      'px, placement offset ' + placeErr.toFixed(1) + 'px (tolerance 22px). Running on hardware sim…');
+
+    animatePolicy(policy, function () {
+      const graspOk = graspErr <= 22;
+      const finalDist = dist(blockPos, t.target);
+      const placeOk = graspOk && finalDist <= 26;
+      const hitObstacle = t.obstacle && blockPos.x > t.obstacle.x - 10 && blockPos.x < t.obstacle.x + t.obstacle.w + 10
+        && blockPos.y > t.obstacle.y - 10 && blockPos.y < t.obstacle.y + t.obstacle.h + 10;
+
+      if (placeOk && !hitObstacle) {
+        setStatus('success', 'success');
+        log('result', 'Block settled ' + finalDist.toFixed(1) + 'px from target center — inside tolerance. Task complete.', 'success');
+        running = false;
+        generateBtn.disabled = false;
+        autoBtn.disabled = true;
+        autoMode = false;
+      } else {
+        setStatus('fail', 'failed');
+        let reason;
+        if (!graspOk) reason = 'grasp missed the block by ' + graspErr.toFixed(1) + 'px — gripper closed on empty air.';
+        else if (hitObstacle) reason = 'path clipped the obstacle while carrying the block.';
+        else reason = 'placement landed ' + finalDist.toFixed(1) + 'px from target center — outside tolerance.';
+        log('result', 'Failed: ' + reason, 'fail');
+        errorMag = Math.max(4, errorMag * 0.45);
+        log('agent', 'Reducing offset noise for next draft (new bound ±' + errorMag.toFixed(1) + 'px) based on observed error.');
+        running = false;
+        generateBtn.disabled = false;
+        autoBtn.disabled = false;
+        if (autoMode && attempt < 8) {
+          setTimeout(runAttempt, 500);
+        } else {
+          autoMode = false;
+        }
+      }
+    });
+  }
+
+  document.querySelectorAll('.task-btn').forEach(btn => {
+    btn.addEventListener('click', () => setTask(+btn.dataset.task));
+  });
+  generateBtn.addEventListener('click', () => { autoMode = false; runAttempt(); });
+  autoBtn.addEventListener('click', () => { autoMode = true; runAttempt(); });
+  resetBtn.addEventListener('click', resetRun);
+
+  setTask(0);
+})();
+</script>
+
+</body>
+</html>
