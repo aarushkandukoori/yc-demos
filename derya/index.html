@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Outreach Loop — an agent that closes industrial deals</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0e1512;
+    --panel:#141d19;
+    --panel2:#182420;
+    --border:#25342d;
+    --text:#e8f0ea;
+    --dim:#8ba497;
+    --accent:#5fd6a0;
+    --accent2:#f2b155;
+    --danger:#e07a6f;
+    --mono: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: radial-gradient(circle at 20% 0%, #17231d 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    padding:32px 20px 90px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{margin-bottom:28px;}
+  .kicker{
+    color:var(--accent);
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    margin-bottom:10px;
+  }
+  h1{font-size:32px;margin:0 0 10px;letter-spacing:-0.02em;}
+  p.sub{color:var(--dim);max-width:680px;line-height:1.55;margin:0;font-size:15px;}
+
+  .board{
+    display:grid;
+    grid-template-columns: 340px 1fr;
+    gap:20px;
+    margin-top:28px;
+  }
+  @media (max-width: 880px){ .board{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:18px;
+  }
+  .panel h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--dim);
+    margin:0 0 14px;
+  }
+
+  .lead{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 14px;
+    margin-bottom:10px;
+    transition: border-color .2s, transform .2s;
+  }
+  .lead.active{border-color:var(--accent);}
+  .lead-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .lead-name{font-weight:600;font-size:14.5px;}
+  .lead-industry{color:var(--dim);font-size:11.5px;font-family:var(--mono);}
+  .lead-item{color:var(--dim);font-size:12.5px;margin-top:4px;}
+  .stage{
+    display:inline-block;
+    margin-top:8px;
+    font-size:10.5px;
+    font-family:var(--mono);
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    padding:3px 8px;
+    border-radius:20px;
+    border:1px solid var(--border);
+    color:var(--dim);
+  }
+  .stage.contacted{color:#7fb3d5;border-color:#2c4657;}
+  .stage.negotiating{color:var(--accent2);border-color:#4a3a20;}
+  .stage.closed{color:var(--accent);border-color:#204a37;}
+  .stage.stalled{color:var(--danger);border-color:#4a2823;}
+
+  button.run{
+    width:100%;
+    padding:12px;
+    background:var(--accent);
+    color:#08150f;
+    border:none;
+    border-radius:10px;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+    margin-bottom:16px;
+    transition:opacity .2s;
+  }
+  button.run:disabled{opacity:0.5;cursor:default;}
+  button.run:hover:not(:disabled){opacity:0.9;}
+
+  .stat-row{display:flex;gap:10px;margin-bottom:16px;}
+  .stat{
+    flex:1;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:10px 12px;
+    text-align:center;
+  }
+  .stat .num{font-size:20px;font-weight:700;font-family:var(--mono);}
+  .stat .lbl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;}
+
+  .feed{
+    height:520px;
+    overflow-y:auto;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:#0b120f;
+    padding:14px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    line-height:1.6;
+  }
+  .feed::-webkit-scrollbar{width:8px;}
+  .feed::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+  .msg{margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--border);}
+  .msg:last-child{border-bottom:none;}
+  .msg .who{color:var(--accent);}
+  .msg .who.buyer{color:var(--accent2);}
+  .msg .who.sys{color:var(--dim);}
+  .msg .body{color:#cfe0d6;}
+  .msg .ts{color:#516459;font-size:10.5px;margin-left:6px;}
+
+  .placeholder{color:var(--dim);text-align:center;padding:60px 20px;font-size:13px;}
+
+  .deals{
+    margin-top:20px;
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px,1fr));
+    gap:12px;
+  }
+  .deal-card{
+    background:var(--panel2);
+    border:1px solid #204a37;
+    border-radius:10px;
+    padding:12px 14px;
+  }
+  .deal-card .dname{font-weight:600;font-size:13.5px;}
+  .deal-card .dline{font-size:12px;color:var(--dim);margin-top:5px;}
+  .deal-card .dprice{color:var(--accent);font-family:var(--mono);font-weight:700;margin-top:8px;font-size:15px;}
+
+  footer{
+    max-width:1180px;
+    margin:60px auto 0;
+    padding-top:18px;
+    border-top:1px solid var(--border);
+    color:var(--dim);
+    font-size:12px;
+    text-align:center;
+  }
+  footer a{color:var(--dim);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Toy demo · outbound sourcing agent</div>
+    <h1>Outreach Loop</h1>
+    <p class="sub">
+      An inbox full of cold industrial leads never gets worked evenly — reps burn out on the tenth
+      "send me a spec sheet." This toy shows one agent running dozens of buyer conversations in
+      parallel, negotiating price and lead time turn by turn, and only surfacing a deal once it's
+      actually ready to sign. Click run and watch the pipeline move.
+    </p>
+  </header>
+
+  <div class="board">
+    <div class="panel">
+      <h2>Lead queue</h2>
+      <button class="run" id="runBtn" onclick="runAgent()">Run outreach agent →</button>
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="statContacted">0</div><div class="lbl">Contacted</div></div>
+        <div class="stat"><div class="num" id="statClosed">0</div><div class="lbl">Closed</div></div>
+        <div class="stat"><div class="num" id="statValue">$0</div><div class="lbl">Booked</div></div>
+      </div>
+      <div id="leadList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Live agent activity</h2>
+      <div class="feed" id="feed">
+        <div class="placeholder">No conversations yet. Press "Run outreach agent" to start working the queue.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px;">
+    <h2>Closed deals</h2>
+    <div class="deals" id="deals">
+      <div class="placeholder" style="grid-column:1/-1;">Closed deals will appear here as the agent finishes negotiating.</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Derya (YC S26). Not affiliated with Derya.
+</footer>
+
+<script>
+// ---- synthetic data -------------------------------------------------
+const LEADS = [
+  { name:"Halden Valve Works", industry:"Industrial valves", item:"316SS gate valves, 4in", qty:120, askPrice:118, floorPrice:96, leadDays:18 },
+  { name:"Coastal Bearing Co.", industry:"Precision bearings", item:"Tapered roller bearings", qty:900, askPrice:14, floorPrice:10.5, leadDays:9 },
+  { name:"Ferro & Kline Metals", industry:"Raw steel supply", item:"Hot-rolled steel coil, 2mm", qty:40, askPrice:860, floorPrice:730, leadDays:22 },
+  { name:"Northrail Fasteners", industry:"Fastener manufacturing", item:"Grade 8 hex bolts, M12", qty:5000, askPrice:0.42, floorPrice:0.29, leadDays:6 },
+  { name:"Vantage Pump Systems", industry:"Fluid handling", item:"Centrifugal pump units", qty:15, askPrice:2450, floorPrice:2050, leadDays:30 },
+  { name:"Ridgeline Conveyor", industry:"Material handling", item:"Modular belt conveyor, 3m", qty:8, askPrice:3100, floorPrice:2600, leadDays:25 },
+  { name:"Ampere Cable & Wire", industry:"Electrical supply", item:"THHN copper wire, 500ft", qty:220, askPrice:96, floorPrice:78, leadDays:12 },
+  { name:"Cinder Refractory", industry:"Industrial ceramics", item:"Firebrick pallets", qty:60, askPrice:210, floorPrice:175, leadDays:14 },
+];
+
+const BUYER_OPEN = [
+  "Yeah we're looking, send me pricing at volume.",
+  "Depends on lead time. What's your best case?",
+  "We usually buy from two other vendors, why should we switch?",
+  "Can you do a sample run before we commit to full qty?",
+  "Price looks high versus what we're paying now.",
+];
+const BUYER_COUNTER = [
+  "That's closer but still above our target. Can you move a bit more?",
+  "Okay, if you can hold that price for the next order too, we're close.",
+  "Our finance team wants one more concession on freight.",
+  "Fine, but we need it in {days} days, not longer.",
+];
+const BUYER_STALL = [
+  "Let me check with procurement and get back to you next quarter.",
+  "We just signed with another supplier, timing's off.",
+  "Budget's frozen on this line item right now.",
+];
+const BUYER_CLOSE = [
+  "Alright, send the PO — let's lock this in.",
+  "Deal. Get the paperwork over and we'll confirm the PO number.",
+  "Works for us. Ship against this once documents are signed.",
+];
+
+function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function money(n){ return "$" + n.toLocaleString(undefined,{maximumFractionDigits:2}); }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// ---- state ------------------------------------------------------------
+let state = LEADS.map(l => ({...l, status:"queued", finalPrice:null}));
+let running = false;
+
+function renderLeads(){
+  const el = document.getElementById("leadList");
+  el.innerHTML = "";
+  state.forEach((l, i) => {
+    const div = document.createElement("div");
+    div.className = "lead" + (l.status==="working" ? " active" : "");
+    const stageClass = l.status==="working" ? "negotiating" :
+                        l.status==="closed" ? "closed" :
+                        l.status==="stalled" ? "stalled" :
+                        l.status==="contacted" ? "contacted" : "";
+    const stageLabel = l.status==="queued" ? "queued" :
+                        l.status==="working" ? "negotiating" :
+                        l.status;
+    div.innerHTML = `
+      <div class="lead-top">
+        <span class="lead-name">${l.name}</span>
+        <span class="lead-industry">${l.industry}</span>
+      </div>
+      <div class="lead-item">${l.qty.toLocaleString()} × ${l.item}</div>
+      <span class="stage ${stageClass}">${stageLabel}</span>
+    `;
+    el.appendChild(div);
+  });
+  updateStats();
+}
+
+function updateStats(){
+  const contacted = state.filter(l=>l.status!=="queued").length;
+  const closed = state.filter(l=>l.status==="closed");
+  const value = closed.reduce((sum,l)=> sum + l.finalPrice*l.qty, 0);
+  document.getElementById("statContacted").textContent = contacted;
+  document.getElementById("statClosed").textContent = closed.length;
+  document.getElementById("statValue").textContent = money(Math.round(value));
+}
+
+function logMsg(who, whoClass, text){
+  const feed = document.getElementById("feed");
+  const placeholder = feed.querySelector(".placeholder");
+  if (placeholder) placeholder.remove();
+  const div = document.createElement("div");
+  div.className = "msg";
+  const time = new Date().toLocaleTimeString(undefined,{hour12:false});
+  div.innerHTML = `<span class="who ${whoClass}">${who}</span><span class="ts">${time}</span><div class="body">${text}</div>`;
+  feed.appendChild(div);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function renderDeal(l){
+  const el = document.getElementById("deals");
+  const placeholder = el.querySelector(".placeholder");
+  if (placeholder) placeholder.remove();
+  const card = document.createElement("div");
+  card.className = "deal-card";
+  card.innerHTML = `
+    <div class="dname">${l.name}</div>
+    <div class="dline">${l.qty.toLocaleString()} × ${l.item}</div>
+    <div class="dline">Lead time confirmed: ${l.leadDays} days</div>
+    <div class="dprice">${money(l.finalPrice)} / unit</div>
+  `;
+  el.appendChild(card);
+}
+
+// negotiation: agent opens near ask, buyer counters, agent concedes toward
+// a floor it was given, converges or stalls.
+async function negotiate(l){
+  l.status = "working";
+  renderLeads();
+
+  logMsg("Agent → " + l.name, "sys", `Opening outreach: "${l.item}, qty ${l.qty.toLocaleString()}. What's realistic on price and lead time?"`);
+  await sleep(500 + Math.random()*400);
+
+  // 15% of leads go cold regardless
+  if (Math.random() < 0.15) {
+    logMsg(l.name, "buyer", rand(BUYER_STALL));
+    l.status = "stalled";
+    renderLeads();
+    return;
+  }
+
+  logMsg(l.name, "buyer", rand(BUYER_OPEN));
+  await sleep(400 + Math.random()*300);
+
+  let price = l.askPrice * (0.94 + Math.random()*0.04); // agent opens slightly under ask
+  logMsg("Agent → " + l.name, "sys", `Countered at ${money(Math.round(price*100)/100)}/unit, ${l.leadDays} day lead time, citing current mill throughput.`);
+  await sleep(450 + Math.random()*350);
+
+  const rounds = 2 + Math.floor(Math.random()*2);
+  for (let r=0; r<rounds; r++){
+    const counterText = rand(BUYER_COUNTER).replace("{days}", Math.max(3, l.leadDays-4));
+    logMsg(l.name, "buyer", counterText);
+    await sleep(400 + Math.random()*300);
+
+    // concede toward floor, never below it
+    const remaining = price - l.floorPrice;
+    price = Math.max(l.floorPrice, price - remaining * (0.35 + Math.random()*0.25));
+    logMsg("Agent → " + l.name, "sys", `Held the line above floor, moved to ${money(Math.round(price*100)/100)}/unit.`);
+    await sleep(400 + Math.random()*300);
+  }
+
+  const closes = price <= l.floorPrice * 1.12 && Math.random() > 0.1;
+  if (closes){
+    logMsg(l.name, "buyer", rand(BUYER_CLOSE));
+    l.status = "closed";
+    l.finalPrice = Math.round(price*100)/100;
+    renderDeal(l);
+    logMsg("Agent → " + l.name, "sys", `Logged PO draft, handed off to ops for shipment tracking.`);
+  } else {
+    logMsg(l.name, "buyer", rand(BUYER_STALL));
+    l.status = "stalled";
+  }
+  renderLeads();
+}
+
+async function runAgent(){
+  if (running) return;
+  running = true;
+  const btn = document.getElementById("runBtn");
+  btn.disabled = true;
+  btn.textContent = "Agent working…";
+
+  state.forEach(l => { l.status="queued"; l.finalPrice=null; });
+  document.getElementById("feed").innerHTML = "";
+  document.getElementById("deals").innerHTML = "";
+  renderLeads();
+
+  // work leads with limited "concurrency" of 3 to feel like parallel threads
+  const queue = [...state];
+  const workers = [1,2,3].map(async () => {
+    while (queue.length){
+      const l = queue.shift();
+      l.status = "contacted";
+      renderLeads();
+      await negotiate(l);
+    }
+  });
+  await Promise.all(workers);
+
+  logMsg("Agent", "sys", `Queue cleared. ${state.filter(l=>l.status==="closed").length} of ${state.length} conversations converted to a signed PO this run.`);
+  btn.disabled = false;
+  btn.textContent = "Run outreach agent →";
+  running = false;
+}
+
+renderLeads();
+</script>
+</body>
+</html>

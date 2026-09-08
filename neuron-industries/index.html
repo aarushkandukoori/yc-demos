@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Plain English &rarr; Running Controller | Demo</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel2: #17202b;
+    --line: #263241;
+    --text: #dbe6f0;
+    --muted: #7f93a6;
+    --accent: #4fd1a5;
+    --accent2: #5aa9ff;
+    --warn: #ffb454;
+    --danger: #ff5d5d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: linear-gradient(180deg, #0b0f14, #0d1218 60%, #0b0f14);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 28px 20px 60px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { margin-bottom: 22px; }
+  header h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  header p { color: var(--muted); margin: 0; font-size: 14.5px; line-height: 1.5; max-width: 720px; }
+  .badge {
+    display: inline-block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid rgba(79,209,165,0.4); background: rgba(79,209,165,0.08);
+    padding: 3px 8px; border-radius: 20px; margin-bottom: 10px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+    margin: 0 0 12px;
+  }
+  textarea {
+    width: 100%; min-height: 120px; resize: vertical;
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--text); font-size: 14px; padding: 10px 12px; font-family: inherit; line-height: 1.5;
+  }
+  textarea:focus { outline: none; border-color: var(--accent2); }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .chip {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+    font-size: 12px; padding: 5px 10px; border-radius: 20px; cursor: pointer;
+  }
+  .chip:hover { color: var(--text); border-color: var(--accent2); }
+  button.primary {
+    margin-top: 12px; background: var(--accent); color: #06231a; border: none;
+    padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button.secondary {
+    margin-top: 12px; margin-left: 8px; background: transparent; color: var(--muted);
+    border: 1px solid var(--line); padding: 10px 14px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+  button.secondary:hover { color: var(--text); border-color: var(--accent2); }
+  pre#compiled {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; font-size: 12.5px; line-height: 1.6; color: #b7f5d8;
+    max-height: 220px; overflow: auto; margin: 0;
+    white-space: pre-wrap;
+  }
+  .kw { color: var(--accent2); }
+  .num { color: var(--warn); }
+  .cmt { color: var(--muted); }
+  .sim-row { display: flex; gap: 18px; align-items: flex-start; margin-top: 4px; }
+  canvas#tank { border-radius: 8px; background: #0d1420; border: 1px solid var(--line); }
+  .readouts { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+  .readout {
+    display: flex; justify-content: space-between; background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13px;
+  }
+  .readout .val { font-weight: 700; }
+  .val.on { color: var(--accent); }
+  .val.off { color: var(--muted); }
+  .val.alarm { color: var(--danger); }
+  .controls { display: flex; gap: 8px; margin-top: 10px; }
+  .controls button {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    padding: 7px 12px; border-radius: 6px; font-size: 12.5px; cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--accent2); }
+  #log {
+    margin-top: 14px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; color: var(--muted); height: 130px; overflow-y: auto;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  #log div { margin-bottom: 3px; }
+  #log .tag-alarm { color: var(--danger); }
+  #log .tag-valve { color: var(--accent2); }
+  .full { grid-column: 1 / -1; }
+  footer {
+    margin-top: 34px; text-align: center; color: var(--muted); font-size: 12px;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  .error { color: var(--danger); font-size: 12.5px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="badge">toy demo</span>
+    <h1>Describe the process. Watch the controller run it.</h1>
+    <p>
+      This is a small, self-contained sketch of the idea behind AI-native industrial controllers:
+      skip hand-written ladder logic, describe the desired behavior in plain English, compile it into
+      deterministic rules, and simulate it running on real equipment &mdash; live, in the browser, with
+      synthetic sensor data. Everything below runs locally; nothing is sent anywhere.
+    </p>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>1 &middot; Describe the behavior</h2>
+      <textarea id="spec">Keep the tank level between 30% and 70%.
+Sound the alarm if the level drops below 10%.
+Never let the level go above 95%.</textarea>
+      <div class="presets">
+        <div class="chip" data-p="Keep the tank level between 30% and 70%.
+Sound the alarm if the level drops below 10%.
+Never let the level go above 95%.">tank buffer</div>
+        <div class="chip" data-p="Fill the tank whenever the level is below 50%.
+Stop filling once the level reaches 90%.
+Sound the alarm if the level drops below 5%.">simple fill</div>
+        <div class="chip" data-p="Keep the tank level between 20% and 40%.
+Sound the alarm if the level goes above 85%.">tight band</div>
+      </div>
+      <div id="err" class="error"></div>
+      <button class="primary" id="compileBtn">Compile &amp; Run</button>
+      <button class="secondary" id="leakBtn">Inject sensor spike</button>
+    </div>
+
+    <div class="panel">
+      <h2>2 &middot; Compiled controller logic</h2>
+      <pre id="compiled">// Compile something to see the generated logic here.</pre>
+    </div>
+
+    <div class="panel full">
+      <h2>3 &middot; Live simulation &mdash; synthetic tank, real controller loop</h2>
+      <div class="sim-row">
+        <canvas id="tank" width="160" height="260"></canvas>
+        <div class="readouts">
+          <div class="readout"><span>Level sensor</span><span class="val" id="rLevel">--</span></div>
+          <div class="readout"><span>Fill valve</span><span class="val off" id="rFill">CLOSED</span></div>
+          <div class="readout"><span>Drain valve</span><span class="val off" id="rDrain">CLOSED</span></div>
+          <div class="readout"><span>Alarm</span><span class="val off" id="rAlarm">CLEAR</span></div>
+          <div class="readout"><span>Controller loop</span><span class="val on" id="rLoop">100 ms scan</span></div>
+          <div class="controls">
+            <button id="pauseBtn">Pause</button>
+            <button id="disturbBtn">Simulate demand spike</button>
+            <button id="resetBtn">Reset</button>
+          </div>
+        </div>
+      </div>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Neuron Industries (YC S26). Not affiliated with Neuron Industries.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var els = {
+    spec: document.getElementById('spec'),
+    compiled: document.getElementById('compiled'),
+    err: document.getElementById('err'),
+    log: document.getElementById('log'),
+    canvas: document.getElementById('tank'),
+    rLevel: document.getElementById('rLevel'),
+    rFill: document.getElementById('rFill'),
+    rDrain: document.getElementById('rDrain'),
+    rAlarm: document.getElementById('rAlarm'),
+  };
+  var ctx = els.canvas.getContext('2d');
+
+  // ---------- "Compiler": turn plain-English sentences into deterministic rules ----------
+  function compileSpec(text) {
+    var rules = [];
+    var lines = text.split(/\n|\.(?=\s|$)/).map(function (s) { return s.trim(); }).filter(Boolean);
+
+    lines.forEach(function (line) {
+      var l = line.toLowerCase();
+      var pctMatches = l.match(/(\d{1,3})\s*%/g);
+      var nums = pctMatches ? pctMatches.map(function (m) { return parseInt(m, 10); }) : [];
+
+      if (/between/.test(l) && nums.length >= 2) {
+        rules.push({ type: 'band', low: Math.min(nums[0], nums[1]), high: Math.max(nums[0], nums[1]),
+          src: line });
+      } else if (/alarm/.test(l) && /below/.test(l) && nums.length >= 1) {
+        rules.push({ type: 'alarm_low', th: nums[0], src: line });
+      } else if (/alarm/.test(l) && /above/.test(l) && nums.length >= 1) {
+        rules.push({ type: 'alarm_high', th: nums[0], src: line });
+      } else if (/fill/.test(l) && /below/.test(l) && nums.length >= 1) {
+        rules.push({ type: 'fill_below', th: nums[0], src: line });
+      } else if (/(stop filling|above)/.test(l) && /fill|reaches/.test(l) && nums.length >= 1) {
+        rules.push({ type: 'fill_stop', th: nums[0], src: line });
+      } else if (/never/.test(l) && /above/.test(l) && nums.length >= 1) {
+        rules.push({ type: 'hard_max', th: nums[0], src: line });
+      } else if (nums.length >= 1) {
+        rules.push({ type: 'unrecognized', src: line });
+      }
+    });
+
+    if (rules.length === 0) throw new Error('Could not find any recognizable percentage-based conditions. Try mentioning a level with a % value.');
+    return rules;
+  }
+
+  function renderCompiled(rules) {
+    var out = "# auto-generated from plain-English spec\n# deterministic, unit-testable control loop\n\n";
+    out += "def scan(level, fill_open, drain_open, alarm):\n";
+    var any = false;
+    rules.forEach(function (r) {
+      if (r.type === 'band') {
+        out += "    if level < " + r.low + ":\n        fill_open = True\n    elif level >= " + r.high + ":\n        fill_open = False\n\n";
+        any = true;
+      } else if (r.type === 'fill_below') {
+        out += "    if level < " + r.th + ":\n        fill_open = True\n\n";
+        any = true;
+      } else if (r.type === 'fill_stop') {
+        out += "    if level >= " + r.th + ":\n        fill_open = False\n\n";
+        any = true;
+      } else if (r.type === 'alarm_low') {
+        out += "    if level < " + r.th + ":\n        alarm = True\n\n";
+        any = true;
+      } else if (r.type === 'alarm_high') {
+        out += "    if level > " + r.th + ":\n        alarm = True\n\n";
+        any = true;
+      } else if (r.type === 'hard_max') {
+        out += "    if level >= " + r.th + ":\n        fill_open = False  # hard interlock\n\n";
+        any = true;
+      } else if (r.type === 'unrecognized') {
+        out += "    # NOTE: could not compile -> \"" + r.src + "\"\n\n";
+      }
+    });
+    out += "    return fill_open, drain_open, alarm\n\n# --- source spec ---\n";
+    rules.forEach(function (r) { out += "# " + r.src + "\n"; });
+    els.compiled.textContent = out;
+  }
+
+  // ---------- Simulation ----------
+  var sim = {
+    level: 50,
+    fill: false,
+    drain: false,
+    alarm: false,
+    rules: [],
+    running: false,
+    timer: null,
+    demand: 0.06,
+  };
+
+  function log(msg, tag) {
+    var d = document.createElement('div');
+    if (tag) d.className = 'tag-' + tag;
+    var t = new Date();
+    var ts = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
+    d.textContent = '[' + ts + '] ' + msg;
+    els.log.appendChild(d);
+    els.log.scrollTop = els.log.scrollHeight;
+    while (els.log.children.length > 80) els.log.removeChild(els.log.firstChild);
+  }
+
+  function applyRules() {
+    var prevFill = sim.fill, prevAlarm = sim.alarm, prevDrain = sim.drain;
+    sim.rules.forEach(function (r) {
+      if (r.type === 'band') {
+        if (sim.level < r.low) { sim.fill = true; sim.drain = false; }
+        else if (sim.level >= r.high) { sim.fill = false; sim.drain = true; }
+      } else if (r.type === 'fill_below') {
+        if (sim.level < r.th) sim.fill = true;
+      } else if (r.type === 'fill_stop') {
+        if (sim.level >= r.th) sim.fill = false;
+      } else if (r.type === 'alarm_low') {
+        sim.alarm = sim.alarm || sim.level < r.th;
+      } else if (r.type === 'alarm_high') {
+        sim.alarm = sim.alarm || sim.level > r.th;
+      } else if (r.type === 'hard_max') {
+        if (sim.level >= r.th) sim.fill = false;
+      }
+    });
+    if (sim.fill !== prevFill) log('fill valve ' + (sim.fill ? 'OPENED' : 'CLOSED'), 'valve');
+    if (sim.drain !== prevDrain) log('drain valve ' + (sim.drain ? 'OPENED' : 'CLOSED'), 'valve');
+    if (sim.alarm && !prevAlarm) log('ALARM raised: level ' + sim.level.toFixed(1) + '%', 'alarm');
+    if (!sim.alarm && prevAlarm) log('alarm cleared');
+  }
+
+  function step() {
+    if (sim.fill) sim.level += 1.1;
+    if (sim.drain) sim.level -= 0.9;
+    sim.level -= sim.demand; // natural consumption / leak
+    sim.level += (Math.random() - 0.5) * 0.4; // sensor noise
+    sim.level = Math.max(0, Math.min(100, sim.level));
+
+    // auto-clear alarm once safely back in range
+    if (sim.alarm && sim.level > 15 && sim.level < 85) sim.alarm = false;
+
+    applyRules();
+    draw();
+    updateReadouts();
+  }
+
+  function draw() {
+    var w = els.canvas.width, h = els.canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0d1420';
+    ctx.fillRect(0, 0, w, h);
+    // tank outline
+    ctx.strokeStyle = '#263241';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, w - 20, h - 20);
+    // liquid
+    var pct = sim.level / 100;
+    var liquidH = (h - 24) * pct;
+    var grad = ctx.createLinearGradient(0, h - 12 - liquidH, 0, h - 12);
+    grad.addColorStop(0, sim.alarm ? '#ff8a8a' : '#5aa9ff');
+    grad.addColorStop(1, sim.alarm ? '#c23a3a' : '#2e7dd6');
+    ctx.fillStyle = grad;
+    ctx.fillRect(12, h - 12 - liquidH, w - 24, liquidH);
+    // level markers
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#7f93a6';
+    [0, 25, 50, 75, 100].forEach(function (m) {
+      var y = 12 + (h - 24) * (1 - m / 100);
+      ctx.fillText(m + '%', w - 30, y + 3);
+      ctx.beginPath();
+      ctx.moveTo(10, y); ctx.lineTo(18, y);
+      ctx.strokeStyle = '#3a4a5c';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+    // valves
+    ctx.fillStyle = sim.fill ? '#4fd1a5' : '#3a4a5c';
+    ctx.fillRect(w / 2 - 22, 0, 12, 10);
+    ctx.fillStyle = sim.drain ? '#5aa9ff' : '#3a4a5c';
+    ctx.fillRect(w / 2 + 10, h - 10, 12, 10);
+    if (sim.alarm && Math.floor(Date.now() / 300) % 2 === 0) {
+      ctx.fillStyle = 'rgba(255,93,93,0.5)';
+      ctx.fillRect(0, 0, w, h);
+    }
+  }
+
+  function updateReadouts() {
+    els.rLevel.textContent = sim.level.toFixed(1) + '%';
+    els.rFill.textContent = sim.fill ? 'OPEN' : 'CLOSED';
+    els.rFill.className = 'val ' + (sim.fill ? 'on' : 'off');
+    els.rDrain.textContent = sim.drain ? 'OPEN' : 'CLOSED';
+    els.rDrain.className = 'val ' + (sim.drain ? 'on' : 'off');
+    els.rAlarm.textContent = sim.alarm ? 'ALARM' : 'CLEAR';
+    els.rAlarm.className = 'val ' + (sim.alarm ? 'alarm' : 'off');
+  }
+
+  function startLoop() {
+    if (sim.timer) clearInterval(sim.timer);
+    sim.running = true;
+    document.getElementById('pauseBtn').textContent = 'Pause';
+    sim.timer = setInterval(step, 100);
+  }
+
+  function togglePause() {
+    if (sim.running) {
+      clearInterval(sim.timer);
+      sim.running = false;
+      document.getElementById('pauseBtn').textContent = 'Resume';
+      log('controller loop paused');
+    } else {
+      startLoop();
+      log('controller loop resumed');
+    }
+  }
+
+  function compileAndRun() {
+    els.err.textContent = '';
+    try {
+      var rules = compileSpec(els.spec.value);
+      renderCompiled(rules);
+      sim.rules = rules;
+      log('compiled ' + rules.length + ' rule(s) from spec, starting scan loop');
+      startLoop();
+    } catch (e) {
+      els.err.textContent = e.message;
+    }
+  }
+
+  function reset() {
+    sim.level = 50;
+    sim.fill = false;
+    sim.drain = false;
+    sim.alarm = false;
+    draw();
+    updateReadouts();
+    log('simulation reset to 50%');
+  }
+
+  document.getElementById('compileBtn').addEventListener('click', compileAndRun);
+  document.getElementById('pauseBtn').addEventListener('click', togglePause);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+  document.getElementById('leakBtn').addEventListener('click', function () {
+    sim.level -= 20;
+    log('sensor spike injected: level dropped 20 points instantly');
+  });
+  document.getElementById('disturbBtn').addEventListener('click', function () {
+    sim.demand = sim.demand > 0.06 ? 0.06 : 0.5;
+    log('demand ' + (sim.demand > 0.06 ? 'spiked (fast consumption)' : 'back to normal'));
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.chip'), function (chip) {
+    chip.addEventListener('click', function () {
+      els.spec.value = chip.getAttribute('data-p');
+    });
+  });
+
+  // initial compile + draw so the demo isn't blank on load
+  compileAndRun();
+})();
+</script>
+</body>
+</html>
