@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MutaVax Lab — Personalized Tumor Vaccine Designer (Toy Demo)</title>
+<style>
+  :root{
+    --bg:#0f1416;
+    --panel:#161d20;
+    --panel-2:#1c2529;
+    --border:#2a3438;
+    --text:#e7f0ee;
+    --muted:#8fa3a0;
+    --accent:#5fc9a8;
+    --accent-2:#e8a35f;
+    --danger:#e05f5f;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 20% -10%, #16302a, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:32px 6vw 16px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:1.6rem;
+    letter-spacing:-0.02em;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0;
+    color:var(--muted);
+    max-width:640px;
+    line-height:1.5;
+    font-size:0.95rem;
+  }
+  main{
+    flex:1;
+    padding:28px 6vw 40px;
+    display:grid;
+    grid-template-columns:1fr;
+    gap:24px;
+    max-width:1200px;
+    margin:0 auto;
+    width:100%;
+  }
+  .step{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:22px 24px;
+  }
+  .step h2{
+    margin:0 0 4px;
+    font-size:1.05rem;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .step h2 .num{
+    width:24px;height:24px;
+    border-radius:50%;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    display:inline-flex;align-items:center;justify-content:center;
+    font-size:0.8rem;
+    color:var(--accent);
+  }
+  .step p.desc{
+    color:var(--muted);
+    margin:2px 0 16px;
+    font-size:0.88rem;
+    line-height:1.5;
+  }
+  .dog-picker{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:6px;
+  }
+  .dog-btn{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:10px 14px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:0.85rem;
+    transition:border-color .15s, transform .1s;
+  }
+  .dog-btn:hover{border-color:var(--accent);}
+  .dog-btn.active{
+    border-color:var(--accent);
+    background:#1d3630;
+  }
+  button.primary{
+    background:var(--accent);
+    color:#0b1512;
+    border:none;
+    padding:11px 18px;
+    border-radius:10px;
+    font-weight:600;
+    font-size:0.88rem;
+    cursor:pointer;
+    transition:transform .1s, opacity .15s;
+  }
+  button.primary:hover{transform:translateY(-1px);}
+  button.primary:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+    transform:none;
+  }
+  button.ghost{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--muted);
+    padding:9px 14px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:0.82rem;
+  }
+  button.ghost:hover{color:var(--text); border-color:var(--accent);}
+
+  .seq-block{
+    font-family:var(--mono);
+    font-size:0.92rem;
+    line-height:1.9;
+    background:#0c1213;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px 16px;
+    overflow-x:auto;
+    white-space:pre;
+    letter-spacing:2px;
+  }
+  .seq-label{
+    display:block;
+    font-family:-apple-system,sans-serif;
+    letter-spacing:0;
+    font-size:0.72rem;
+    color:var(--muted);
+    text-transform:uppercase;
+    margin-bottom:2px;
+  }
+  .mut{
+    background:var(--danger);
+    color:#1a0a0a;
+    border-radius:3px;
+    padding:0 1px;
+  }
+  .row-actions{
+    display:flex;
+    gap:10px;
+    margin-top:16px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .hint{
+    color:var(--muted);
+    font-size:0.8rem;
+  }
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:0.85rem;
+    margin-top:6px;
+  }
+  th,td{
+    text-align:left;
+    padding:9px 10px;
+    border-bottom:1px solid var(--border);
+  }
+  th{
+    color:var(--muted);
+    font-weight:500;
+    font-size:0.75rem;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+  }
+  td.mono{font-family:var(--mono);}
+  .score-bar-wrap{
+    background:var(--panel-2);
+    border-radius:6px;
+    overflow:hidden;
+    width:120px;
+    height:8px;
+  }
+  .score-bar{
+    height:100%;
+    background:linear-gradient(90deg, var(--accent-2), var(--accent));
+  }
+  tr.selected{background:#173129;}
+  tr.selectable{cursor:pointer;}
+  tr.selectable:hover{background:#182022;}
+  .pill{
+    display:inline-block;
+    font-size:0.7rem;
+    padding:2px 8px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    color:var(--muted);
+  }
+  .pill.picked{
+    color:#0b1512;
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+
+  .vaccine-card{
+    display:flex;
+    gap:18px;
+    flex-wrap:wrap;
+  }
+  .peptide-chip{
+    background:var(--panel-2);
+    border:1px solid var(--accent);
+    color:var(--accent);
+    padding:8px 12px;
+    border-radius:8px;
+    font-family:var(--mono);
+    font-size:0.8rem;
+  }
+
+  canvas{
+    width:100%;
+    height:220px;
+    display:block;
+  }
+  .chart-wrap{
+    background:#0c1213;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px;
+  }
+  .legend{
+    display:flex;
+    gap:20px;
+    margin-top:10px;
+    font-size:0.78rem;
+    color:var(--muted);
+  }
+  .legend span::before{
+    content:"";
+    display:inline-block;
+    width:10px;height:10px;
+    border-radius:2px;
+    margin-right:6px;
+    vertical-align:middle;
+  }
+  .legend .l1::before{background:var(--danger);}
+  .legend .l2::before{background:var(--accent);}
+
+  .stat-row{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+    margin-top:14px;
+  }
+  .stat{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 16px;
+    min-width:130px;
+  }
+  .stat .v{font-size:1.3rem;font-weight:700;}
+  .stat .l{font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;}
+  .stat .v.good{color:var(--accent);}
+  .stat .v.bad{color:var(--danger);}
+
+  footer{
+    text-align:center;
+    padding:18px 6vw 28px;
+    color:var(--muted);
+    font-size:0.78rem;
+    border-top:1px solid var(--border);
+  }
+  .disabled-wrap{opacity:0.4; pointer-events:none; filter:grayscale(0.3);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MutaVax <span>Lab</span></h1>
+  <p>A toy walkthrough of the core idea behind personalized cancer vaccines for dogs: compare a tumor's DNA to healthy DNA, find the mutations unique to the cancer, rank which ones are worth training the immune system on, and watch a simulated dose take effect. All sequences and outcomes below are synthetic and generated in your browser — nothing here leaves the page.</p>
+</header>
+
+<main>
+
+  <section class="step" id="step1">
+    <h2><span class="num">1</span> Pick a patient</h2>
+    <p class="desc">Every dog gets two reads: one from healthy tissue, one from the tumor biopsy. Choose a case to pull its (synthetic) sequencing data.</p>
+    <div class="dog-picker" id="dogPicker"></div>
+    <div class="hint" id="dogHint">Select a dog to load its biopsy.</div>
+  </section>
+
+  <section class="step disabled-wrap" id="step2">
+    <h2><span class="num">2</span> Compare tumor DNA to healthy DNA</h2>
+    <p class="desc">Somatic mutations are the letters that changed <em>only</em> in the tumor. Those are the flags your dog's immune system has never seen before — and the raw material for a vaccine.</p>
+    <div class="seq-block" id="healthySeq"></div>
+    <div class="seq-block" style="margin-top:10px;" id="tumorSeq"></div>
+    <div class="row-actions">
+      <button class="primary" id="scanBtn">Scan for mutations</button>
+      <span class="hint" id="scanHint"></span>
+    </div>
+  </section>
+
+  <section class="step disabled-wrap" id="step3">
+    <h2><span class="num">3</span> Score mutations for vaccine potential</h2>
+    <p class="desc">Not every mutation is worth including — some sit in genome regions the immune system barely samples, others produce a protein shape (an epitope) that binds strongly to receptor cells and is easy to raise a response against. Click rows to build your vaccine payload; we've pre-selected the top scorers.</p>
+    <table id="mutTable">
+      <thead>
+        <tr><th></th><th>Position</th><th>Change</th><th>Predicted epitope</th><th>Immunogenicity score</th><th></th></tr>
+      </thead>
+      <tbody id="mutTbody"></tbody>
+    </table>
+    <div class="row-actions">
+      <button class="primary" id="designBtn">Design mRNA vaccine from selection</button>
+      <span class="hint" id="selHint">0 targets selected</span>
+    </div>
+  </section>
+
+  <section class="step disabled-wrap" id="step4">
+    <h2><span class="num">4</span> Vaccine payload</h2>
+    <p class="desc">Each selected mutation becomes a short mRNA sequence coding for its mutant peptide, so the immune system can be shown the exact shape to look for.</p>
+    <div class="vaccine-card" id="vaccineCard"></div>
+  </section>
+
+  <section class="step disabled-wrap" id="step5">
+    <h2><span class="num">5</span> Simulated response</h2>
+    <p class="desc">Illustrative only — a simplified model of tumor burden vs. anti-tumor immune activity over 12 weeks post-vaccination, driven by how many high-scoring targets you included.</p>
+    <div class="chart-wrap">
+      <canvas id="chart" width="900" height="220"></canvas>
+      <div class="legend">
+        <span class="l1">Tumor burden (relative)</span>
+        <span class="l2">Immune activity against tumor antigens</span>
+      </div>
+    </div>
+    <div class="stat-row" id="statRow"></div>
+  </section>
+
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Gamgee (YC S26). Not affiliated with Gamgee.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var BASES = ["A","C","G","T"];
+  var AMINO = ["Leu","Val","Gly","Ala","Ser","Thr","Arg","Lys","Glu","Asp","Phe","Tyr","Pro","His","Gln","Asn"];
+
+  var DOGS = [
+    {name:"Rosie", breed:"Border Collie mix", seed:11, tumorType:"osteosarcoma"},
+    {name:"Bruno", breed:"Labrador", seed:27, tumorType:"mast cell tumor"},
+    {name:"Willow", breed:"Greyhound", seed:42, tumorType:"lymphoma"},
+    {name:"Max", breed:"German Shepherd", seed:5, tumorType:"hemangiosarcoma"}
+  ];
+
+  var SEQ_LEN = 48;
+  var state = {
+    dog:null,
+    healthy:"",
+    tumor:"",
+    mutations:[],
+    selected:new Set()
+  };
+
+  // seeded PRNG so each dog is deterministic but distinct
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function genSequence(rng, len){
+    var s = "";
+    for(var i=0;i<len;i++){
+      s += BASES[Math.floor(rng()*4)];
+    }
+    return s;
+  }
+
+  function mutate(seq, rng, count){
+    var arr = seq.split("");
+    var positions = [];
+    while(positions.length < count){
+      var p = Math.floor(rng()*arr.length);
+      if(positions.indexOf(p) === -1) positions.push(p);
+    }
+    positions.forEach(function(p){
+      var options = BASES.filter(function(b){return b !== arr[p];});
+      arr[p] = options[Math.floor(rng()*options.length)];
+    });
+    return {seq:arr.join(""), positions:positions.sort(function(a,b){return a-b;})};
+  }
+
+  function renderDogPicker(){
+    var wrap = document.getElementById("dogPicker");
+    DOGS.forEach(function(d, idx){
+      var btn = document.createElement("button");
+      btn.className = "dog-btn";
+      btn.textContent = d.name + " · " + d.breed;
+      btn.addEventListener("click", function(){
+        selectDog(idx);
+        Array.prototype.forEach.call(wrap.children, function(c){c.classList.remove("active");});
+        btn.classList.add("active");
+      });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function selectDog(idx){
+    var d = DOGS[idx];
+    var rng = mulberry32(d.seed * 1000 + 7);
+    var healthy = genSequence(rng, SEQ_LEN);
+    var mutCount = 6 + Math.floor(rng()*4); // 6-9 mutations
+    var result = mutate(healthy, rng, mutCount);
+
+    state.dog = d;
+    state.healthy = healthy;
+    state.tumor = result.seq;
+    state.mutPositions = result.positions;
+    state.rng = rng;
+    state.mutations = [];
+    state.selected = new Set();
+
+    document.getElementById("dogHint").textContent =
+      d.name + " · biopsy diagnosis: suspected " + d.tumorType + ". Healthy and tumor DNA reads loaded (" + SEQ_LEN + " bp window).";
+
+    resetStep2Onward();
+    document.getElementById("step2").classList.remove("disabled-wrap");
+    renderRawSeqs();
+  }
+
+  function resetStep2Onward(){
+    ["step3","step4","step5"].forEach(function(id){
+      document.getElementById(id).classList.add("disabled-wrap");
+    });
+    document.getElementById("scanHint").textContent = "";
+    document.getElementById("mutTbody").innerHTML = "";
+    document.getElementById("vaccineCard").innerHTML = "";
+    document.getElementById("statRow").innerHTML = "";
+    var ctx = document.getElementById("chart").getContext("2d");
+    ctx.clearRect(0,0,900,220);
+  }
+
+  function renderRawSeqs(){
+    var h = document.getElementById("healthySeq");
+    var t = document.getElementById("tumorSeq");
+    h.innerHTML = '<span class="seq-label">Healthy tissue read</span>' + escapeHtml(state.healthy);
+    t.innerHTML = '<span class="seq-label">Tumor biopsy read</span>' + escapeHtml(state.tumor);
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  }
+
+  function scanMutations(){
+    // reveal tumor sequence with mismatches highlighted
+    var h = state.healthy, t = state.tumor;
+    var htmlH = "", htmlT = "";
+    for(var i=0;i<h.length;i++){
+      if(h[i] !== t[i]){
+        htmlH += '<span class="mut">'+h[i]+'</span>';
+        htmlT += '<span class="mut">'+t[i]+'</span>';
+      } else {
+        htmlH += h[i];
+        htmlT += t[i];
+      }
+    }
+    document.getElementById("healthySeq").innerHTML = '<span class="seq-label">Healthy tissue read</span>' + htmlH;
+    document.getElementById("tumorSeq").innerHTML = '<span class="seq-label">Tumor biopsy read (mutations highlighted)</span>' + htmlT;
+
+    var rng = state.rng;
+    var muts = state.mutPositions.map(function(pos){
+      var score = Math.round((0.35 + rng()*0.65) * 100) / 100;
+      var epitope = AMINO[Math.floor(rng()*AMINO.length)] + "-" + AMINO[Math.floor(rng()*AMINO.length)];
+      return {
+        pos: pos,
+        from: state.healthy[pos],
+        to: state.tumor[pos],
+        epitope: epitope,
+        score: score
+      };
+    }).sort(function(a,b){ return b.score - a.score; });
+
+    state.mutations = muts;
+    document.getElementById("scanHint").textContent =
+      muts.length + " somatic mutations found — none present in the healthy read.";
+    document.getElementById("step3").classList.remove("disabled-wrap");
+    renderMutTable();
+  }
+
+  function renderMutTable(){
+    var tbody = document.getElementById("mutTbody");
+    tbody.innerHTML = "";
+    // preselect top 3 by score
+    var topN = state.mutations.slice().sort(function(a,b){return b.score-a.score;}).slice(0,3);
+    var topSet = new Set(topN.map(function(m){return m.pos;}));
+
+    state.mutations.forEach(function(m){
+      if(topSet.has(m.pos)) state.selected.add(m.pos);
+      var tr = document.createElement("tr");
+      tr.className = "selectable" + (state.selected.has(m.pos) ? " selected" : "");
+      tr.dataset.pos = m.pos;
+
+      var pillHtml = "<span class='pill" + (state.selected.has(m.pos) ? " picked" : "") + "'>" +
+        (state.selected.has(m.pos) ? "in vaccine" : "add") + "</span>";
+
+      tr.innerHTML =
+        "<td>" + pillHtml + "</td>" +
+        "<td class='mono'>bp " + (m.pos+1) + "</td>" +
+        "<td class='mono'>" + m.from + " &rarr; " + m.to + "</td>" +
+        "<td class='mono'>" + m.epitope + "</td>" +
+        "<td><div style='display:flex;align-items:center;gap:8px;'>" +
+          "<div class='score-bar-wrap'><div class='score-bar' style='width:" + Math.round(m.score*100) + "%'></div></div>" +
+          "<span class='mono'>" + m.score.toFixed(2) + "</span>" +
+        "</div></td>" +
+        "<td></td>";
+
+      tr.addEventListener("click", function(){
+        var pos = Number(tr.dataset.pos);
+        if(state.selected.has(pos)) state.selected.delete(pos);
+        else state.selected.add(pos);
+        renderMutTable();
+      });
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("selHint").textContent = state.selected.size + " targets selected";
+  }
+
+  function designVaccine(){
+    var chosen = state.mutations.filter(function(m){ return state.selected.has(m.pos); });
+    if(chosen.length === 0){
+      document.getElementById("selHint").textContent = "Select at least one mutation first.";
+      return;
+    }
+    var card = document.getElementById("vaccineCard");
+    card.innerHTML = "";
+    chosen.forEach(function(m){
+      var chip = document.createElement("div");
+      chip.className = "peptide-chip";
+      var rnaCodon = m.to === "T" ? "U" : m.to; // toy transcription
+      chip.textContent = "mRNA-" + (m.pos+1) + " :: 5'-AUG…" + rnaCodon + rnaCodon + "C-3' [" + m.epitope + "]";
+      card.appendChild(chip);
+    });
+    document.getElementById("step4").classList.remove("disabled-wrap");
+    document.getElementById("step5").classList.remove("disabled-wrap");
+    runSimulation(chosen);
+  }
+
+  function runSimulation(chosen){
+    var weeks = 12;
+    var avgScore = chosen.reduce(function(s,m){return s+m.score;},0) / chosen.length;
+    var strength = avgScore * (0.6 + Math.min(chosen.length,5)*0.08); // more/better targets -> stronger response
+
+    var tumor = [100];
+    var immune = [5];
+    for(var w=1; w<=weeks; w++){
+      var immuneNext = Math.min(100, immune[w-1] + strength * (14 - w*0.4) * 0.9);
+      var tumorNext = Math.max(6, tumor[w-1] - strength * (immuneNext/100) * 9 + (Math.random()*2-1));
+      immune.push(Math.round(immuneNext*10)/10);
+      tumor.push(Math.round(tumorNext*10)/10);
+    }
+
+    drawChart(tumor, immune);
+
+    var reduction = Math.round(100 - tumor[tumor.length-1]);
+    var statRow = document.getElementById("statRow");
+    statRow.innerHTML =
+      stat("Targets in vaccine", chosen.length, "") +
+      stat("Avg. immunogenicity", avgScore.toFixed(2), "") +
+      stat("Simulated tumor burden change", "-" + reduction + "%", "good") +
+      stat("Peak immune activity", Math.max.apply(null, immune).toFixed(0) + "/100", "good");
+  }
+
+  function stat(label, value, cls){
+    return "<div class='stat'><div class='v " + cls + "'>" + value + "</div><div class='l'>" + label + "</div></div>";
+  }
+
+  function drawChart(tumor, immune){
+    var canvas = document.getElementById("chart");
+    var ctx = canvas.getContext("2d");
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+
+    var padL = 36, padB = 24, padT = 10, padR = 10;
+    var plotW = w - padL - padR;
+    var plotH = h - padT - padB;
+
+    // gridlines
+    ctx.strokeStyle = "#22302c";
+    ctx.lineWidth = 1;
+    ctx.font = "11px monospace";
+    ctx.fillStyle = "#8fa3a0";
+    for(var g=0; g<=4; g++){
+      var y = padT + plotH - (g/4)*plotH;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(w-padR, y);
+      ctx.stroke();
+      ctx.fillText(g*25, 4, y+3);
+    }
+
+    function plot(series, color){
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      series.forEach(function(v, i){
+        var x = padL + (i/(series.length-1))*plotW;
+        var y = padT + plotH - (v/100)*plotH;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+
+    plot(tumor, "#e05f5f");
+    plot(immune, "#5fc9a8");
+
+    ctx.fillStyle = "#8fa3a0";
+    ctx.fillText("week 0", padL-4, h-6);
+    ctx.fillText("week 12", w-padR-46, h-6);
+  }
+
+  document.getElementById("scanBtn").addEventListener("click", scanMutations);
+  document.getElementById("designBtn").addEventListener("click", designVaccine);
+
+  renderDogPicker();
+})();
+</script>
+
+</body>
+</html>
