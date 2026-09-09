@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Front Desk Autopilot — Demo</title>
+<style>
+  :root{
+    --bg:#0f1216;
+    --panel:#171b21;
+    --panel2:#1e232b;
+    --line:#2a3038;
+    --text:#e7ebf0;
+    --muted:#8a93a1;
+    --accent:#5ee6c8;
+    --accent2:#7aa2ff;
+    --warn:#ffb454;
+    --danger:#ff6b6b;
+    --good:#5ee6c8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, #182029 0%, var(--bg) 60%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 40px 12px;
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:-0.02em;
+  }
+  header h1 span{ color:var(--accent); }
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:640px;
+    line-height:1.5;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+    padding:24px 40px;
+    max-width:1200px;
+    width:100%;
+    margin:0 auto;
+  }
+  @media (max-width:880px){
+    main{grid-template-columns:1fr;}
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    min-height:520px;
+  }
+  .panel-head{
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:var(--panel2);
+  }
+  .panel-head h2{
+    margin:0;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+  }
+  .call-status{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    color:var(--muted);
+  }
+  .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--muted);
+  }
+  .dot.live{ background:var(--good); box-shadow:0 0 0 4px rgba(94,230,200,0.15); animation:pulse 1.5s infinite; }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(94,230,200,0.35);}
+    70%{box-shadow:0 0 0 8px rgba(94,230,200,0);}
+    100%{box-shadow:0 0 0 0 rgba(94,230,200,0);}
+  }
+
+  .scenarios{
+    display:flex;
+    gap:8px;
+    padding:12px 18px;
+    flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+  }
+  .scenario-btn{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:7px 12px;
+    border-radius:20px;
+    font-size:12px;
+    cursor:pointer;
+    transition:border-color .15s, color .15s;
+  }
+  .scenario-btn:hover{ border-color:var(--accent2); color:var(--accent2); }
+  .scenario-btn.active{ border-color:var(--accent); color:var(--accent); }
+
+  .transcript{
+    flex:1;
+    padding:18px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .bubble{
+    max-width:82%;
+    padding:10px 13px;
+    border-radius:12px;
+    font-size:13.5px;
+    line-height:1.45;
+    animation:rise .25s ease;
+  }
+  @keyframes rise{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .bubble.patient{
+    align-self:flex-end;
+    background:var(--accent2);
+    color:#0b1220;
+    border-bottom-right-radius:3px;
+  }
+  .bubble.agent{
+    align-self:flex-start;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-bottom-left-radius:3px;
+  }
+  .bubble.agent b{ color:var(--accent); }
+  .bubble .tag{
+    display:block;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    opacity:0.6;
+    margin-bottom:3px;
+  }
+
+  .composer{
+    display:flex;
+    gap:8px;
+    padding:14px 18px;
+    border-top:1px solid var(--line);
+    background:var(--panel2);
+  }
+  .composer input{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:10px 12px;
+    border-radius:10px;
+    font-size:13.5px;
+  }
+  .composer input:focus{ outline:none; border-color:var(--accent2); }
+  .composer button{
+    background:var(--accent);
+    color:#08221c;
+    border:none;
+    padding:10px 16px;
+    border-radius:10px;
+    font-weight:600;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .composer button:disabled{ opacity:0.4; cursor:not-allowed; }
+  .composer button:hover:not(:disabled){ filter:brightness(1.08); }
+
+  .ehr-body{
+    flex:1;
+    padding:18px;
+    overflow-y:auto;
+  }
+  .ehr-status{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px 12px;
+    border-radius:10px;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    margin-bottom:16px;
+    font-size:12.5px;
+  }
+  .ehr-status .pill{
+    padding:4px 10px;
+    border-radius:20px;
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+  }
+  .pill.pending{ background:rgba(138,147,161,0.15); color:var(--muted); }
+  .pill.working{ background:rgba(122,162,255,0.15); color:var(--accent2); }
+  .pill.resolved{ background:rgba(94,230,200,0.15); color:var(--good); }
+  .pill.escalated{ background:rgba(255,107,107,0.15); color:var(--danger); }
+
+  .field-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .field{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 12px;
+    transition:border-color .2s, background .2s;
+  }
+  .field.filled{ border-color:rgba(94,230,200,0.4); background:rgba(94,230,200,0.05); }
+  .field label{
+    display:block;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin-bottom:4px;
+  }
+  .field .val{
+    font-size:13.5px;
+    font-weight:600;
+    min-height:18px;
+  }
+  .field .val.empty{ color:var(--muted); font-weight:400; }
+
+  .log-title{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0 0 8px;
+  }
+  .log{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .log-item{
+    display:flex;
+    gap:8px;
+    align-items:flex-start;
+    font-size:12.5px;
+    color:var(--muted);
+    padding:6px 0;
+    border-bottom:1px dashed var(--line);
+  }
+  .log-item:last-child{ border-bottom:none; }
+  .log-item .check{
+    color:var(--good);
+    flex-shrink:0;
+  }
+  .log-item .system-name{
+    color:var(--accent2);
+    font-weight:600;
+  }
+
+  footer{
+    text-align:center;
+    padding:18px 20px 26px;
+    font-size:12px;
+    color:var(--muted);
+    border-top:1px solid var(--line);
+  }
+  footer b{ color:var(--text); font-weight:600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Front Desk <span>Autopilot</span></h1>
+  <p>A toy version of an AI voice agent that answers a patient call, resolves the request in conversation, and writes the result straight into a mock EHR record — no human touches the phone. Pick a call type below, or type your own request.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Incoming Call</h2>
+      <div class="call-status">
+        <span class="dot" id="callDot"></span>
+        <span id="callStatusText">idle</span>
+      </div>
+    </div>
+    <div class="scenarios" id="scenarios">
+      <button class="scenario-btn" data-scenario="schedule">Book an appointment</button>
+      <button class="scenario-btn" data-scenario="refill">Prescription refill</button>
+      <button class="scenario-btn" data-scenario="referral">Referral request</button>
+      <button class="scenario-btn" data-scenario="billing">Billing question</button>
+    </div>
+    <div class="transcript" id="transcript">
+      <div class="bubble agent">
+        <span class="tag">Agent</span>
+        Thanks for calling Maple Family Health, this is the virtual front desk. How can I help you today? Pick a call type above, or type a request below — try mentioning a symptom, a medication, or "reschedule".
+      </div>
+    </div>
+    <div class="composer">
+      <input type="text" id="patientInput" placeholder="Type what the patient says..." />
+      <button id="sendBtn">Send</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>EHR Write-Back (Simulated)</h2>
+      <span style="font-size:11px;color:var(--muted);">record #MFH-4471</span>
+    </div>
+    <div class="ehr-body">
+      <div class="ehr-status">
+        <span>Encounter status</span>
+        <span class="pill pending" id="statusPill">Waiting for call</span>
+      </div>
+
+      <div class="field-grid">
+        <div class="field" id="f-patient">
+          <label>Patient</label>
+          <div class="val empty" id="v-patient">—</div>
+        </div>
+        <div class="field" id="f-reason">
+          <label>Reason for contact</label>
+          <div class="val empty" id="v-reason">—</div>
+        </div>
+        <div class="field" id="f-provider">
+          <label>Provider / Specialty</label>
+          <div class="val empty" id="v-provider">—</div>
+        </div>
+        <div class="field" id="f-slot">
+          <label>Date / Time</label>
+          <div class="val empty" id="v-slot">—</div>
+        </div>
+        <div class="field" id="f-insurance">
+          <label>Eligibility check</label>
+          <div class="val empty" id="v-insurance">—</div>
+        </div>
+        <div class="field" id="f-action">
+          <label>Action taken</label>
+          <div class="val empty" id="v-action">—</div>
+        </div>
+      </div>
+
+      <p class="log-title">System log</p>
+      <div class="log" id="log">
+        <div class="log-item">Waiting for a call to begin…</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by <b>Aarush Kandukoori</b>, inspired by Elite (YC S26). <b>Not affiliated</b> with Elite.
+</footer>
+
+<script>
+(function(){
+  const transcript = document.getElementById('transcript');
+  const input = document.getElementById('patientInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const callDot = document.getElementById('callDot');
+  const callStatusText = document.getElementById('callStatusText');
+  const statusPill = document.getElementById('statusPill');
+  const log = document.getElementById('log');
+  const scenarioBtns = document.querySelectorAll('.scenario-btn');
+
+  const fields = {
+    patient: document.getElementById('v-patient'),
+    reason: document.getElementById('v-reason'),
+    provider: document.getElementById('v-provider'),
+    slot: document.getElementById('v-slot'),
+    insurance: document.getElementById('v-insurance'),
+    action: document.getElementById('v-action'),
+  };
+  const fieldWraps = {
+    patient: document.getElementById('f-patient'),
+    reason: document.getElementById('f-reason'),
+    provider: document.getElementById('f-provider'),
+    slot: document.getElementById('f-slot'),
+    insurance: document.getElementById('f-insurance'),
+    action: document.getElementById('f-action'),
+  };
+
+  const samplePatients = ['J. Alvarez', 'M. Chen', 'R. Okafor', 'S. Patel', 'D. Kowalski'];
+  const providers = {
+    schedule: 'Dr. Bennett — Family Medicine',
+    refill: 'Dr. Han — Internal Medicine',
+    referral: 'Dr. Reyes — Cardiology (referred out)',
+    billing: 'Billing Desk',
+  };
+  const slots = ['Thu 9/11, 2:30 PM', 'Fri 9/12, 10:15 AM', 'Mon 9/15, 4:00 PM', 'Tue 9/16, 11:45 AM'];
+
+  let state = null; // current call state machine
+  let currentPatient = null;
+
+  function setCallLive(live){
+    callDot.classList.toggle('live', live);
+    callStatusText.textContent = live ? 'call in progress' : 'idle';
+  }
+
+  function setStatus(text, cls){
+    statusPill.textContent = text;
+    statusPill.className = 'pill ' + cls;
+  }
+
+  function addBubble(who, html){
+    const b = document.createElement('div');
+    b.className = 'bubble ' + who;
+    b.innerHTML = '<span class="tag">' + (who === 'agent' ? 'Agent' : 'Patient') + '</span>' + html;
+    transcript.appendChild(b);
+    transcript.scrollTop = transcript.scrollHeight;
+    return b;
+  }
+
+  function agentSay(html, delay){
+    return new Promise(resolve => {
+      setTimeout(() => {
+        addBubble('agent', html);
+        resolve();
+      }, delay || 500);
+    });
+  }
+
+  function setField(key, value){
+    fields[key].textContent = value;
+    fields[key].classList.remove('empty');
+    fieldWraps[key].classList.add('filled');
+  }
+
+  function addLog(text){
+    const item = document.createElement('div');
+    item.className = 'log-item';
+    item.innerHTML = '<span class="check">✓</span><span>' + text + '</span>';
+    if (log.children.length === 1 && log.children[0].textContent.startsWith('Waiting')) {
+      log.innerHTML = '';
+    }
+    log.appendChild(item);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function resetCall(){
+    transcript.innerHTML = '';
+    log.innerHTML = '<div class="log-item">Waiting for a call to begin…</div>';
+    Object.keys(fields).forEach(k => {
+      fields[k].textContent = '—';
+      fields[k].classList.add('empty');
+      fieldWraps[k].classList.remove('filled');
+    });
+    setStatus('Waiting for call', 'pending');
+    setCallLive(false);
+    state = null;
+    currentPatient = samplePatients[Math.floor(Math.random() * samplePatients.length)];
+  }
+
+  // Intent detection from free-typed text
+  function detectIntent(text){
+    const t = text.toLowerCase();
+    if (/refill|medication|prescription|running out|pharmacy/.test(t)) return 'refill';
+    if (/referral|specialist|cardio|dermat|ortho|see a/.test(t)) return 'referral';
+    if (/bill|charge|invoice|payment|insurance claim/.test(t)) return 'billing';
+    if (/appointment|schedule|reschedul|book|visit|checkup|sick|fever|pain|symptom/.test(t)) return 'schedule';
+    return 'schedule';
+  }
+
+  async function runScenario(kind, openingLine){
+    resetCall();
+    setCallLive(true);
+    setStatus('In progress', 'working');
+    addLog('Call answered in 0 rings.');
+    setField('patient', currentPatient);
+    addLog('Caller matched to existing chart: <span class="system-name">' + currentPatient + '</span>.');
+
+    addBubble('patient', openingLine);
+    await agentSay('Got it — I can help with that. One moment while I pull up your chart.', 500);
+    await agentSay('I see your chart, ' + currentPatient.split(' ')[1] + '. Let me confirm a few details.', 900);
+
+    if (kind === 'schedule'){
+      setField('reason', 'New appointment request');
+      const provider = providers.schedule;
+      const slot = slots[Math.floor(Math.random()*slots.length)];
+      await agentSay('Based on what you described, I\'d like to get you in with <b>' + provider + '</b>. I have <b>' + slot + '</b> open — does that work?', 900);
+      addLog('Queried open slots for Family Medicine via scheduling API.');
+      await agentSay('Great — I\'m holding that slot now.', 700);
+      setField('provider', provider);
+      setField('slot', slot);
+      addLog('Slot held: ' + slot + '.');
+      await agentSay('Quick eligibility check on your insurance on file...', 700);
+      setField('insurance', 'Active — copay $25');
+      addLog('Real-time eligibility check returned: active coverage, $25 copay.');
+      await agentSay('You\'re all set — copay is $25, and you\'ll get a text confirmation and reminder. Anything else?', 700);
+      setField('action', 'Appointment booked');
+      addLog('Appointment written to EHR calendar. Confirmation SMS queued.');
+      setStatus('Resolved', 'resolved');
+    } else if (kind === 'refill'){
+      setField('reason', 'Prescription refill');
+      await agentSay('I see an active prescription on file. Let me check if it\'s eligible for a refill without a new visit.', 900);
+      addLog('Checked prescription eligibility against last fill date.');
+      setField('provider', providers.refill);
+      await agentSay('Good news — you\'re eligible. I\'m sending the refill request to <b>Dr. Han</b> for a quick sign-off, then it goes to your pharmacy.', 900);
+      setField('action', 'Refill request submitted for MD approval');
+      addLog('Refill request routed to prescriber queue for e-signature.');
+      await agentSay('You should see it at your pharmacy within a couple of hours once approved. Anything else today?', 700);
+      setField('slot', 'N/A — no visit required');
+      setField('insurance', 'On file, no action needed');
+      setStatus('Resolved', 'resolved');
+    } else if (kind === 'referral'){
+      setField('reason', 'Referral request');
+      await agentSay('This sounds like something a specialist should look at. Let me check what your plan requires.', 900);
+      addLog('Checked payer rules for specialist referral requirement.');
+      setField('provider', providers.referral);
+      const escalate = Math.random() > 0.5;
+      if (escalate){
+        await agentSay('Your plan requires a PCP sign-off before a cardiology referral — that\'s outside what I can finalize on this call, so I\'m flagging this for your care team to approve today.', 1000);
+        setField('action', 'Escalated to care team for referral sign-off');
+        addLog('Escalated to human staff queue with full call context attached.');
+        setStatus('Escalated', 'escalated');
+      } else {
+        await agentSay('Your plan allows direct specialist referrals — I\'ve submitted the referral to Cardiology and it should be scheduled within the week.', 1000);
+        setField('action', 'Referral submitted');
+        addLog('Referral order written to EHR and routed to specialist office.');
+        setStatus('Resolved', 'resolved');
+      }
+      setField('slot', escalate ? 'Pending care team review' : 'Pending specialist scheduling');
+      setField('insurance', 'Referral coverage verified');
+    } else if (kind === 'billing'){
+      setField('reason', 'Billing question');
+      await agentSay('Let me pull up your account balance and recent claims.', 900);
+      addLog('Queried billing ledger for open balance.');
+      setField('provider', providers.billing);
+      await agentSay('I see a $40 balance from your last visit that hasn\'t been submitted to insurance yet — that\'s likely why. I\'m resubmitting the claim now.', 1000);
+      setField('action', 'Claim resubmitted, patient notified');
+      addLog('Claim resubmission triggered in billing system.');
+      setField('slot', 'N/A');
+      setField('insurance', 'Claim under review');
+      await agentSay('You\'ll get an updated statement once it processes. Anything else I can help with?', 700);
+      setStatus('Resolved', 'resolved');
+    }
+    setCallLive(false);
+    callStatusText.textContent = 'call resolved';
+  }
+
+  const openers = {
+    schedule: 'Hi, I\'ve had a fever and sore throat for two days, can I come in?',
+    refill: 'Hi, I\'m almost out of my blood pressure medication and need a refill.',
+    referral: 'My doctor mentioned I might need to see a cardiologist about some chest tightness.',
+    billing: 'I got a bill in the mail and I\'m not sure why the amount is what it is.',
+  };
+
+  scenarioBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      scenarioBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const kind = btn.dataset.scenario;
+      runScenario(kind, openers[kind]);
+    });
+  });
+
+  function handleFreeText(){
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    const kind = detectIntent(text);
+    scenarioBtns.forEach(b => b.classList.toggle('active', b.dataset.scenario === kind));
+    runScenario(kind, text);
+  }
+
+  sendBtn.addEventListener('click', handleFreeText);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleFreeText();
+  });
+
+  resetCall();
+})();
+</script>
+
+</body>
+</html>
