@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Continuum — a portable context demo</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#171a21;
+    --panel2:#1e222b;
+    --border:#2a2f3a;
+    --text:#e8eaf0;
+    --muted:#8b93a7;
+    --accent:#6ee7b7;
+    --accent2:#7dd3fc;
+    --warn:#fbbf24;
+    --danger:#f87171;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, #1a2030 0%, var(--bg) 60%);
+    color:var(--text);
+    line-height:1.5;
+  }
+  header{
+    padding:32px 24px 8px;
+    max-width:1100px;
+    margin:0 auto;
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:26px;
+    letter-spacing:-0.02em;
+  }
+  header p{
+    margin:0;
+    color:var(--muted);
+    max-width:640px;
+    font-size:14.5px;
+  }
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--accent);
+    border:1px solid #234d3c;
+    background:#12251d;
+    padding:3px 8px;
+    border-radius:999px;
+    margin-bottom:10px;
+  }
+  main{
+    max-width:1100px;
+    margin:0 auto;
+    padding:16px 24px 60px;
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:20px;
+  }
+  @media (max-width:860px){
+    main{grid-template-columns:1fr;}
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:18px;
+  }
+  .panel h2{
+    font-size:15px;
+    margin:0 0 4px;
+  }
+  .panel .sub{
+    color:var(--muted);
+    font-size:12.5px;
+    margin:0 0 14px;
+  }
+  .fact{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:9px;
+    padding:9px 10px;
+    margin-bottom:8px;
+    font-size:13px;
+  }
+  .fact .cat{
+    flex-shrink:0;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:#0f1115;
+    background:var(--accent2);
+    padding:2px 6px;
+    border-radius:5px;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .fact.cat-preferences .cat{background:#c4b5fd;}
+  .fact.cat-work .cat{background:#7dd3fc;}
+  .fact.cat-dietary .cat{background:#fca5a5;}
+  .fact.cat-travel .cat{background:#fcd34d;}
+  .fact.cat-health .cat{background:#6ee7b7;}
+  .fact button{
+    margin-left:auto;
+    background:none;
+    border:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:14px;
+    line-height:1;
+  }
+  .fact button:hover{color:var(--danger);}
+  .add-fact{
+    display:flex;
+    gap:6px;
+    margin-top:10px;
+  }
+  select,input,textarea{
+    background:#0f1218;
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:7px;
+    padding:7px 8px;
+    font-size:12.5px;
+    font-family:inherit;
+  }
+  .add-fact select{flex-shrink:0;width:100px;}
+  .add-fact input{flex:1;min-width:0;}
+  .add-fact button{
+    flex-shrink:0;
+    background:var(--accent);
+    color:#0f1115;
+    border:none;
+    border-radius:7px;
+    padding:0 12px;
+    font-weight:600;
+    cursor:pointer;
+    font-size:12.5px;
+  }
+  .apps-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+  @media (max-width:560px){ .apps-grid{grid-template-columns:1fr;} }
+  .app-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .app-card .app-head{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .app-card .icon{
+    font-size:22px;
+    width:38px;
+    height:38px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--panel2);
+    border-radius:9px;
+  }
+  .app-card .app-name{font-weight:600;font-size:14.5px;}
+  .app-card .app-desc{color:var(--muted);font-size:12px;margin-top:1px;}
+  .status-pill{
+    font-size:10.5px;
+    padding:2px 8px;
+    border-radius:999px;
+    margin-left:auto;
+    white-space:nowrap;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    font-weight:600;
+  }
+  .status-pill.off{background:#2a2f3a;color:var(--muted);}
+  .status-pill.on{background:#12251d;color:var(--accent);border:1px solid #234d3c;}
+  .scopes{
+    display:flex;
+    flex-wrap:wrap;
+    gap:5px;
+  }
+  .scope-tag{
+    font-size:10.5px;
+    padding:2px 7px;
+    border-radius:999px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--muted);
+  }
+  .scope-tag.granted{color:var(--accent);border-color:#234d3c;}
+  .app-actions{display:flex;gap:8px;}
+  .btn{
+    border:none;
+    border-radius:7px;
+    padding:7px 12px;
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .btn-primary{background:var(--accent2);color:#0f1115;}
+  .btn-danger{background:transparent;border:1px solid #4a2b2b;color:var(--danger);}
+  .btn-ghost{background:var(--panel2);border:1px solid var(--border);color:var(--text);}
+  .chat{
+    border-top:1px solid var(--border);
+    padding-top:10px;
+    margin-top:2px;
+  }
+  .chat-log{
+    max-height:140px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    margin-bottom:8px;
+    font-size:12.5px;
+  }
+  .msg{padding:6px 9px;border-radius:8px;max-width:92%;}
+  .msg.user{background:var(--panel2);align-self:flex-end;}
+  .msg.bot{background:#141824;border:1px solid var(--border);align-self:flex-start;}
+  .msg.bot.generic{color:var(--muted);font-style:italic;}
+  .chat-input{display:flex;gap:6px;}
+  .chat-input input{flex:1;}
+  .chat-input button{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:7px;
+    padding:0 10px;
+    cursor:pointer;
+    font-size:12.5px;
+  }
+  .log-panel{margin-top:20px;}
+  .log-entry{
+    font-size:12px;
+    color:var(--muted);
+    padding:5px 0;
+    border-bottom:1px dashed var(--border);
+    display:flex;
+    gap:8px;
+  }
+  .log-entry:last-child{border-bottom:none;}
+  .log-entry .t{color:#4b5266;flex-shrink:0;width:64px;}
+  .log-entry b{color:var(--text);}
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(6,7,10,.7);
+    display:none;align-items:center;justify-content:center;z-index:50;
+    padding:20px;
+  }
+  .modal-backdrop.open{display:flex;}
+  .modal{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:22px;
+    max-width:380px;
+    width:100%;
+  }
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal p{color:var(--muted);font-size:13px;margin:0 0 14px;}
+  .modal .scope-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+  .modal .scope-row{
+    display:flex;align-items:center;gap:8px;
+    background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:12.5px;
+  }
+  .modal .scope-row .n{color:var(--muted);font-size:11px;}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;}
+  footer{
+    max-width:1100px;
+    margin:20px auto 40px;
+    padding:16px 24px;
+    color:var(--muted);
+    font-size:12px;
+    border-top:1px solid var(--border);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">toy demo · not the real product</div>
+  <h1>Continuum</h1>
+  <p>A tiny working model of "carry your context anywhere." Keep one profile of facts about
+  yourself, then decide exactly what each app is allowed to see. Revoke access any time —
+  the app forgets instantly, nothing is deleted from your profile.</p>
+</header>
+
+<main>
+  <section class="panel" id="passport-panel">
+    <h2>Your Passport</h2>
+    <p class="sub">One profile. You control every grant below.</p>
+    <div id="fact-list"></div>
+    <div class="add-fact">
+      <select id="new-cat">
+        <option value="preferences">prefs</option>
+        <option value="work">work</option>
+        <option value="dietary">dietary</option>
+        <option value="travel">travel</option>
+        <option value="health">health</option>
+      </select>
+      <input id="new-fact" type="text" placeholder="e.g. allergic to shellfish" maxlength="80">
+      <button onclick="addFact()">Add</button>
+    </div>
+
+    <div class="log-panel">
+      <h2>Access Log</h2>
+      <p class="sub">Every read, timestamped.</p>
+      <div id="log-list"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="apps-grid" id="apps-grid"></div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <h3 id="modal-title">Connect app</h3>
+    <p id="modal-sub">This app is requesting access to:</p>
+    <div class="scope-list" id="modal-scopes"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmGrant()">Approve access</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Egoist Machines (YC S26). Not affiliated with Egoist Machines.
+</footer>
+
+<script>
+  // ---- synthetic profile data ----
+  let facts = [
+    {id:1, cat:'preferences', text:'prefers concise, no-fluff answers'},
+    {id:2, cat:'work', text:'works as a product designer at a seed-stage startup'},
+    {id:3, cat:'dietary', text:'vegetarian, avoids peanuts'},
+    {id:4, cat:'travel', text:'flying to Lisbon on Oct 14, back Oct 21'},
+    {id:5, cat:'health', text:'trains for a half marathon, runs mornings'},
+    {id:6, cat:'preferences', text:'favorite coffee order: oat flat white'}
+  ];
+  let nextId = 7;
+
+  // ---- apps, each with requested scopes and live connection state ----
+  let apps = [
+    {
+      id:'sage', name:'Sage', icon:'🧭', desc:'trip planning assistant',
+      requested:['travel','preferences'], granted:[], connected:false,
+      keywords:{travel:['trip','flight','travel','lisbon','plan'], preferences:['prefer','like','coffee']}
+    },
+    {
+      id:'plate', name:'Plate', icon:'🍽️', desc:'meal & grocery planner',
+      requested:['dietary','health'], granted:[], connected:false,
+      keywords:{dietary:['eat','food','allerg','vegetarian','meal'], health:['run','train','health','marathon']}
+    },
+    {
+      id:'standup', name:'Standup', icon:'💬', desc:'work chat drafting tool',
+      requested:['work','preferences'], granted:[], connected:false,
+      keywords:{work:['work','job','startup','design','team'], preferences:['prefer','style','tone']}
+    },
+    {
+      id:'coachly', name:'Coachly', icon:'🏃', desc:'fitness coaching bot',
+      requested:['health','dietary'], granted:[], connected:false,
+      keywords:{health:['run','train','marathon','health'], dietary:['eat','food','protein','vegetarian']}
+    }
+  ];
+
+  let log = [];
+  let pendingAppId = null;
+
+  function catLabel(c){
+    return {preferences:'prefs', work:'work', dietary:'dietary', travel:'travel', health:'health'}[c] || c;
+  }
+
+  function addLogEntry(text){
+    const now = new Date();
+    const t = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    log.unshift({t, text});
+    if(log.length > 30) log.pop();
+    renderLog();
+  }
+
+  function renderFacts(){
+    const wrap = document.getElementById('fact-list');
+    wrap.innerHTML = '';
+    facts.forEach(f=>{
+      const el = document.createElement('div');
+      el.className = 'fact cat-' + f.cat;
+      el.innerHTML = `<span class="cat">${catLabel(f.cat)}</span><span>${escapeHtml(f.text)}</span><button title="remove" onclick="removeFact(${f.id})">✕</button>`;
+      wrap.appendChild(el);
+    });
+  }
+
+  function escapeHtml(s){
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function addFact(){
+    const cat = document.getElementById('new-cat').value;
+    const input = document.getElementById('new-fact');
+    const text = input.value.trim();
+    if(!text) return;
+    facts.push({id: nextId++, cat, text});
+    input.value = '';
+    renderFacts();
+    addLogEntry(`You added a new <b>${catLabel(cat)}</b> fact to your passport.`);
+  }
+
+  function removeFact(id){
+    facts = facts.filter(f=>f.id !== id);
+    renderFacts();
+  }
+
+  function renderApps(){
+    const grid = document.getElementById('apps-grid');
+    grid.innerHTML = '';
+    apps.forEach(app=>{
+      const card = document.createElement('div');
+      card.className = 'app-card';
+      const scopesHtml = app.requested.map(s=>{
+        const g = app.granted.includes(s);
+        return `<span class="scope-tag ${g?'granted':''}">${catLabel(s)}</span>`;
+      }).join('');
+      card.innerHTML = `
+        <div class="app-head">
+          <div class="icon">${app.icon}</div>
+          <div>
+            <div class="app-name">${app.name}</div>
+            <div class="app-desc">${app.desc}</div>
+          </div>
+          <span class="status-pill ${app.connected?'on':'off'}">${app.connected?'connected':'not connected'}</span>
+        </div>
+        <div class="scopes">${scopesHtml}</div>
+        <div class="app-actions">
+          ${app.connected
+            ? `<button class="btn btn-danger" onclick="revoke('${app.id}')">Revoke access</button>`
+            : `<button class="btn btn-primary" onclick="openModal('${app.id}')">Sign in with Passport</button>`}
+        </div>
+        <div class="chat">
+          <div class="chat-log" id="chatlog-${app.id}"></div>
+          <div class="chat-input">
+            <input type="text" id="chatin-${app.id}" placeholder="Ask ${app.name} something..." onkeydown="if(event.key==='Enter')sendMsg('${app.id}')">
+            <button onclick="sendMsg('${app.id}')">Send</button>
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
+      if(!app._history) app._history = [];
+      renderChat(app.id);
+    });
+  }
+
+  function renderChat(appId){
+    const app = apps.find(a=>a.id===appId);
+    const el = document.getElementById('chatlog-' + appId);
+    if(!el) return;
+    el.innerHTML = app._history.map(m=>
+      `<div class="msg ${m.who}${m.generic?' generic':''}">${escapeHtml(m.text)}</div>`
+    ).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function openModal(appId){
+    pendingAppId = appId;
+    const app = apps.find(a=>a.id===appId);
+    document.getElementById('modal-title').textContent = `Connect ${app.name}`;
+    document.getElementById('modal-sub').textContent = `${app.name} is requesting read access to these parts of your passport:`;
+    const scopesEl = document.getElementById('modal-scopes');
+    scopesEl.innerHTML = app.requested.map(s=>{
+      const count = facts.filter(f=>f.cat===s).length;
+      return `<div class="scope-row"><span class="cat" style="padding:2px 6px;border-radius:5px;font-size:10.5px;text-transform:uppercase;background:var(--panel2);">${catLabel(s)}</span><span>${count} fact${count===1?'':'s'} in this category</span><span class="n" style="margin-left:auto;">read-only</span></div>`;
+    }).join('');
+    document.getElementById('modal').classList.add('open');
+  }
+
+  function closeModal(){
+    document.getElementById('modal').classList.remove('open');
+    pendingAppId = null;
+  }
+
+  function confirmGrant(){
+    const app = apps.find(a=>a.id===pendingAppId);
+    if(app){
+      app.connected = true;
+      app.granted = [...app.requested];
+      addLogEntry(`<b>${app.name}</b> was granted access to <b>${app.requested.map(catLabel).join(', ')}</b>.`);
+      app._history.push({who:'bot', text:`Connected. I can now see your ${app.requested.map(catLabel).join(' and ')} context — ask me anything.`});
+    }
+    closeModal();
+    renderApps();
+  }
+
+  function revoke(appId){
+    const app = apps.find(a=>a.id===appId);
+    app.connected = false;
+    app.granted = [];
+    app._history.push({who:'bot', text:'Access revoked. I no longer have your context.', generic:true});
+    addLogEntry(`You revoked <b>${app.name}</b>'s access. It can no longer read your passport.`);
+    renderApps();
+  }
+
+  function sendMsg(appId){
+    const app = apps.find(a=>a.id===appId);
+    const input = document.getElementById('chatin-' + appId);
+    const text = input.value.trim();
+    if(!text) return;
+    app._history.push({who:'user', text});
+    input.value = '';
+
+    let reply;
+    if(!app.connected){
+      reply = {who:'bot', generic:true, text: `I don't have any context on you yet — sign in with your passport so I can personalize this.`};
+    } else {
+      const lower = text.toLowerCase();
+      let matchedFact = null;
+      let matchedCat = null;
+      for(const cat of app.granted){
+        const kws = app.keywords[cat] || [];
+        if(kws.some(k=>lower.includes(k))){
+          const candidates = facts.filter(f=>f.cat===cat);
+          if(candidates.length){
+            matchedFact = candidates[Math.floor(Math.random()*candidates.length)];
+            matchedCat = cat;
+            break;
+          }
+        }
+      }
+      if(matchedFact){
+        addLogEntry(`<b>${app.name}</b> read your <b>${catLabel(matchedCat)}</b> fact to answer a question.`);
+        reply = {who:'bot', text: `Since I know you ${matchedFact.text}, ${craftLine(app, matchedFact)}`};
+      } else {
+        reply = {who:'bot', generic:true, text: `Noted — I don't have anything in my granted scopes (${app.granted.map(catLabel).join(', ')}) that's relevant to that yet.`};
+      }
+    }
+    app._history.push(reply);
+    renderChat(appId);
+  }
+
+  function craftLine(app, fact){
+    const lines = {
+      sage: `I'll route your plan around that.`,
+      plate: `I'll keep that out of this week's menu.`,
+      standup: `I'll match that in how I draft your messages.`,
+      coachly: `I'll factor that into your next training block.`
+    };
+    return lines[app.id] || `I'll keep that in mind.`;
+  }
+
+  function renderLog(){
+    const el = document.getElementById('log-list');
+    if(log.length === 0){
+      el.innerHTML = `<div class="log-entry"><span class="t"></span><span>No activity yet.</span></div>`;
+      return;
+    }
+    el.innerHTML = log.map(l=>`<div class="log-entry"><span class="t">${l.t}</span><span>${l.text}</span></div>`).join('');
+  }
+
+  renderFacts();
+  renderApps();
+  renderLog();
+</script>
+
+</body>
+</html>

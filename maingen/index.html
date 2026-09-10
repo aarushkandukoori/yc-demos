@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ops Desk Sandbox — a toy industrial dispatch simulator</title>
+<style>
+  :root{
+    --bg:#0b1015;
+    --panel:#121922;
+    --panel2:#161f2b;
+    --line:#243040;
+    --text:#dbe6f0;
+    --muted:#7c8ba0;
+    --accent:#3ee6a4;
+    --accent2:#5eb0ff;
+    --warn:#ffb15e;
+    --bad:#ff6767;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 20% -10%, #17222f 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px;}
+  header{margin-bottom:22px;}
+  header h1{font-size:1.7rem;margin:0 0 6px;letter-spacing:-0.02em;}
+  header p{color:var(--muted);margin:0;max-width:620px;line-height:1.5;font-size:0.95rem;}
+  .badge{
+    display:inline-block;font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;
+    background:rgba(62,230,164,0.12);color:var(--accent);border:1px solid rgba(62,230,164,0.35);
+    padding:3px 9px;border-radius:20px;margin-bottom:10px;
+  }
+  .grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+  }
+  .panel h2{font-size:0.85rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin:0 0 12px;font-weight:600;}
+  canvas{width:100%;display:block;border-radius:8px;background:var(--panel2);}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px;}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+  .stat .k{font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
+  .stat .v{font-size:1.15rem;font-weight:600;margin-top:2px;}
+  .stat .v.good{color:var(--accent);}
+  .stat .v.bad{color:var(--bad);}
+  .side .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .side .row .k{color:var(--muted);font-size:0.85rem;}
+  .side .row .v{font-weight:600;font-size:0.95rem;}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;}
+  button{
+    font-family:inherit;font-size:0.85rem;font-weight:600;padding:10px 8px;border-radius:9px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;
+    transition:transform .06s ease, border-color .15s ease;
+  }
+  button:hover{border-color:var(--accent2);}
+  button:active{transform:scale(0.97);}
+  button:disabled{opacity:0.35;cursor:not-allowed;}
+  button.primary{background:linear-gradient(135deg,#1d3a34,#12261f);border-color:rgba(62,230,164,0.4);color:var(--accent);}
+  button.wide{grid-column:1/-1;}
+  button.toggled{background:linear-gradient(135deg,#123048,#0d2436);border-color:var(--accent2);color:var(--accent2);}
+  .log{
+    margin-top:16px;height:150px;overflow-y:auto;font-size:0.8rem;line-height:1.55;
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  }
+  .log div{border-bottom:1px dashed rgba(255,255,255,0.05);padding:2px 0;}
+  .log .t{color:var(--muted);margin-right:6px;}
+  .log .event{color:var(--warn);}
+  .log .fault{color:var(--bad);}
+  .log .agent{color:var(--accent2);}
+  .legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;font-size:0.75rem;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  footer{
+    margin-top:34px;padding-top:16px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:0.78rem;text-align:center;
+  }
+  .hint{font-size:0.75rem;color:var(--muted);margin-top:10px;line-height:1.5;}
+  .flash{animation:flash 0.5s ease;}
+  @keyframes flash{0%{background:rgba(255,177,94,0.25);}100%{background:transparent;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge">toy simulation · synthetic data</div>
+    <h1>Ops Desk Sandbox</h1>
+    <p>A miniature stand-in for the kind of environment used to train agents that operate real infrastructure: a simulated solar-plus-battery site with live weather, price and grid-curtailment shocks. Dispatch the battery yourself, or flip on the autopilot policy and watch an agent trade against the same environment in real time.</p>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Site telemetry — 10s ticks ≈ 15 simulated minutes</h2>
+      <canvas id="chart" height="220"></canvas>
+      <div class="legend">
+        <span><i class="dot" style="background:#ffd166"></i> solar output (kW)</span>
+        <span><i class="dot" style="background:#5eb0ff"></i> grid price ($/MWh, scaled)</span>
+        <span><i class="dot" style="background:#3ee6a4"></i> battery state of charge (%)</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Battery SoC</div><div class="v" id="soc">50%</div></div>
+        <div class="stat"><div class="k">Solar output</div><div class="v" id="solar">0 kW</div></div>
+        <div class="stat"><div class="k">Grid price</div><div class="v" id="price">$0/MWh</div></div>
+        <div class="stat"><div class="k">Sim clock</div><div class="v" id="clock">06:00</div></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Your revenue</div><div class="v good" id="revYou">$0</div></div>
+        <div class="stat"><div class="k">Baseline (sell all)</div><div class="v" id="revBase">$0</div></div>
+        <div class="stat"><div class="k">Edge vs baseline</div><div class="v" id="edge">$0</div></div>
+        <div class="stat"><div class="k">Curtailment losses</div><div class="v bad" id="losses">$0</div></div>
+      </div>
+    </div>
+
+    <div class="panel side">
+      <h2>Dispatch desk</h2>
+      <div class="row"><span class="k">Mode</span><span class="v" id="modeLabel">Manual</span></div>
+      <div class="row"><span class="k">Pending grid order</span><span class="v" id="orderLabel">none</span></div>
+      <div class="controls">
+        <button class="primary wide" id="btnAuto">Enable agent autopilot</button>
+        <button id="btnCharge">Charge battery</button>
+        <button id="btnDischarge">Discharge battery</button>
+        <button id="btnSell" class="wide">Sell solar to grid now</button>
+        <button id="btnHold" class="wide">Hold / do nothing</button>
+      </div>
+      <div class="hint">
+        Autopilot policy: charge when price is cheap and battery has room; discharge or sell when price spikes; always obey a curtailment order from the grid operator. Try beating it manually, or just watch it work.
+      </div>
+      <h2 style="margin-top:18px;">Event log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Maingen (YC S26). Not affiliated with Maingen.</footer>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  function fitCanvas(){
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = canvas.clientWidth * ratio;
+    canvas.height = 220 * ratio;
+    ctx.setTransform(ratio,0,0,ratio,0,0);
+  }
+  window.addEventListener('resize', fitCanvas);
+
+  const N = 96; // 15-min steps over 24h
+  let step = 24; // start at 06:00
+  let history = []; // {solar, price, soc}
+  let soc = 50; // %
+  const CAP_KWH = 200;
+  let revYou = 0, revBase = 0, lossCurtail = 0;
+  let autopilot = false;
+  let pendingOrder = null; // 'curtail' or null
+  let orderTicks = 0;
+  let logEl = document.getElementById('log');
+
+  function solarCurve(t){
+    // t in steps of 15 min, 0..95, daylight bell curve with noise
+    const hour = (t % N) / 4;
+    const base = Math.max(0, Math.sin((hour - 6) / 12 * Math.PI));
+    let cloud = 1;
+    if (Math.random() < 0.04) cloud = 0.25 + Math.random()*0.3; // cloud passes
+    return Math.round(base * 500 * cloud);
+  }
+
+  function priceCurve(t){
+    const hour = (t % N) / 4;
+    // evening peak, midday dip (duck curve), random spikes
+    let p = 30 + 25*Math.sin((hour-17)/8*Math.PI) + 10*Math.sin(hour/3);
+    if (Math.random() < 0.03) p += 60 + Math.random()*40; // spike
+    return Math.max(5, Math.round(p));
+  }
+
+  function log(msg, cls){
+    const d = document.createElement('div');
+    const hh = String(Math.floor((step%N)/4)).padStart(2,'0');
+    const mm = String((step%4)*15).padStart(2,'0');
+    d.innerHTML = '<span class="t">'+hh+':'+mm+'</span><span class="'+(cls||'')+'">'+msg+'</span>';
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+    while(logEl.children.length > 60) logEl.removeChild(logEl.firstChild);
+  }
+
+  function fmt$(n){ return '$'+n.toFixed(2); }
+
+  function draw(){
+    fitCanvas();
+    const w = canvas.clientWidth, h = 220;
+    ctx.clearRect(0,0,w,h);
+    if(history.length < 2) return;
+    const n = history.length;
+    const maxSolar = 520, maxPrice = 140;
+    function xAt(i){ return (i/(n-1)) * (w-16) + 8; }
+
+    function drawSeries(getY, color){
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      history.forEach((pt,i)=>{
+        const x = xAt(i), y = getY(pt);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+    // gridlines
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for(let g=1; g<4; g++){
+      const y = h - (g/4)*h;
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    }
+    drawSeries(pt => h - (pt.solar/maxSolar)*h*0.92 - 6, '#ffd166');
+    drawSeries(pt => h - (pt.price/maxPrice)*h*0.92 - 6, '#5eb0ff');
+    drawSeries(pt => h - (pt.soc/100)*h*0.92 - 6, '#3ee6a4');
+  }
+
+  function maybeOrder(){
+    if(!pendingOrder && Math.random() < 0.025){
+      pendingOrder = 'curtail';
+      orderTicks = 4 + Math.floor(Math.random()*4);
+      log('⚠ Grid operator issues curtailment order — export capped for ' + (orderTicks*15) + ' min.', 'event');
+      document.getElementById('orderLabel').textContent = 'CURTAIL (' + orderTicks + ' ticks)';
+    }
+  }
+
+  function applyAction(action, solar, price){
+    // action: 'charge' | 'discharge' | 'sell' | 'hold'
+    const chargeableKwh = solar * 0.25; // energy this 15-min step if fully captured
+    let exportKwh = chargeableKwh;
+    let curtailedKwh = 0;
+    if(pendingOrder === 'curtail'){
+      exportKwh = chargeableKwh * 0.3;
+      curtailedKwh = chargeableKwh - exportKwh;
+    }
+
+    if(action === 'charge'){
+      const room = (100 - soc)/100 * CAP_KWH;
+      const toBattery = Math.min(room, chargeableKwh);
+      soc += (toBattery / CAP_KWH) * 100;
+      const remainder = Math.max(0, exportKwh - toBattery);
+      revYou += remainder * price / 1000;
+      lossCurtail += curtailedKwh * price / 1000;
+    } else if(action === 'discharge'){
+      const avail = (soc/100) * CAP_KWH;
+      const toSell = Math.min(avail, 60); // discharge rate cap
+      soc -= (toSell / CAP_KWH) * 100;
+      revYou += (toSell + exportKwh) * price / 1000;
+      lossCurtail += curtailedKwh * price / 1000;
+    } else if(action === 'sell'){
+      revYou += exportKwh * price / 1000;
+      lossCurtail += curtailedKwh * price / 1000;
+    } else { // hold — solar still exports at capped rate but battery untouched
+      revYou += exportKwh * price / 1000;
+      lossCurtail += curtailedKwh * price / 1000;
+    }
+    soc = Math.max(0, Math.min(100, soc));
+
+    // baseline: always sells everything immediately, still subject to curtailment
+    revBase += exportKwh * price / 1000;
+  }
+
+  function agentPolicy(solar, price){
+    if(pendingOrder === 'curtail') return 'discharge';
+    if(price < 35 && soc < 90) return 'charge';
+    if(price > 70) return 'discharge';
+    if(solar > 300 && soc > 15) return 'discharge';
+    return 'hold';
+  }
+
+  function tick(manualAction){
+    const solar = solarCurve(step);
+    const price = priceCurve(step);
+    maybeOrder();
+
+    let action = manualAction;
+    if(autopilot && !manualAction){
+      action = agentPolicy(solar, price);
+      if(action !== 'hold') log('agent → ' + action + ' (price $' + price + ', solar ' + solar + 'kW)', 'agent');
+    }
+    if(!action) action = 'hold';
+
+    if(price > 95 && !manualAction) log('price spike: $' + price + '/MWh', 'event');
+
+    applyAction(action, solar, price);
+
+    if(pendingOrder){
+      orderTicks--;
+      if(orderTicks <= 0){
+        pendingOrder = null;
+        document.getElementById('orderLabel').textContent = 'none';
+        log('Curtailment order lifted.', 'event');
+      } else {
+        document.getElementById('orderLabel').textContent = 'CURTAIL (' + orderTicks + ' ticks)';
+      }
+    }
+
+    history.push({solar, price, soc});
+    if(history.length > N) history.shift();
+    step++;
+
+    document.getElementById('soc').textContent = Math.round(soc) + '%';
+    document.getElementById('solar').textContent = solar + ' kW';
+    document.getElementById('price').textContent = '$' + price + '/MWh';
+    const hh = String(Math.floor((step%N)/4)).padStart(2,'0');
+    const mm = String((step%4)*15).padStart(2,'0');
+    document.getElementById('clock').textContent = hh + ':' + mm;
+    document.getElementById('revYou').textContent = fmt$(revYou);
+    document.getElementById('revBase').textContent = fmt$(revBase);
+    const edge = revYou - revBase;
+    const edgeEl = document.getElementById('edge');
+    edgeEl.textContent = (edge>=0?'+':'') + fmt$(edge);
+    edgeEl.className = 'v ' + (edge>=0 ? 'good':'bad');
+    document.getElementById('losses').textContent = fmt$(lossCurtail);
+
+    draw();
+  }
+
+  document.getElementById('btnCharge').addEventListener('click', ()=>tick('charge'));
+  document.getElementById('btnDischarge').addEventListener('click', ()=>tick('discharge'));
+  document.getElementById('btnSell').addEventListener('click', ()=>tick('sell'));
+  document.getElementById('btnHold').addEventListener('click', ()=>tick('hold'));
+
+  const autoBtn = document.getElementById('btnAuto');
+  autoBtn.addEventListener('click', ()=>{
+    autopilot = !autopilot;
+    autoBtn.textContent = autopilot ? 'Disable agent autopilot' : 'Enable agent autopilot';
+    autoBtn.classList.toggle('toggled', autopilot);
+    document.getElementById('modeLabel').textContent = autopilot ? 'Agent autopilot' : 'Manual';
+    ['btnCharge','btnDischarge','btnSell','btnHold'].forEach(id=>{
+      document.getElementById(id).disabled = autopilot;
+    });
+    log(autopilot ? 'Autopilot engaged.' : 'Autopilot disengaged — manual control.', 'agent');
+  });
+
+  // seed initial history
+  for(let i=0;i<20;i++){
+    const s = solarCurve(step), p = priceCurve(step);
+    history.push({solar:s, price:p, soc});
+    step++;
+  }
+  log('Simulation initialized. Solar + battery site, 200kWh capacity.', 'agent');
+
+  setInterval(()=>{ tick(null); }, 2500);
+  fitCanvas();
+  draw();
+})();
+</script>
+</body>
+</html>
