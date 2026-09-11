@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Compute Futures Pit — toy demo</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#131826; --panel2:#0f1420; --border:#232b3d;
+    --text:#e6ebf5; --muted:#8592ad; --green:#3ddc97; --red:#ff5d7a;
+    --accent:#5b8cff; --accent2:#ffb454;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:24px; line-height:1.4;
+  }
+  header{max-width:1100px; margin:0 auto 20px;}
+  h1{font-size:22px; margin:0 0 4px;}
+  h1 span{color:var(--accent);}
+  .sub{color:var(--muted); font-size:13.5px; max-width:640px;}
+  .wrap{max-width:1100px; margin:0 auto; display:grid; grid-template-columns:280px 1fr 320px; gap:16px;}
+  @media (max-width:960px){ .wrap{grid-template-columns:1fr;} }
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px;
+  }
+  .panel h2{font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px;}
+  .contract-list button{
+    display:block; width:100%; text-align:left; background:var(--panel2);
+    border:1px solid var(--border); color:var(--text); padding:10px; border-radius:8px;
+    margin-bottom:8px; cursor:pointer; font-size:13px;
+  }
+  .contract-list button.active{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
+  .contract-list .name{font-weight:600;}
+  .contract-list .meta{color:var(--muted); font-size:11.5px; margin-top:2px;}
+  .price-row{display:flex; align-items:baseline; gap:10px; margin-bottom:14px;}
+  .price-row .px{font-size:30px; font-weight:700;}
+  .chg{font-size:13px; font-weight:600;}
+  .up{color:var(--green);} .down{color:var(--red);}
+  canvas{width:100%; height:160px; display:block; background:var(--panel2); border-radius:8px; border:1px solid var(--border);}
+  .book{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; font-size:12px;}
+  .book .col-title{color:var(--muted); font-size:11px; text-transform:uppercase; margin-bottom:6px;}
+  .book .row{display:flex; justify-content:space-between; padding:3px 6px; border-radius:4px; font-variant-numeric:tabular-nums;}
+  .book .bids .row{background:linear-gradient(to left, rgba(61,220,151,.12), transparent);}
+  .book .asks .row{background:linear-gradient(to right, rgba(255,93,122,.12), transparent);}
+  .form-row{margin-bottom:10px;}
+  .form-row label{display:block; font-size:11.5px; color:var(--muted); margin-bottom:4px;}
+  .form-row input, .form-row select{
+    width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    padding:8px; border-radius:6px; font-size:13px;
+  }
+  .side-toggle{display:flex; gap:6px; margin-bottom:10px;}
+  .side-toggle button{
+    flex:1; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--panel2);
+    color:var(--muted); cursor:pointer; font-weight:600; font-size:12.5px;
+  }
+  .side-toggle button.buy.active{background:rgba(61,220,151,.15); color:var(--green); border-color:var(--green);}
+  .side-toggle button.sell.active{background:rgba(255,93,122,.15); color:var(--red); border-color:var(--red);}
+  .submit-btn{
+    width:100%; padding:10px; border:none; border-radius:8px; background:var(--accent);
+    color:#0b0e14; font-weight:700; cursor:pointer; font-size:13.5px; margin-top:4px;
+  }
+  .submit-btn:hover{filter:brightness(1.1);}
+  .fills{max-height:150px; overflow-y:auto; font-size:11.5px; margin-top:10px;}
+  .fills .row{display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid var(--border); color:var(--muted);}
+  .fills .row.buy{color:var(--green);}
+  .fills .row.sell{color:var(--red);}
+  .settle-box{margin-top:14px; padding:10px; background:var(--panel2); border-radius:8px; border:1px dashed var(--border); font-size:12px; color:var(--muted);}
+  .settle-box b{color:var(--text);}
+  footer{max-width:1100px; margin:26px auto 0; color:var(--muted); font-size:11.5px; text-align:center; border-top:1px solid var(--border); padding-top:14px;}
+  .badge{display:inline-block; background:rgba(91,140,255,.15); color:var(--accent); border-radius:4px; padding:1px 6px; font-size:10.5px; margin-left:6px; vertical-align:middle;}
+  .hint{font-size:11px; color:var(--muted); margin-top:8px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Compute <span>Futures Pit</span> <span class="badge">toy demo</span></h1>
+  <div class="sub">A minimal order book for buying and selling standardized contracts on future GPU capacity.
+  Place a bid or ask, watch the matching engine clear it against the book in real time, and see the mark price move.
+  All order flow and prices below are synthetic.</div>
+</header>
+
+<div class="wrap">
+
+  <div class="panel">
+    <h2>Contracts</h2>
+    <div class="contract-list" id="contractList"></div>
+    <div class="settle-box" id="settleBox"></div>
+  </div>
+
+  <div class="panel">
+    <div class="price-row">
+      <div class="px" id="markPrice">--</div>
+      <div class="chg" id="markChg"></div>
+    </div>
+    <canvas id="chart" width="600" height="160"></canvas>
+    <div class="book">
+      <div class="bids">
+        <div class="col-title">Bids</div>
+        <div id="bidRows"></div>
+      </div>
+      <div class="asks">
+        <div class="col-title">Asks</div>
+        <div id="askRows"></div>
+      </div>
+    </div>
+    <div class="fills" id="fillLog"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Place order</h2>
+    <div class="side-toggle">
+      <button class="buy active" id="btnBuy">BUY</button>
+      <button class="sell" id="btnSell">SELL</button>
+    </div>
+    <div class="form-row">
+      <label>Limit price ($ / GPU-hr)</label>
+      <input type="number" id="ordPrice" step="0.01">
+    </div>
+    <div class="form-row">
+      <label>Quantity (contracts, 1 = 1000 GPU-hrs)</label>
+      <input type="number" id="ordQty" value="1" min="1" step="1">
+    </div>
+    <button class="submit-btn" id="submitOrder">Submit order</button>
+    <div class="hint">Orders match price-time priority against resting orders. Unfilled quantity rests on your side of the book.</div>
+  </div>
+
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Computable (YC S26). Not affiliated with Computable.</footer>
+
+<script>
+(function(){
+
+  // ---- contract universe (synthetic) ----
+  var CONTRACTS = [
+    { id:'H100-DEC', name:'H100 · Dec 2026', meta:'1,000 GPU-hrs · cash-settled', base:2.85, settle:'2026-12-01' },
+    { id:'H100-MAR', name:'H100 · Mar 2027', meta:'1,000 GPU-hrs · cash-settled', base:2.55, settle:'2027-03-01' },
+    { id:'B200-DEC', name:'B200 · Dec 2026', meta:'1,000 GPU-hrs · cash-settled', base:5.40, settle:'2026-12-01' },
+    { id:'TPUv6-JAN', name:'TPU v6 · Jan 2027', meta:'1,000 chip-hrs · cash-settled', base:1.95, settle:'2027-01-01' }
+  ];
+
+  var state = {}; // per-contract order books + history
+
+  function rnd(a,b){ return a + Math.random()*(b-a); }
+  function round2(x){ return Math.round(x*100)/100; }
+
+  function seedBook(base){
+    var bids = [], asks = [];
+    var p = base;
+    for(var i=0;i<6;i++){
+      p = round2(p - rnd(0.01,0.06));
+      bids.push({ price:p, qty: Math.ceil(rnd(1,9)) });
+    }
+    p = base;
+    for(var j=0;j<6;j++){
+      p = round2(p + rnd(0.01,0.06));
+      asks.push({ price:p, qty: Math.ceil(rnd(1,9)) });
+    }
+    bids.sort(function(a,b){return b.price-a.price;});
+    asks.sort(function(a,b){return a.price-b.price;});
+    return {bids:bids, asks:asks};
+  }
+
+  function seedHistory(base){
+    var h = [], p = base;
+    for(var i=0;i<40;i++){
+      p = round2(Math.max(0.1, p + rnd(-0.03,0.03)));
+      h.push(p);
+    }
+    return h;
+  }
+
+  CONTRACTS.forEach(function(c){
+    var book = seedBook(c.base);
+    state[c.id] = {
+      book: book,
+      history: seedHistory(c.base),
+      last: c.base,
+      fills: []
+    };
+  });
+
+  var current = CONTRACTS[0].id;
+  var side = 'buy';
+
+  // ---- rendering ----
+  var contractListEl = document.getElementById('contractList');
+  var settleBoxEl = document.getElementById('settleBox');
+  var markPriceEl = document.getElementById('markPrice');
+  var markChgEl = document.getElementById('markChg');
+  var bidRowsEl = document.getElementById('bidRows');
+  var askRowsEl = document.getElementById('askRows');
+  var fillLogEl = document.getElementById('fillLog');
+  var canvas = document.getElementById('chart');
+  var ctx = canvas.getContext('2d');
+
+  function contractById(id){
+    for(var i=0;i<CONTRACTS.length;i++){ if(CONTRACTS[i].id===id) return CONTRACTS[i]; }
+  }
+
+  function renderContractList(){
+    contractListEl.innerHTML = '';
+    CONTRACTS.forEach(function(c){
+      var btn = document.createElement('button');
+      btn.className = c.id===current ? 'active' : '';
+      btn.innerHTML = '<div class="name">'+c.name+'</div><div class="meta">'+c.meta+'</div>';
+      btn.onclick = function(){ current = c.id; renderAll(); };
+      contractListEl.appendChild(btn);
+    });
+  }
+
+  function renderSettle(){
+    var c = contractById(current);
+    settleBoxEl.innerHTML = 'Settlement date <b>'+c.settle+'</b>. At settlement, longs and shorts cash-settle against the realized spot price for '+c.name.split(' · ')[0]+' capacity — no physical GPUs change hands here, just the price bet.';
+  }
+
+  function renderPrice(){
+    var s = state[current];
+    var h = s.history;
+    var prev = h[h.length-2] !== undefined ? h[h.length-2] : s.last;
+    var chg = s.last - prev;
+    var pct = prev ? (chg/prev*100) : 0;
+    markPriceEl.textContent = '$' + s.last.toFixed(2);
+    markChgEl.textContent = (chg>=0?'+':'') + chg.toFixed(2) + ' (' + (pct>=0?'+':'') + pct.toFixed(1) + '%)';
+    markChgEl.className = 'chg ' + (chg>=0 ? 'up' : 'down');
+  }
+
+  function renderChart(){
+    var s = state[current];
+    var h = s.history;
+    var w = canvas.width, hgt = canvas.height;
+    ctx.clearRect(0,0,w,hgt);
+    if(h.length < 2) return;
+    var min = Math.min.apply(null,h), max = Math.max.apply(null,h);
+    var pad = (max-min)*0.15 || 0.1;
+    min -= pad; max += pad;
+    ctx.beginPath();
+    h.forEach(function(v,i){
+      var x = (i/(h.length-1)) * (w-16) + 8;
+      var y = hgt - 10 - ((v-min)/(max-min)) * (hgt-20);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    var rising = h[h.length-1] >= h[0];
+    ctx.strokeStyle = rising ? '#3ddc97' : '#ff5d7a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // fill under line
+    var lastX = (1) * (w-16) + 8;
+    ctx.lineTo(lastX, hgt-10);
+    ctx.lineTo(8, hgt-10);
+    ctx.closePath();
+    ctx.fillStyle = rising ? 'rgba(61,220,151,.08)' : 'rgba(255,93,122,.08)';
+    ctx.fill();
+  }
+
+  function renderBook(){
+    var s = state[current];
+    bidRowsEl.innerHTML = '';
+    askRowsEl.innerHTML = '';
+    s.book.bids.slice(0,8).forEach(function(o){
+      var d = document.createElement('div');
+      d.className = 'row';
+      d.innerHTML = '<span>$'+o.price.toFixed(2)+'</span><span>'+o.qty+'</span>';
+      bidRowsEl.appendChild(d);
+    });
+    s.book.asks.slice(0,8).forEach(function(o){
+      var d = document.createElement('div');
+      d.className = 'row';
+      d.innerHTML = '<span>$'+o.price.toFixed(2)+'</span><span>'+o.qty+'</span>';
+      askRowsEl.appendChild(d);
+    });
+  }
+
+  function renderFills(){
+    var s = state[current];
+    fillLogEl.innerHTML = '';
+    s.fills.slice(-12).reverse().forEach(function(f){
+      var d = document.createElement('div');
+      d.className = 'row ' + f.side;
+      d.innerHTML = '<span>'+f.side.toUpperCase()+' '+f.qty+' @ $'+f.price.toFixed(2)+'</span><span>'+f.tag+'</span>';
+      fillLogEl.appendChild(d);
+    });
+    if(s.fills.length===0){
+      fillLogEl.innerHTML = '<div class="row" style="border:none; color:var(--muted);">No fills yet on this contract.</div>';
+    }
+  }
+
+  function renderAll(){
+    renderContractList();
+    renderSettle();
+    renderPrice();
+    renderChart();
+    renderBook();
+    renderFills();
+  }
+
+  // ---- matching engine ----
+  // buyPrice >= lowest ask -> match; sellPrice <= highest bid -> match
+  function submitOrder(orderSide, price, qty){
+    var s = state[current];
+    var book = s.book;
+    price = round2(price);
+    qty = Math.max(1, Math.floor(qty));
+    var remaining = qty;
+    var fillsMade = [];
+
+    if(orderSide === 'buy'){
+      while(remaining > 0 && book.asks.length > 0 && book.asks[0].price <= price){
+        var top = book.asks[0];
+        var traded = Math.min(remaining, top.qty);
+        fillsMade.push({price: top.price, qty: traded});
+        remaining -= traded;
+        top.qty -= traded;
+        if(top.qty <= 0) book.asks.shift();
+      }
+      if(remaining > 0){
+        book.bids.push({price:price, qty:remaining});
+        book.bids.sort(function(a,b){return b.price-a.price;});
+      }
+    } else {
+      while(remaining > 0 && book.bids.length > 0 && book.bids[0].price >= price){
+        var topB = book.bids[0];
+        var tradedB = Math.min(remaining, topB.qty);
+        fillsMade.push({price: topB.price, qty: tradedB});
+        remaining -= tradedB;
+        topB.qty -= tradedB;
+        if(topB.qty <= 0) book.bids.shift();
+      }
+      if(remaining > 0){
+        book.asks.push({price:price, qty:remaining});
+        book.asks.sort(function(a,b){return a.price-b.price;});
+      }
+    }
+
+    fillsMade.forEach(function(f){
+      s.fills.push({side:orderSide, price:f.price, qty:f.qty, tag:'matched'});
+      s.last = f.price;
+      s.history.push(f.price);
+    });
+
+    if(fillsMade.length === 0 && remaining < qty){
+      // shouldn't happen, safety no-op
+    }
+    if(fillsMade.length === 0 && remaining === qty){
+      s.fills.push({side:orderSide, price:price, qty:qty, tag:'resting'});
+    }
+
+    if(s.history.length > 60) s.history = s.history.slice(-60);
+    renderAll();
+  }
+
+  // ---- background market noise so the book feels alive ----
+  setInterval(function(){
+    var ids = Object.keys(state);
+    var id = ids[Math.floor(Math.random()*ids.length)];
+    var s = state[id];
+    var c = contractById(id);
+    var book = s.book;
+    var actAsBuy = Math.random() < 0.5;
+    var refPrice = s.last;
+    var px = round2(refPrice + rnd(-0.05, 0.05));
+    var qty = Math.ceil(rnd(1,5));
+
+    if(actAsBuy && book.asks.length && px >= book.asks[0].price){
+      var top = book.asks[0];
+      var traded = Math.min(qty, top.qty);
+      top.qty -= traded;
+      if(top.qty<=0) book.asks.shift();
+      s.last = top.price;
+      s.history.push(top.price);
+      s.fills.push({side:'buy', price:top.price, qty:traded, tag:'market'});
+    } else if(!actAsBuy && book.bids.length && px <= book.bids[0].price){
+      var topB = book.bids[0];
+      var tradedB = Math.min(qty, topB.qty);
+      topB.qty -= tradedB;
+      if(topB.qty<=0) book.bids.shift();
+      s.last = topB.price;
+      s.history.push(topB.price);
+      s.fills.push({side:'sell', price:topB.price, qty:tradedB, tag:'market'});
+    } else {
+      if(actAsBuy){
+        book.bids.push({price:px, qty:qty});
+        book.bids.sort(function(a,b){return b.price-a.price;});
+      } else {
+        book.asks.push({price:px, qty:qty});
+        book.asks.sort(function(a,b){return a.price-b.price;});
+      }
+    }
+    if(s.history.length > 60) s.history = s.history.slice(-60);
+    if(id === current) renderAll();
+  }, 1800);
+
+  // ---- UI wiring ----
+  document.getElementById('btnBuy').onclick = function(){
+    side='buy';
+    this.classList.add('active');
+    document.getElementById('btnSell').classList.remove('active');
+  };
+  document.getElementById('btnSell').onclick = function(){
+    side='sell';
+    this.classList.add('active');
+    document.getElementById('btnBuy').classList.remove('active');
+  };
+  document.getElementById('submitOrder').onclick = function(){
+    var priceInput = document.getElementById('ordPrice');
+    var qtyInput = document.getElementById('ordQty');
+    var price = parseFloat(priceInput.value);
+    var qty = parseInt(qtyInput.value, 10);
+    if(isNaN(price) || price <= 0){
+      priceInput.style.borderColor = 'var(--red)';
+      setTimeout(function(){ priceInput.style.borderColor = 'var(--border)'; }, 900);
+      return;
+    }
+    if(isNaN(qty) || qty <= 0) qty = 1;
+    submitOrder(side, price, qty);
+  };
+
+  // default price field to current mark
+  document.getElementById('ordPrice').value = state[current].last.toFixed(2);
+
+  renderAll();
+})();
+</script>
+
+</body>
+</html>
