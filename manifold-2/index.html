@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pick Loop — a warehouse robot dispatch toy</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#151b23; --panel2:#1c2430; --line:#2a3444;
+    --text:#e6edf3; --dim:#8b98a9; --accent:#ff8a3d; --accent2:#3ddc97;
+    --warn:#ffb347; --cell:#1a2330; --cell-shelf:#233047; --cell-active:#3a2a1a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #1a2333 0%, var(--bg) 55%);
+    color:var(--text); min-height:100vh; display:flex; flex-direction:column;
+  }
+  header{padding:28px 32px 8px; max-width:1100px; margin:0 auto; width:100%;}
+  header h1{margin:0 0 6px; font-size:26px; letter-spacing:-0.02em;}
+  header p{margin:0; color:var(--dim); font-size:14px; max-width:640px; line-height:1.5;}
+  .badge{display:inline-block; background:var(--panel2); border:1px solid var(--line); color:var(--accent2);
+    font-size:11px; padding:3px 8px; border-radius:20px; margin-bottom:10px; letter-spacing:0.03em;}
+
+  main{flex:1; max-width:1100px; margin:0 auto; width:100%; padding:16px 32px 40px; display:grid;
+    grid-template-columns:1.4fr 1fr; gap:20px;}
+  @media (max-width:880px){ main{grid-template-columns:1fr;} }
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px;}
+  .panel h2{margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:0.06em; color:var(--dim);}
+
+  #floor{
+    display:grid; grid-template-columns:repeat(9, 1fr); gap:5px; aspect-ratio:9/6;
+  }
+  .cell{
+    background:var(--cell); border-radius:6px; position:relative; display:flex; align-items:center;
+    justify-content:center; font-size:10px; color:var(--dim); border:1px solid transparent;
+    transition:background .15s, border-color .15s;
+  }
+  .cell.shelf{background:var(--cell-shelf); color:#a9c1e6; font-weight:600; cursor:default;}
+  .cell.dock{background:#233020; color:var(--accent2); font-weight:700;}
+  .cell.empty-slot{cursor:pointer;}
+  .cell.empty-slot:hover{border-color:var(--accent); color:var(--accent);}
+  .cell.target{background:var(--cell-active); border-color:var(--accent); color:var(--accent); font-weight:700;}
+  .cell.visited-flash{animation:flash .5s ease;}
+  @keyframes flash{ 0%{background:var(--accent2); color:#0d1117;} 100%{background:var(--cell-shelf);} }
+  .bot{
+    position:absolute; inset:3px; border-radius:5px; background:var(--accent);
+    box-shadow:0 0 0 2px rgba(255,138,61,.25), 0 4px 12px rgba(255,138,61,.4);
+    display:flex; align-items:center; justify-content:center; font-size:13px;
+    transition:transform .28s cubic-bezier(.4,.0,.2,1);
+    z-index:5; pointer-events:none;
+  }
+
+  .stat-row{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;}
+  .stat{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; flex:1; min-width:110px;}
+  .stat .v{font-size:20px; font-weight:700;}
+  .stat .l{font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em;}
+  .stat .v.accent{color:var(--accent);}
+  .stat .v.green{color:var(--accent2);}
+
+  .queue{list-style:none; margin:0; padding:0; max-height:150px; overflow-y:auto;}
+  .queue li{
+    display:flex; justify-content:space-between; align-items:center; padding:7px 9px; border-radius:8px;
+    background:var(--panel2); margin-bottom:6px; font-size:13px; border:1px solid var(--line);
+  }
+  .queue li.done{opacity:.4; text-decoration:line-through;}
+  .queue li .tag{font-size:10px; color:var(--dim); background:var(--bg); padding:2px 6px; border-radius:6px;}
+
+  button{
+    font:inherit; border:none; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600;
+    font-size:13px; transition:transform .1s, opacity .15s;
+  }
+  button:active{transform:scale(.97);}
+  .btn-primary{background:var(--accent); color:#1a1000;}
+  .btn-secondary{background:var(--panel2); color:var(--text); border:1px solid var(--line);}
+  .btn-primary:disabled, .btn-secondary:disabled{opacity:.4; cursor:not-allowed;}
+  .controls{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
+
+  .add-sku{margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);}
+  .add-sku p{font-size:12px; color:var(--dim); margin:0 0 8px; line-height:1.5;}
+  .add-sku input{
+    background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:8px;
+    padding:8px 10px; font-size:13px; width:100%; margin-bottom:8px;
+  }
+  .add-sku .hint{font-size:11px; color:var(--accent2);}
+
+  .compare{margin-top:14px;}
+  .bar-row{margin-bottom:10px;}
+  .bar-row .lbl{font-size:12px; color:var(--dim); display:flex; justify-content:space-between; margin-bottom:4px;}
+  .bar-track{background:var(--bg); border-radius:6px; height:10px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:6px;}
+  .bar-fill.robot{background:linear-gradient(90deg,var(--accent),#ffb347);}
+  .bar-fill.human{background:#5b6b82;}
+
+  footer{
+    text-align:center; padding:18px 20px 26px; color:var(--dim); font-size:12px;
+    border-top:1px solid var(--line); margin-top:auto;
+  }
+  footer strong{color:var(--text);}
+  .log{font-size:11px; color:var(--dim); margin-top:10px; line-height:1.6; max-height:70px; overflow-y:auto;}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge">◆ TOY SIMULATION — synthetic data</span>
+  <h1>Pick Loop</h1>
+  <p>A tiny model of drop-in warehouse picking: drop a robot onto an existing floor plan, feed it orders,
+     and watch it route itself between shelves with zero retrofitting. Add a brand-new SKU location mid-shift
+     and the robot picks it on the very next order — no reconfiguration step.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Warehouse floor (click an empty slot to add a SKU)</h2>
+    <div id="floor"></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>Shift control</h2>
+      <div class="stat-row">
+        <div class="stat"><div class="v accent" id="stat-picks">0</div><div class="l">Picks done</div></div>
+        <div class="stat"><div class="v" id="stat-rate">0</div><div class="l">Picks / hr (sim)</div></div>
+        <div class="stat"><div class="v green" id="stat-cost">$0.00</div><div class="l">Cost so far</div></div>
+      </div>
+      <h2 style="margin-top:2px;">Order queue</h2>
+      <ul class="queue" id="queue"></ul>
+      <div class="controls">
+        <button class="btn-primary" id="btn-order">+ New order</button>
+        <button class="btn-secondary" id="btn-run">Start shift</button>
+        <button class="btn-secondary" id="btn-reset">Reset</button>
+      </div>
+
+      <div class="add-sku">
+        <p>Click an empty (dark) slot on the floor plan, name a SKU, and it becomes pickable immediately —
+           this is the "integrates in hours, not months" part.</p>
+        <input id="sku-name" placeholder="e.g. SKU-BULK-9 (pick an empty slot first)" disabled>
+        <button class="btn-secondary" id="btn-add-sku" disabled style="width:100%;">Add shelf location</button>
+        <div class="hint" id="add-hint"></div>
+      </div>
+    </div>
+
+    <div class="panel compare" style="margin-top:20px;">
+      <h2>Cost per completed order: robot vs. a human picker</h2>
+      <div class="bar-row">
+        <div class="lbl"><span>Robot &mdash; priced by the pick</span><span id="cost-robot">$0.00</span></div>
+        <div class="bar-track"><div class="bar-fill robot" id="bar-robot" style="width:0%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="lbl"><span>Human picker &mdash; hourly wage, walk time included</span><span id="cost-human">$0.00</span></div>
+        <div class="bar-track"><div class="bar-fill human" id="bar-human" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by <strong>Aarush Kandukoori</strong>, inspired by Manifold (YC S26). Not affiliated with Manifold.
+</footer>
+
+<script>
+(function(){
+  const COLS = 9, ROWS = 6;
+  const DOCK = {r:0,c:0};
+  const PICK_PRICE = 0.35;      // $ per pick, "priced by the pick"
+  const HUMAN_WAGE_PER_SEC = 22/3600; // $22/hr fully loaded
+  const HUMAN_WALK_PENALTY = 1.6; // humans walk slower/less optimally than a routed robot
+
+  let grid = []; // grid[r][c] = {type:'empty'|'shelf'|'dock', sku:null}
+  let bot = {r:0, c:0, busy:false};
+  let picksDone = 0, costAccrued = 0, simSeconds = 0, shiftRunning = false;
+  let queue = [];
+  let selectedSlot = null;
+  let orderCounter = 0;
+  let timerHandle = null;
+
+  const floorEl = document.getElementById('floor');
+  const queueEl = document.getElementById('queue');
+  const logEl = document.getElementById('log');
+
+  const SKU_SEED = [
+    {r:1,c:2,sku:'A-104'},{r:1,c:5,sku:'B-220'},{r:1,c:7,sku:'C-011'},
+    {r:3,c:1,sku:'D-330'},{r:3,c:4,sku:'E-045'},{r:3,c:7,sku:'F-902'},
+    {r:5,c:2,sku:'G-118'},{r:5,c:6,sku:'H-503'}
+  ];
+
+  function initGrid(){
+    grid = Array.from({length:ROWS}, () => Array.from({length:COLS}, () => ({type:'empty', sku:null})));
+    grid[DOCK.r][DOCK.c] = {type:'dock', sku:null};
+    SKU_SEED.forEach(s => { grid[s.r][s.c] = {type:'shelf', sku:s.sku}; });
+  }
+
+  function allSkus(){
+    const list = [];
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(grid[r][c].type==='shelf') list.push({r,c,sku:grid[r][c].sku});
+    return list;
+  }
+
+  function renderFloor(){
+    floorEl.innerHTML = '';
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const cellData = grid[r][c];
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r; cell.dataset.c = c;
+        if(cellData.type === 'shelf'){
+          cell.classList.add('shelf');
+          cell.textContent = cellData.sku;
+        } else if(cellData.type === 'dock'){
+          cell.classList.add('dock');
+          cell.textContent = 'DOCK';
+        } else {
+          cell.classList.add('empty-slot');
+          cell.addEventListener('click', () => selectSlot(r,c,cell));
+        }
+        if(queue.length && !queue[0].done){
+          const target = queue[0].pos;
+          if(target && target.r===r && target.c===c) cell.classList.add('target');
+        }
+        if(bot.r===r && bot.c===c){
+          const b = document.createElement('div');
+          b.className = 'bot';
+          b.textContent = '◆';
+          cell.appendChild(b);
+        }
+        floorEl.appendChild(cell);
+      }
+    }
+  }
+
+  function selectSlot(r,c,cellEl){
+    document.querySelectorAll('.empty-slot').forEach(e => e.style.borderColor = '');
+    selectedSlot = {r,c};
+    cellEl.style.borderColor = 'var(--accent)';
+    document.getElementById('sku-name').disabled = false;
+    document.getElementById('btn-add-sku').disabled = false;
+    document.getElementById('add-hint').textContent = `Slot (${r},${c}) selected.`;
+  }
+
+  document.getElementById('btn-add-sku').addEventListener('click', () => {
+    if(!selectedSlot) return;
+    const nameInput = document.getElementById('sku-name');
+    const name = (nameInput.value || `SKU-NEW-${allSkus().length+1}`).trim().toUpperCase();
+    grid[selectedSlot.r][selectedSlot.c] = {type:'shelf', sku:name};
+    log(`New shelf location ${name} added at (${selectedSlot.r},${selectedSlot.c}) — no downtime, robot can route there next order.`);
+    document.getElementById('add-hint').textContent = `${name} is live. Robot can pick it on the very next order.`;
+    nameInput.value = '';
+    nameInput.disabled = true;
+    document.getElementById('btn-add-sku').disabled = true;
+    selectedSlot = null;
+    renderFloor();
+  });
+
+  function log(msg){
+    const line = document.createElement('div');
+    line.textContent = `· ${msg}`;
+    logEl.prepend(line);
+    while(logEl.children.length > 8) logEl.removeChild(logEl.lastChild);
+  }
+
+  function makeOrder(){
+    const skus = allSkus();
+    if(!skus.length) return;
+    const pick = skus[Math.floor(Math.random()*skus.length)];
+    orderCounter++;
+    queue.push({id:orderCounter, sku:pick.sku, pos:{r:pick.r, c:pick.c}, done:false});
+    renderQueue();
+    renderFloor();
+  }
+
+  function renderQueue(){
+    queueEl.innerHTML = '';
+    queue.slice(-8).forEach(o => {
+      const li = document.createElement('li');
+      if(o.done) li.classList.add('done');
+      li.innerHTML = `<span>Order #${o.id} &middot; ${o.sku}</span><span class="tag">${o.done?'picked':'queued'}</span>`;
+      queueEl.appendChild(li);
+    });
+  }
+
+  function manhattanPath(from, to){
+    // returns list of {r,c} steps, moving in straight legs (row then col)
+    const steps = [];
+    let r = from.r, c = from.c;
+    while(r !== to.r){ r += (to.r > r) ? 1 : -1; steps.push({r,c}); }
+    while(c !== to.c){ c += (to.c > c) ? 1 : -1; steps.push({r,c}); }
+    return steps;
+  }
+
+  function stepDurationMs(){ return 140; }
+
+  async function moveBotAlong(path){
+    for(const step of path){
+      bot.r = step.r; bot.c = step.c;
+      renderFloor();
+      await sleep(stepDurationMs());
+    }
+  }
+
+  function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+  async function processNextOrder(){
+    if(!shiftRunning) return;
+    const order = queue.find(o => !o.done);
+    if(!order){
+      makeOrder();
+      return scheduleNext(400);
+    }
+    bot.busy = true;
+    const path = manhattanPath({r:bot.r,c:bot.c}, order.pos);
+    const travelSteps = path.length;
+    await moveBotAlong(path);
+    // pick dwell
+    await sleep(220);
+    order.done = true;
+    picksDone++;
+    costAccrued += PICK_PRICE;
+    simSeconds += travelSteps * 1.1 + 3.5; // sim seconds elapsed for this pick (robot)
+    log(`Robot picked ${order.sku} for order #${order.id} in ${travelSteps} moves.`);
+    // return toward dock only occasionally to keep it snappy — go straight to next target instead
+    bot.busy = false;
+    updateStats();
+    renderQueue();
+    renderFloor();
+    scheduleNext(250);
+  }
+
+  function scheduleNext(delay){
+    if(!shiftRunning) return;
+    timerHandle = setTimeout(processNextOrder, delay);
+  }
+
+  function updateStats(){
+    document.getElementById('stat-picks').textContent = picksDone;
+    const hrs = simSeconds / 3600;
+    const rate = hrs > 0 ? Math.round(picksDone / hrs) : 0;
+    document.getElementById('stat-rate').textContent = rate.toLocaleString();
+    document.getElementById('stat-cost').textContent = '$' + costAccrued.toFixed(2);
+
+    const robotCostPerOrder = picksDone ? costAccrued / picksDone : 0;
+    const humanSecondsPerOrder = picksDone ? (simSeconds / picksDone) * HUMAN_WALK_PENALTY : 0;
+    const humanCostPerOrder = humanSecondsPerOrder * HUMAN_WAGE_PER_SEC;
+
+    document.getElementById('cost-robot').textContent = '$' + robotCostPerOrder.toFixed(2);
+    document.getElementById('cost-human').textContent = '$' + humanCostPerOrder.toFixed(2);
+    const maxVal = Math.max(robotCostPerOrder, humanCostPerOrder, 0.01);
+    document.getElementById('bar-robot').style.width = (robotCostPerOrder/maxVal*100) + '%';
+    document.getElementById('bar-human').style.width = (humanCostPerOrder/maxVal*100) + '%';
+  }
+
+  document.getElementById('btn-order').addEventListener('click', () => { makeOrder(); });
+
+  document.getElementById('btn-run').addEventListener('click', (e) => {
+    shiftRunning = !shiftRunning;
+    e.target.textContent = shiftRunning ? 'Pause shift' : 'Start shift';
+    if(shiftRunning){
+      if(!queue.some(o=>!o.done)) makeOrder();
+      log('Shift started — robot pulling from the order queue.');
+      processNextOrder();
+    } else {
+      clearTimeout(timerHandle);
+      log('Shift paused.');
+    }
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    clearTimeout(timerHandle);
+    shiftRunning = false;
+    document.getElementById('btn-run').textContent = 'Start shift';
+    picksDone = 0; costAccrued = 0; simSeconds = 0; queue = []; orderCounter = 0;
+    bot = {r:0,c:0,busy:false};
+    initGrid();
+    renderFloor(); renderQueue(); updateStats();
+    logEl.innerHTML = '';
+    log('Floor reset to the default layout.');
+  });
+
+  initGrid();
+  renderFloor();
+  for(let i=0;i<3;i++) makeOrder();
+  updateStats();
+  log('Floor plan loaded. Add a queue of orders or start the shift to watch the robot route itself.');
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Coalition — a tiny multi-agent trust arena</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0e1116;
+    --panel:#161b23;
+    --panel2:#1e2530;
+    --line:#2a3242;
+    --ink:#e8ecf3;
+    --dim:#8a94a6;
+    --accent:#5fd0c0;
+    --accent2:#f0a860;
+    --bad:#e06868;
+    --good:#6dd48a;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 800px at 50% -10%, #1a2130 0%, var(--bg) 60%);
+    color:var(--ink);
+    padding:32px 18px 60px;
+  }
+  .wrap{max-width:960px;margin:0 auto;}
+  header{text-align:center;margin-bottom:28px;}
+  header h1{font-size:2rem;margin:0 0 6px;letter-spacing:-0.02em;}
+  header p{color:var(--dim);max-width:640px;margin:0 auto;line-height:1.5;font-size:.95rem;}
+  .badge{
+    display:inline-block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);border:1px solid #2b4844;background:#122019;
+    padding:4px 10px;border-radius:20px;margin-bottom:12px;
+  }
+
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:20px;margin-bottom:18px;
+  }
+
+  .status-row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px;}
+  .status-row .pool{font-size:.95rem;color:var(--dim);}
+  .status-row .pool b{color:var(--accent2);font-size:1.1rem;}
+  .round-tag{font-size:.85rem;color:var(--dim);}
+
+  .agents{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:18px;}
+  .agent-card{
+    background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;
+    position:relative;overflow:hidden;
+  }
+  .agent-card .name{font-weight:600;font-size:.95rem;display:flex;justify-content:space-between;align-items:center;}
+  .agent-card .role{color:var(--dim);font-size:.75rem;margin:2px 0 10px;}
+  .trust-label{font-size:.72rem;color:var(--dim);display:flex;justify-content:space-between;margin-bottom:4px;}
+  .trust-bar{height:6px;border-radius:4px;background:#0b0f15;overflow:hidden;}
+  .trust-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--bad),var(--accent2),var(--good));transition:width .4s ease;}
+  .score{font-size:.75rem;color:var(--dim);margin-top:10px;}
+  .score b{color:var(--ink);}
+  .agent-thought{
+    margin-top:10px;font-size:.72rem;color:var(--accent);min-height:14px;
+    font-style:italic;opacity:0;transition:opacity .3s ease;
+  }
+  .agent-thought.show{opacity:1;}
+
+  .choices{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+  .choices button{
+    flex:1;min-width:150px;
+    background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    padding:12px 14px;border-radius:10px;cursor:pointer;font-size:.88rem;text-align:left;
+    transition:border-color .15s, transform .1s;
+  }
+  .choices button:hover:not(:disabled){border-color:var(--accent);transform:translateY(-1px);}
+  .choices button:disabled{opacity:.4;cursor:not-allowed;}
+  .choices button small{display:block;color:var(--dim);font-weight:400;margin-top:3px;}
+
+  .log{
+    background:#0b0f15;border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;max-height:170px;overflow-y:auto;font-size:.8rem;color:var(--dim);
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.6;
+  }
+  .log div span.you{color:var(--accent);}
+  .log div span.agent{color:var(--accent2);}
+  .log div span.pos{color:var(--good);}
+  .log div span.neg{color:var(--bad);}
+
+  .eval-panel h2{font-size:1.05rem;margin:0 0 10px;}
+  .eval-panel table{width:100%;border-collapse:collapse;font-size:.85rem;}
+  .eval-panel th,.eval-panel td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+  .eval-panel th{color:var(--dim);font-weight:500;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;}
+  .tag{
+    display:inline-block;font-size:.7rem;padding:2px 8px;border-radius:12px;margin:2px 4px 2px 0;
+    border:1px solid var(--line);color:var(--dim);
+  }
+  .tag.hot{border-color:#4a2f2f;color:var(--bad);background:#1a1010;}
+  .tag.cool{border-color:#2b4844;color:var(--good);background:#0f1a13;}
+  .tag.mid{border-color:#3a3520;color:var(--accent2);background:#1a160c;}
+
+  .dataset-json{
+    background:#0b0f15;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;color:#9fb0c9;
+    white-space:pre-wrap;max-height:220px;overflow-y:auto;margin-top:12px;
+  }
+
+  .restart{
+    display:block;margin:18px auto 0;background:var(--accent);color:#08201b;border:none;
+    padding:10px 22px;border-radius:8px;font-weight:600;cursor:pointer;font-size:.9rem;
+  }
+  .restart:hover{opacity:.9;}
+
+  footer{
+    text-align:center;color:var(--dim);font-size:.78rem;margin-top:40px;
+    border-top:1px solid var(--line);padding-top:18px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="badge">toy multi-agent arena</span>
+    <h1>Coalition</h1>
+    <p>Five rounds. A shared point pool each round. You and three AI agents each decide, independently, whether to
+    cooperate or defect. The agents aren't scripted to a fixed pattern — each one tracks a running trust score toward
+    you and toward the other agents, and that score shapes what it does next. Play it out, then look at the eval log
+    the arena produces about each agent's behavior.</p>
+  </header>
+
+  <div class="panel">
+    <div class="status-row">
+      <div class="round-tag">Round <b id="roundNum">1</b> of <span id="roundTotal">5</span></div>
+      <div class="pool">Pool this round: <b id="poolAmt">100</b> pts</div>
+      <div class="round-tag">Your total: <b id="yourScore" style="color:var(--accent)">0</b> pts</div>
+    </div>
+
+    <div class="agents" id="agentGrid"></div>
+
+    <div class="choices" id="choiceRow">
+      <!-- injected -->
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="panel eval-panel" id="evalPanel" style="display:none">
+    <h2>Post-game evaluation log</h2>
+    <p style="color:var(--dim);font-size:.85rem;margin-top:-4px;">
+      This is the kind of behavioral record the arena logs after every match — not just who won, but how each
+      agent negotiated, whether it kept promises, and how it responded to being betrayed.
+    </p>
+    <table>
+      <thead><tr><th>Agent</th><th>Coop rate</th><th>Retaliation</th><th>Final trust in you</th><th>Tags</th></tr></thead>
+      <tbody id="evalBody"></tbody>
+    </table>
+    <div class="dataset-json" id="datasetJson"></div>
+    <button class="restart" onclick="resetGame()">Run another match</button>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Olam Labs (YC S26). Not affiliated with Olam Labs.
+  </footer>
+</div>
+
+<script>
+(function(){
+  const TOTAL_ROUNDS = 5;
+  const agents = [
+    {
+      id:'nova', name:'Agent Nova', role:'Cooperative — forgives fast, rarely opens with betrayal',
+      trustInYou:0.6, trustInOthers:{vex:0.5, rho:0.5},
+      aggression:0.15, memory:0.55, score:0,
+      history:[], thought:''
+    },
+    {
+      id:'vex', name:'Agent Vex', role:'Opportunist — mirrors whatever worked last round',
+      trustInYou:0.5, trustInOthers:{nova:0.5, rho:0.5},
+      aggression:0.4, memory:0.8, score:0,
+      history:[], thought:''
+    },
+    {
+      id:'rho', name:'Agent Rho', role:'Aggressive — defects early to test you, tracks grudges hard',
+      trustInYou:0.35, trustInOthers:{nova:0.5, vex:0.5},
+      aggression:0.7, memory:0.9, score:0,
+      history:[], thought:''
+    }
+  ];
+
+  let round = 1;
+  let yourScore = 0;
+  let pool = 0;
+  let roundLocked = false;
+  let logEntries = [];
+
+  function rand(){ return Math.random(); }
+  function clamp(v){ return Math.max(0, Math.min(1, v)); }
+  function poolForRound(r){ return 80 + r*10 + Math.floor(rand()*15); }
+
+  function agentDecision(agent){
+    // Decision = function of trust in you, own aggression, and a little noise.
+    // Higher trust + lower aggression => more likely to cooperate.
+    const base = agent.trustInYou * (1 - agent.aggression*0.6);
+    const noise = (rand() - 0.5) * 0.25;
+    const coopProb = clamp(base + noise + 0.15);
+    const cooperates = rand() < coopProb;
+    return {cooperates, coopProb};
+  }
+
+  function agentThoughtLine(agent, cooperates, coopProb){
+    if (cooperates && agent.trustInYou > 0.6) return `trusts you, plays it straight`;
+    if (cooperates) return `cautiously cooperating, watching closely`;
+    if (!cooperates && agent.trustInYou < 0.4) return `low trust in you — hedging by defecting`;
+    return `testing you this round`;
+  }
+
+  function render(){
+    document.getElementById('roundNum').textContent = round;
+    document.getElementById('roundTotal').textContent = TOTAL_ROUNDS;
+    document.getElementById('poolAmt').textContent = pool;
+    document.getElementById('yourScore').textContent = yourScore;
+
+    const grid = document.getElementById('agentGrid');
+    grid.innerHTML = '';
+    agents.forEach(a => {
+      const pct = Math.round(a.trustInYou*100);
+      const div = document.createElement('div');
+      div.className = 'agent-card';
+      div.innerHTML = `
+        <div class="name">${a.name}<span style="font-size:.7rem;color:var(--dim)">#${a.id}</span></div>
+        <div class="role">${a.role}</div>
+        <div class="trust-label"><span>trust in you</span><span>${pct}%</span></div>
+        <div class="trust-bar"><div class="trust-fill" style="width:${pct}%"></div></div>
+        <div class="score">score: <b>${a.score}</b></div>
+        <div class="agent-thought" id="thought-${a.id}">${a.thought ? '"'+a.thought+'"' : ''}</div>
+      `;
+      grid.appendChild(div);
+      if (a.thought) requestAnimationFrame(()=>document.getElementById('thought-'+a.id).classList.add('show'));
+    });
+
+    const choiceRow = document.getElementById('choiceRow');
+    choiceRow.innerHTML = '';
+    if (round > TOTAL_ROUNDS){ choiceRow.style.display='none'; return; }
+    choiceRow.style.display = 'flex';
+    const coopBtn = document.createElement('button');
+    coopBtn.innerHTML = `Cooperate<small>Split the pool if enough agents also cooperate. Builds trust.</small>`;
+    coopBtn.disabled = roundLocked;
+    coopBtn.onclick = () => playRound(true);
+
+    const defectBtn = document.createElement('button');
+    defectBtn.innerHTML = `Defect<small>Grab a larger cut if others cooperate. Tanks trust fast.</small>`;
+    defectBtn.disabled = roundLocked;
+    defectBtn.onclick = () => playRound(false);
+
+    choiceRow.appendChild(coopBtn);
+    choiceRow.appendChild(defectBtn);
+  }
+
+  function pushLog(html){
+    logEntries.unshift(html);
+    const logDiv = document.getElementById('log');
+    logDiv.innerHTML = logEntries.map(e=>`<div>${e}</div>`).join('');
+  }
+
+  function playRound(youCooperate){
+    if (roundLocked) return;
+    roundLocked = true;
+
+    const decisions = agents.map(a => {
+      const d = agentDecision(a);
+      a.thought = agentThoughtLine(a, d.cooperates, d.coopProb);
+      return {agent:a, cooperates:d.cooperates};
+    });
+
+    const cooperators = decisions.filter(d=>d.cooperates).length + (youCooperate?1:0);
+    const totalPlayers = agents.length + 1;
+
+    // Payout logic: cooperators split the pool proportional to cooperator count;
+    // defectors take a fixed bonus skimmed off the top, shrinking the coop pool.
+    const defectorCount = totalPlayers - cooperators;
+    const skim = defectorCount * (pool * 0.12);
+    const coopPoolRemaining = Math.max(0, pool - skim);
+    const perCooperator = cooperators > 0 ? Math.floor(coopPoolRemaining / cooperators) : 0;
+    const perDefector = Math.floor(pool * 0.12) + (cooperators>0 ? Math.floor(perCooperator*0.4) : Math.floor(pool/totalPlayers));
+
+    let youGain = youCooperate ? perCooperator : perDefector;
+    yourScore += youGain;
+
+    decisions.forEach(({agent, cooperates}) => {
+      const gain = cooperates ? perCooperator : perDefector;
+      agent.score += gain;
+
+      // Update this agent's trust in you based on what YOU did this round.
+      const delta = youCooperate ? (0.10 + agent.memory*0.05) : -(0.18 + agent.memory*0.07);
+      agent.trustInYou = clamp(agent.trustInYou + delta);
+      agent.history.push({round, youCooperate, agentCooperated:cooperates, gain});
+    });
+
+    const you = `<span class="you">You</span> ${youCooperate ? '<span class="pos">cooperated</span>' : '<span class="neg">defected</span>'} — round ${round}, pool ${pool}pts`;
+    pushLog(you);
+    decisions.forEach(({agent, cooperates}) => {
+      pushLog(`<span class="agent">${agent.name}</span> ${cooperates ? '<span class="pos">cooperated</span>' : '<span class="neg">defected</span>'} — earned ${agent.score - (agent.score - (cooperates?perCooperator:perDefector))>=0 ? (cooperates?perCooperator:perDefector) : 0}pts`);
+    });
+
+    render();
+
+    setTimeout(() => {
+      round += 1;
+      roundLocked = false;
+      if (round > TOTAL_ROUNDS){
+        showEval();
+      } else {
+        pool = poolForRound(round);
+        render();
+      }
+    }, 900);
+  }
+
+  function tagsFor(agent){
+    const coopRate = agent.history.filter(h=>h.agentCooperated).length / agent.history.length;
+    const retaliations = agent.history.filter(h=>!h.youCooperate).map((h,i)=>h).length;
+    // did it defect right after being betrayed?
+    let retaliated = 0, opportunities = 0;
+    for (let i=1;i<agent.history.length;i++){
+      if (!agent.history[i-1].youCooperate){
+        opportunities++;
+        if (!agent.history[i].agentCooperated) retaliated++;
+      }
+    }
+    const retaliationRate = opportunities>0 ? retaliated/opportunities : 0;
+    const tags = [];
+    if (coopRate > 0.7) tags.push({t:'reliable partner', c:'cool'});
+    if (coopRate < 0.35) tags.push({t:'exploitative', c:'hot'});
+    if (retaliationRate > 0.6) tags.push({t:'holds grudges', c:'hot'});
+    if (retaliationRate < 0.3 && opportunities>0) tags.push({t:'forgiving', c:'cool'});
+    if (agent.trustInYou > 0.65) tags.push({t:'high trust in you', c:'cool'});
+    if (agent.trustInYou < 0.35) tags.push({t:'wary of you', c:'hot'});
+    if (tags.length===0) tags.push({t:'balanced', c:'mid'});
+    return {coopRate, retaliationRate, tags};
+  }
+
+  function showEval(){
+    document.getElementById('evalPanel').style.display = 'block';
+    const body = document.getElementById('evalBody');
+    body.innerHTML = '';
+    const dataset = [];
+
+    agents.forEach(agent => {
+      const {coopRate, retaliationRate, tags} = tagsFor(agent);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${agent.name}</td>
+        <td>${Math.round(coopRate*100)}%</td>
+        <td>${Math.round(retaliationRate*100)}%</td>
+        <td>${Math.round(agent.trustInYou*100)}%</td>
+        <td>${tags.map(t=>`<span class="tag ${t.c}">${t.t}</span>`).join('')}</td>
+      `;
+      body.appendChild(tr);
+
+      dataset.push({
+        agent_id: agent.id,
+        persona: agent.role,
+        final_score: agent.score,
+        cooperation_rate: Number(coopRate.toFixed(2)),
+        retaliation_rate: Number(retaliationRate.toFixed(2)),
+        final_trust_in_player: Number(agent.trustInYou.toFixed(2)),
+        behavior_tags: tags.map(t=>t.t),
+        turn_log: agent.history
+      });
+    });
+
+    document.getElementById('datasetJson').textContent =
+      '// synthetic training record this match would contribute to an evals dataset\n' +
+      JSON.stringify({ match_id: 'demo-' + Math.random().toString(36).slice(2,8), player_score: yourScore, agents: dataset }, null, 2);
+
+    document.getElementById('choiceRow').style.display = 'none';
+  }
+
+  window.resetGame = function(){
+    round = 1; yourScore = 0; pool = poolForRound(1); roundLocked = false; logEntries = [];
+    agents.forEach(a => {
+      a.trustInYou = 0.35 + rand()*0.3;
+      a.score = 0; a.history = []; a.thought='';
+    });
+    document.getElementById('evalPanel').style.display = 'none';
+    document.getElementById('log').innerHTML = '';
+    render();
+  };
+
+  pool = poolForRound(1);
+  render();
+})();
+</script>
+</body>
+</html>
