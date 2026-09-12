@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Drawing Auditor — Traceable Review Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2a3342;
+    --text:#e6edf3; --muted:#8b98a9; --accent:#4fb3ff; --good:#3fd68f;
+    --warn:#f5b942; --bad:#ff6161; --mono:'SF Mono',Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #16233a 0%, var(--bg) 55%);
+    color:var(--text); min-height:100vh;
+  }
+  header{padding:28px 36px 10px}
+  header h1{margin:0 0 4px; font-size:22px; letter-spacing:.3px}
+  header p{margin:0; color:var(--muted); font-size:14px; max-width:640px; line-height:1.5}
+  .badge{
+    display:inline-block; background:#1d2a3d; color:var(--accent);
+    border:1px solid #2b466b; padding:2px 9px; border-radius:20px;
+    font-size:11px; font-weight:600; letter-spacing:.4px; margin-bottom:10px;
+  }
+  main{
+    display:grid; grid-template-columns: 380px 1fr 340px; gap:18px;
+    padding:8px 36px 36px; align-items:start;
+  }
+  @media (max-width: 1100px){ main{grid-template-columns:1fr} }
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:18px 20px;
+  }
+  .panel h2{font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 0 14px}
+  .field{margin-bottom:16px}
+  .field label{display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; color:var(--text)}
+  .field label span.val{color:var(--accent); font-family:var(--mono)}
+  input[type=range]{width:100%; accent-color:var(--accent)}
+  select, input[type=text]{
+    width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    padding:8px 10px; border-radius:8px; font-size:13px; font-family:inherit;
+  }
+  .hint{font-size:11.5px; color:var(--muted); margin-top:4px; line-height:1.4}
+  button.run{
+    width:100%; padding:12px; border:none; border-radius:9px; font-size:14px; font-weight:700;
+    background:linear-gradient(135deg,#4fb3ff,#3f8cff); color:#04101c; cursor:pointer; margin-top:6px;
+    letter-spacing:.2px;
+  }
+  button.run:hover{filter:brightness(1.08)}
+  .drawing-wrap{position:relative}
+  svg{width:100%; height:auto; background:#0b1220; border:1px solid var(--line); border-radius:10px}
+  .stat-row{display:flex; gap:10px; margin-top:14px}
+  .stat{
+    flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:9px;
+    padding:10px 12px; text-align:center;
+  }
+  .stat .n{font-size:20px; font-weight:700; font-family:var(--mono)}
+  .stat .l{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px}
+  .findings{display:flex; flex-direction:column; gap:10px; max-height:640px; overflow:auto}
+  .finding{
+    border-radius:9px; padding:11px 13px; border:1px solid var(--line); background:var(--panel2);
+    animation:slidein .25s ease both;
+  }
+  @keyframes slidein{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)}}
+  .finding .top{display:flex; align-items:center; justify-content:space-between; margin-bottom:5px}
+  .sev{font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; letter-spacing:.3px}
+  .sev.bad{background:#3a1414; color:var(--bad)}
+  .sev.warn{background:#3a2c10; color:var(--warn)}
+  .sev.info{background:#12283a; color:var(--accent)}
+  .finding .msg{font-size:13px; line-height:1.4; margin-bottom:6px}
+  .finding .cite{
+    font-family:var(--mono); font-size:11px; color:var(--muted); border-top:1px dashed var(--line);
+    padding-top:6px; display:flex; justify-content:space-between; gap:8px;
+  }
+  .finding .cite b{color:var(--good)}
+  .empty{color:var(--muted); font-size:13px; text-align:center; padding:30px 10px}
+  .callout{
+    fill:none; stroke:var(--bad); stroke-width:2; stroke-dasharray:4 3;
+  }
+  footer{
+    text-align:center; color:var(--muted); font-size:12px; padding:20px 10px 34px;
+    border-top:1px solid var(--line); margin-top:10px;
+  }
+  .flag{
+    position:absolute; background:var(--bad); color:#fff; font-size:10px; font-weight:700;
+    padding:2px 6px; border-radius:10px; transform:translate(-50%,-140%);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">TOY DEMO · NOT AFFILIATED WITH HERA</div>
+  <h1>Drawing Auditor</h1>
+  <p>Adjust the callouts on this synthetic bracket drawing like an engineer would in CAD, then run an audit.
+  Every finding is traced back to the governing rule that triggered it — no black box, just a paper trail
+  a reviewer could sign off on in seconds instead of hours.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Drawing Callouts</h2>
+
+    <div class="field">
+      <label>Wall thickness <span class="val" id="wallVal">3.0 mm</span></label>
+      <input type="range" id="wall" min="0.8" max="6" step="0.1" value="3.0">
+      <div class="hint">Thin walls near a bend risk warping or cracking during casting/forming.</div>
+    </div>
+
+    <div class="field">
+      <label>Hole diameter <span class="val" id="holeVal">8.0 mm</span></label>
+      <input type="range" id="hole" min="2" max="20" step="0.5" value="8.0">
+    </div>
+
+    <div class="field">
+      <label>Edge-to-hole distance <span class="val" id="edgeVal">6.0 mm</span></label>
+      <input type="range" id="edge" min="1" max="20" step="0.5" value="6.0">
+      <div class="hint">Too close to the edge and the hole can tear out under load.</div>
+    </div>
+
+    <div class="field">
+      <label>Position tolerance (Ø) <span class="val" id="tolVal">±0.10 mm</span></label>
+      <input type="range" id="tol" min="0.02" max="0.5" step="0.01" value="0.10">
+    </div>
+
+    <div class="field">
+      <label>Material</label>
+      <select id="material">
+        <option value="al6061">Aluminum 6061-T6</option>
+        <option value="steel4130">Steel 4130</option>
+        <option value="ss316">Stainless 316</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Datum callout</label>
+      <select id="datum">
+        <option value="full">A | B | C — fully defined</option>
+        <option value="partial">A | B — missing tertiary datum</option>
+        <option value="none">none specified</option>
+      </select>
+    </div>
+
+    <button class="run" onclick="runAudit()">Run drawing audit →</button>
+  </section>
+
+  <section class="panel">
+    <h2>Drawing — Bracket, Rev C</h2>
+    <div class="drawing-wrap">
+      <svg id="dwg" viewBox="0 0 420 340">
+        <rect x="40" y="60" width="260" height="140" rx="6" fill="#131b28" stroke="#3a4658" stroke-width="2"/>
+        <rect x="40" y="200" width="90" height="80" fill="#131b28" stroke="#3a4658" stroke-width="2"/>
+        <circle id="holeCircle" cx="170" cy="130" r="16" fill="#0b1220" stroke="#8b98a9" stroke-width="2"/>
+        <line id="edgeLine" x1="40" y1="130" x2="154" y2="130" stroke="#556074" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="60" y="122" fill="#8b98a9" font-size="10" font-family="monospace">edge→hole</text>
+        <rect id="wallRect" x="40" y="60" width="14" height="140" fill="#213047"/>
+        <text x="10" y="130" fill="#8b98a9" font-size="10" font-family="monospace" transform="rotate(-90 20 130)">wall</text>
+        <text x="150" y="230" fill="#e6edf3" font-size="11" font-family="monospace">⌀<tspan id="holeLabel">8.0</tspan> ±<tspan id="tolLabel">0.10</tspan></text>
+        <text x="55" y="300" fill="#8b98a9" font-size="10" font-family="monospace">BRACKET-100, SHEET 1/1</text>
+        <text x="220" y="300" fill="#8b98a9" font-size="10" font-family="monospace" id="datumLabel">DATUM A|B|C</text>
+        <g id="flags"></g>
+      </svg>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="n" id="statFindings">–</div><div class="l">Findings</div></div>
+      <div class="stat"><div class="n" id="statTime">–</div><div class="l">Audit time</div></div>
+      <div class="stat"><div class="n" id="statManual">~40 min</div><div class="l">Manual equivalent</div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Findings — traced to source</h2>
+    <div class="findings" id="findings">
+      <div class="empty">Run an audit to see traceable findings appear here, each tied to the specific requirement it violates.</div>
+    </div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by HERA (YC S26). Not affiliated with HERA.</footer>
+
+<script>
+const wallEl = document.getElementById('wall');
+const holeEl = document.getElementById('hole');
+const edgeEl = document.getElementById('edge');
+const tolEl = document.getElementById('tol');
+const materialEl = document.getElementById('material');
+const datumEl = document.getElementById('datum');
+
+const MATERIAL_MIN_WALL = { al6061: 1.2, steel4130: 0.8, ss316: 1.0 };
+const MATERIAL_NAMES = { al6061: 'Aluminum 6061-T6', steel4130: 'Steel 4130', ss316: 'Stainless 316' };
+
+function fmt(n, d=1){ return Number(n).toFixed(d); }
+
+function syncLabels(){
+  document.getElementById('wallVal').textContent = fmt(wallEl.value) + ' mm';
+  document.getElementById('holeVal').textContent = fmt(holeEl.value) + ' mm';
+  document.getElementById('edgeVal').textContent = fmt(edgeEl.value) + ' mm';
+  document.getElementById('tolVal').textContent = '±' + fmt(tolEl.value, 2) + ' mm';
+  redrawDrawing();
+}
+[wallEl, holeEl, edgeEl, tolEl, materialEl, datumEl].forEach(el => el.addEventListener('input', syncLabels));
+
+function redrawDrawing(){
+  const wall = parseFloat(wallEl.value);
+  const hole = parseFloat(holeEl.value);
+  const edge = parseFloat(edgeEl.value);
+  const tol = parseFloat(tolEl.value);
+
+  document.getElementById('wallRect').setAttribute('width', Math.max(3, wall*4));
+  const r = Math.max(4, hole * 2);
+  document.getElementById('holeCircle').setAttribute('r', r);
+  const holeX = Math.min(260, 40 + wall*4 + edge*4 + r);
+  document.getElementById('holeCircle').setAttribute('cx', holeX);
+  document.getElementById('edgeLine').setAttribute('x2', holeX - r);
+  document.getElementById('edgeLine').setAttribute('x1', 40 + wall*4);
+  document.getElementById('holeLabel').textContent = fmt(hole);
+  document.getElementById('tolLabel').textContent = fmt(tol, 2);
+
+  const datumMap = { full: 'DATUM A|B|C', partial: 'DATUM A|B (no C)', none: 'DATUM — none' };
+  document.getElementById('datumLabel').textContent = datumMap[datumEl.value];
+}
+
+function flagAt(x, y, text){
+  const ns = 'http://www.w3.org/2000/svg';
+  const g = document.getElementById('flags');
+  const el = document.createElementNS(ns, 'text');
+  el.setAttribute('x', x); el.setAttribute('y', y);
+  el.setAttribute('fill', '#ff6161'); el.setAttribute('font-size', '18');
+  el.setAttribute('font-family', 'monospace'); el.textContent = '⚠';
+  g.appendChild(el);
+}
+
+const RULES = [
+  {
+    id: 'wall-min',
+    test: (v) => v.wall < MATERIAL_MIN_WALL[v.material],
+    severity: 'bad',
+    msg: (v) => `Wall thickness ${fmt(v.wall)} mm is below the minimum castable/formable section for ${MATERIAL_NAMES[v.material]} (min ${MATERIAL_MIN_WALL[v.material]} mm). Risk of warping or short-fill.`,
+    cite: 'DFM-RULE 4.2 — Min. wall by material class', conf: 0.97,
+    at: {x:60,y:130}
+  },
+  {
+    id: 'edge-dist',
+    test: (v) => v.edge < 1.5 * (v.hole/2),
+    severity: 'bad',
+    msg: (v) => `Edge distance ${fmt(v.edge)} mm is less than 1.5× hole radius (${fmt(v.hole/2)} mm). Fastener tear-out risk under shear load.`,
+    cite: 'ASME Y14.5-derived — Edge margin ≥ 1.5r', conf: 0.94,
+    at: {x:110,y:110}
+  },
+  {
+    id: 'tol-tight',
+    test: (v) => v.tol < 0.05,
+    severity: 'warn',
+    msg: (v) => `Position tolerance ±${fmt(v.tol,2)} mm is tighter than the shop's standard capability for this hole size. Likely to inflate cost or fail incoming inspection.`,
+    cite: 'PROC-CAP 12 — Shop capability envelope', conf: 0.88,
+    at: {x:200,y:240}
+  },
+  {
+    id: 'tol-loose',
+    test: (v) => v.tol > 0.35,
+    severity: 'warn',
+    msg: (v) => `Position tolerance ±${fmt(v.tol,2)} mm is unusually loose for a ⌀${fmt(v.hole)} mm hole in a load path — check whether this was intentional or a copy-paste from a non-critical feature.`,
+    cite: 'REVIEW-HIST 7 — Tolerance vs. feature criticality', conf: 0.7,
+    at: {x:200,y:240}
+  },
+  {
+    id: 'datum-missing',
+    test: (v) => v.datum !== 'full',
+    severity: (v) => v.datum === 'none' ? 'bad' : 'warn',
+    msg: (v) => v.datum === 'none'
+      ? 'No datum reference frame specified. Inspection cannot be reproduced consistently across vendors.'
+      : 'Tertiary datum (C) is missing. Rotation about the primary axis is left unconstrained.',
+    cite: 'ASME Y14.5 §4.4 — Datum reference frame completeness', conf: 0.99,
+    at: {x:250,y:300}
+  },
+  {
+    id: 'hole-wall-ratio',
+    test: (v) => v.hole > v.wall * 5,
+    severity: 'info',
+    msg: (v) => `Hole diameter is ${fmt(v.hole / v.wall,1)}× the wall thickness. Confirm the boss/pad around the hole is called out separately — otherwise this reads as a thru-slot in the base wall.`,
+    cite: 'DFM-RULE 9.1 — Hole-to-wall ratio advisory', conf: 0.6,
+    at: {x:170,y:150}
+  },
+];
+
+function runAudit(){
+  const v = {
+    wall: parseFloat(wallEl.value),
+    hole: parseFloat(holeEl.value),
+    edge: parseFloat(edgeEl.value),
+    tol: parseFloat(tolEl.value),
+    material: materialEl.value,
+    datum: datumEl.value,
+  };
+
+  document.getElementById('flags').innerHTML = '';
+  const container = document.getElementById('findings');
+  container.innerHTML = '';
+
+  const hits = RULES.filter(r => r.test(v));
+  const start = performance.now();
+
+  if (hits.length === 0){
+    container.innerHTML = '<div class="empty">✓ No violations found against the loaded rule set. This callout set would pass straight to release.</div>';
+  } else {
+    hits.forEach((r, i) => {
+      setTimeout(() => {
+        const sev = typeof r.severity === 'function' ? r.severity(v) : r.severity;
+        const div = document.createElement('div');
+        div.className = 'finding';
+        div.innerHTML = `
+          <div class="top">
+            <span class="sev ${sev}">${sev.toUpperCase()}</span>
+            <span style="font-size:11px;color:var(--muted)">confidence <b style="color:var(--good)">${Math.round(r.conf*100)}%</b></span>
+          </div>
+          <div class="msg">${r.msg(v)}</div>
+          <div class="cite"><span>${r.cite}</span><span>rule: ${r.id}</span></div>
+        `;
+        container.appendChild(div);
+        flagAt(r.at.x, r.at.y, '');
+      }, i * 160);
+    });
+  }
+
+  const elapsed = ((performance.now() - start)/1000 + hits.length*0.16).toFixed(1);
+  document.getElementById('statFindings').textContent = hits.length;
+  document.getElementById('statTime').textContent = elapsed + 's';
+}
+
+syncLabels();
+</script>
+</body>
+</html>
