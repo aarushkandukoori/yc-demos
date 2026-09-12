@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Taxline — Deterministic Tax Calculation, Line by Line</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #131a24;
+    --panel-2: #0f1620;
+    --border: #24303f;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --accent: #4fd1a5;
+    --accent-2: #5b9dff;
+    --warn: #f2b866;
+    --mono: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at top, #101722 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 36px 24px 16px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    letter-spacing: -0.5px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0 auto;
+    max-width: 620px;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 24px auto 40px;
+    padding: 0 24px;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .card h2 {
+    margin: 0 0 14px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin: 14px 0 6px;
+  }
+  label:first-of-type { margin-top: 0; }
+  select, input[type=number] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  select:focus, input:focus { outline: 1px solid var(--accent-2); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .toggle-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--muted);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(79,209,165,0.08);
+  }
+  .dep-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+  }
+  .dep-controls button {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .dep-controls span { font-size: 15px; min-width: 16px; text-align: center; }
+  .run-btn {
+    margin-top: 20px;
+    width: 100%;
+    padding: 13px;
+    background: var(--accent);
+    border: none;
+    border-radius: 9px;
+    color: #06231a;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .run-btn:hover { filter: brightness(1.05); }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(79,209,165,0.1);
+    border: 1px solid rgba(79,209,165,0.3);
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+  .trace {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .trace-line {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 10px;
+    align-items: start;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 13.5px;
+    opacity: 0;
+    transform: translateY(4px);
+    animation: fadeIn 0.35s forwards;
+  }
+  .trace-line:last-child { border-bottom: none; }
+  @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+  .step-num {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding-top: 1px;
+  }
+  .step-label { color: var(--text); }
+  .step-rule {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .step-val {
+    font-family: var(--mono);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .step-val.neg { color: var(--warn); }
+  .step-val.pos { color: var(--accent-2); }
+  .totals {
+    margin-top: 18px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .totals-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 6px 0;
+    color: var(--muted);
+  }
+  .totals-row.final {
+    color: var(--text);
+    font-size: 20px;
+    font-weight: 700;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding-top: 12px;
+  }
+  .totals-row.final .amt { color: var(--accent); font-family: var(--mono); }
+  .totals-row .amt { font-family: var(--mono); }
+  .api-panel {
+    margin-top: 20px;
+  }
+  .api-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .api-tab {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    background: var(--panel-2);
+  }
+  .api-tab.active { color: var(--accent-2); border-color: var(--accent-2); }
+  pre.code {
+    background: #080d14;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    overflow-x: auto;
+    color: #cfe8ff;
+    max-height: 360px;
+  }
+  .code .k { color: #7ee787; }
+  .code .s { color: #a5d6ff; }
+  .code .n { color: #f2b866; }
+  .integrity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .replay-note {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  footer {
+    text-align: center;
+    padding: 30px 20px 40px;
+    color: var(--muted);
+    font-size: 12.5px;
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+  footer a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Taxline<span>.</span> deterministic tax math you can replay</h1>
+  <p>A toy engine that shows the one thing a real tax API has to get right: the same inputs must always produce the same output, with every bracket, deduction, and credit shown as an auditable step — not a black box.</p>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>Filer inputs</h2>
+
+    <label>Filing status</label>
+    <div class="toggle-group" id="statusGroup">
+      <div class="chip active" data-value="single">Single</div>
+      <div class="chip" data-value="joint">Married, joint</div>
+      <div class="chip" data-value="hoh">Head of household</div>
+    </div>
+
+    <label for="income">Gross annual income (USD)</label>
+    <input type="number" id="income" value="82000" min="0" step="500">
+
+    <div class="row2">
+      <div>
+        <label for="state">State</label>
+        <select id="state">
+          <option value="CA">California</option>
+          <option value="TX">Texas (no income tax)</option>
+          <option value="NY">New York</option>
+          <option value="FL">Florida (no income tax)</option>
+          <option value="PA">Pennsylvania</option>
+        </select>
+      </div>
+      <div>
+        <label for="retire">401(k) contribution</label>
+        <input type="number" id="retire" value="6000" min="0" step="250">
+      </div>
+    </div>
+
+    <label>Dependents (child tax credit)</label>
+    <div class="dep-controls">
+      <button id="depMinus">−</button>
+      <span id="depCount">0</span>
+      <button id="depPlus">+</button>
+    </div>
+
+    <button class="run-btn" id="runBtn">Run calculation</button>
+    <p class="hint">Every run recomputes from scratch using the same fixed 2025 rule table below — identical inputs will always produce an identical trace and total. That's the guarantee.</p>
+  </div>
+
+  <div class="card">
+    <div class="result-header">
+      <h2 style="margin:0;">Calculation trace</h2>
+      <span class="badge" id="runBadge">not yet run</span>
+    </div>
+
+    <div class="trace" id="trace">
+      <div class="trace-line" style="animation-delay:0s;">
+        <span class="step-num">—</span>
+        <span class="step-label">Adjust inputs on the left, then run the calculation to see each rule fire in order.</span>
+        <span class="step-val"></span>
+      </div>
+    </div>
+
+    <div class="totals" id="totals" style="display:none;">
+      <div class="totals-row"><span>Federal tax owed</span><span class="amt" id="tFed">$0</span></div>
+      <div class="totals-row"><span>State tax owed</span><span class="amt" id="tState">$0</span></div>
+      <div class="totals-row"><span>FICA (SS + Medicare)</span><span class="amt" id="tFica">$0</span></div>
+      <div class="totals-row"><span>Credits applied</span><span class="amt" id="tCredit">$0</span></div>
+      <div class="totals-row final"><span>Total tax liability</span><span class="amt" id="tFinal">$0</span></div>
+    </div>
+
+    <div class="integrity" id="integrityLine" style="display:none;">
+      <span class="dot"></span>
+      <span>Deterministic hash of this result: <span id="hashVal" style="font-family:var(--mono); color:var(--text);"></span> — re-run with the same inputs to verify it never changes.</span>
+    </div>
+
+    <div class="api-panel">
+      <div class="api-tabs">
+        <div class="api-tab active" data-tab="request">Request</div>
+        <div class="api-tab" data-tab="response">Response</div>
+      </div>
+      <pre class="code" id="apiBody">// Run a calculation to see the request payload.</pre>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Luca IQ (YC S26). Not affiliated with Luca IQ.
+</footer>
+
+<script>
+(function() {
+  // ---- fixed, synthetic "2025" rule table (toy numbers, not real tax law) ----
+  var BRACKETS = {
+    single: [
+      {upTo: 11600, rate: 0.10}, {upTo: 47150, rate: 0.12}, {upTo: 100525, rate: 0.22},
+      {upTo: 191950, rate: 0.24}, {upTo: Infinity, rate: 0.32}
+    ],
+    joint: [
+      {upTo: 23200, rate: 0.10}, {upTo: 94300, rate: 0.12}, {upTo: 201050, rate: 0.22},
+      {upTo: 383900, rate: 0.24}, {upTo: Infinity, rate: 0.32}
+    ],
+    hoh: [
+      {upTo: 16550, rate: 0.10}, {upTo: 63100, rate: 0.12}, {upTo: 100500, rate: 0.22},
+      {upTo: 191950, rate: 0.24}, {upTo: Infinity, rate: 0.32}
+    ]
+  };
+  var STD_DEDUCTION = { single: 14600, joint: 29200, hoh: 21900 };
+  var STATE_RATES = { CA: 0.06, TX: 0, NY: 0.055, FL: 0, PA: 0.0307 };
+  var STATE_NAMES = { CA: "California", TX: "Texas", NY: "New York", FL: "Florida", PA: "Pennsylvania" };
+  var SS_RATE = 0.062, SS_CAP = 168600, MEDI_RATE = 0.0145;
+  var CTC_PER_CHILD = 2000;
+
+  var status = "single";
+  var dependents = 0;
+
+  document.querySelectorAll("#statusGroup .chip").forEach(function(chip) {
+    chip.addEventListener("click", function() {
+      document.querySelectorAll("#statusGroup .chip").forEach(function(c){ c.classList.remove("active"); });
+      chip.classList.add("active");
+      status = chip.getAttribute("data-value");
+    });
+  });
+
+  document.getElementById("depPlus").addEventListener("click", function() {
+    dependents = Math.min(dependents + 1, 8);
+    document.getElementById("depCount").textContent = dependents;
+  });
+  document.getElementById("depMinus").addEventListener("click", function() {
+    dependents = Math.max(dependents - 1, 0);
+    document.getElementById("depCount").textContent = dependents;
+  });
+
+  document.querySelectorAll(".api-tab").forEach(function(tab) {
+    tab.addEventListener("click", function() {
+      document.querySelectorAll(".api-tab").forEach(function(t){ t.classList.remove("active"); });
+      tab.classList.add("active");
+      renderApi(tab.getAttribute("data-tab"));
+    });
+  });
+
+  var lastRequest = null, lastResponse = null;
+
+  function fmt(n) {
+    var neg = n < 0;
+    n = Math.abs(Math.round(n));
+    var s = "$" + n.toLocaleString("en-US");
+    return neg ? "-" + s : s;
+  }
+
+  function bracketTax(taxable, table) {
+    var tax = 0, lower = 0, breakdown = [];
+    for (var i = 0; i < table.length; i++) {
+      var band = table[i];
+      if (taxable <= lower) break;
+      var top = Math.min(taxable, band.upTo);
+      var amountInBand = Math.max(0, top - lower);
+      if (amountInBand > 0) {
+        var t = amountInBand * band.rate;
+        tax += t;
+        breakdown.push({rate: band.rate, amount: amountInBand, tax: t, lower: lower, upper: top});
+      }
+      lower = band.upTo;
+    }
+    return { tax: tax, breakdown: breakdown };
+  }
+
+  function simpleHash(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) {
+      h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+    }
+    return "0x" + (h >>> 0).toString(16).padStart(8, "0");
+  }
+
+  function addTraceLine(container, idx, label, ruleText, value, cls, delayMs) {
+    var line = document.createElement("div");
+    line.className = "trace-line";
+    line.style.animationDelay = (delayMs / 1000) + "s";
+    line.innerHTML =
+      '<span class="step-num">' + String(idx).padStart(2, "0") + '</span>' +
+      '<span class="step-label">' + label + (ruleText ? '<span class="step-rule">' + ruleText + '</span>' : '') + '</span>' +
+      '<span class="step-val ' + (cls || "") + '">' + value + '</span>';
+    container.appendChild(line);
+  }
+
+  function renderApi(tab) {
+    if (!lastRequest) return;
+    var el = document.getElementById("apiBody");
+    var obj = tab === "request" ? lastRequest : lastResponse;
+    el.textContent = JSON.stringify(obj, null, 2);
+  }
+
+  document.getElementById("runBtn").addEventListener("click", function() {
+    var income = Math.max(0, parseFloat(document.getElementById("income").value) || 0);
+    var retire = Math.max(0, parseFloat(document.getElementById("retire").value) || 0);
+    var state = document.getElementById("state").value;
+
+    var trace = document.getElementById("trace");
+    trace.innerHTML = "";
+    var step = 1, delay = 0, STEP_DELAY = 90;
+
+    // 1. gross income
+    addTraceLine(trace, step++, "Gross annual income", "as reported", fmt(income), "", delay); delay += STEP_DELAY;
+
+    // 2. pre-tax retirement adjustment
+    var agi = Math.max(0, income - retire);
+    addTraceLine(trace, step++, "Pre-tax 401(k) deferral", "reduces AGI dollar-for-dollar (IRC §402(g), toy limit ignored)", "-" + fmt(retire), "neg", delay); delay += STEP_DELAY;
+    addTraceLine(trace, step++, "Adjusted gross income (AGI)", "gross − deferral", fmt(agi), "", delay); delay += STEP_DELAY;
+
+    // 3. standard deduction
+    var stdDed = STD_DEDUCTION[status];
+    var taxable = Math.max(0, agi - stdDed);
+    addTraceLine(trace, step++, "Standard deduction", status + " filer, fixed rule-table value", "-" + fmt(stdDed), "neg", delay); delay += STEP_DELAY;
+    addTraceLine(trace, step++, "Federal taxable income", "AGI − standard deduction", fmt(taxable), "", delay); delay += STEP_DELAY;
+
+    // 4. bracket walk
+    var fed = bracketTax(taxable, BRACKETS[status]);
+    fed.breakdown.forEach(function(b) {
+      var pct = Math.round(b.rate * 1000) / 10;
+      addTraceLine(trace, step++, pct + "% bracket", fmt(b.lower) + " → " + fmt(b.upper) + " taxed at " + pct + "%", fmt(b.tax), "pos", delay);
+      delay += STEP_DELAY;
+    });
+    addTraceLine(trace, step++, "Federal tax before credits", "sum of bracket amounts", fmt(fed.tax), "", delay); delay += STEP_DELAY;
+
+    // 5. child tax credit
+    var credit = dependents * CTC_PER_CHILD;
+    var fedFinal = Math.max(0, fed.tax - credit);
+    if (dependents > 0) {
+      addTraceLine(trace, step++, "Child tax credit", dependents + " dependent(s) × " + fmt(CTC_PER_CHILD), "-" + fmt(credit), "neg", delay); delay += STEP_DELAY;
+    }
+    addTraceLine(trace, step++, "Federal tax owed", "after credits, floored at $0", fmt(fedFinal), "", delay); delay += STEP_DELAY;
+
+    // 6. state tax
+    var stateRate = STATE_RATES[state];
+    var stateTax = taxable * stateRate;
+    addTraceLine(trace, step++, STATE_NAMES[state] + " state tax", stateRate === 0 ? "no state income tax" : "flat " + (stateRate * 100).toFixed(2) + "% on taxable income", fmt(stateTax), "pos", delay); delay += STEP_DELAY;
+
+    // 7. FICA
+    var ssBase = Math.min(income, SS_CAP);
+    var ss = ssBase * SS_RATE;
+    var medicare = income * MEDI_RATE;
+    var fica = ss + medicare;
+    addTraceLine(trace, step++, "Social Security (6.2%)", "on wages up to " + fmt(SS_CAP) + " wage base", fmt(ss), "pos", delay); delay += STEP_DELAY;
+    addTraceLine(trace, step++, "Medicare (1.45%)", "on full gross wages", fmt(medicare), "pos", delay); delay += STEP_DELAY;
+
+    var total = fedFinal + stateTax + fica;
+    addTraceLine(trace, step++, "Total tax liability", "federal + state + FICA", fmt(total), "pos", delay); delay += STEP_DELAY;
+
+    document.getElementById("totals").style.display = "block";
+    document.getElementById("tFed").textContent = fmt(fedFinal);
+    document.getElementById("tState").textContent = fmt(stateTax);
+    document.getElementById("tFica").textContent = fmt(fica);
+    document.getElementById("tCredit").textContent = fmt(credit);
+    document.getElementById("tFinal").textContent = fmt(total);
+
+    document.getElementById("runBadge").textContent = "computed in-browser · synthetic rule table";
+
+    lastRequest = {
+      endpoint: "POST /v1/calculate",
+      filing_status: status,
+      gross_income: income,
+      pretax_retirement_contribution: retire,
+      state: state,
+      dependents: dependents,
+      tax_year: 2025
+    };
+    lastResponse = {
+      agi: Math.round(agi),
+      federal_taxable_income: Math.round(taxable),
+      federal_tax_before_credits: Math.round(fed.tax),
+      credits_applied: Math.round(credit),
+      federal_tax_owed: Math.round(fedFinal),
+      state_tax_owed: Math.round(stateTax),
+      fica: { social_security: Math.round(ss), medicare: Math.round(medicare) },
+      total_liability: Math.round(total),
+      trace_step_count: step - 1,
+      deterministic: true
+    };
+    document.querySelectorAll(".api-tab").forEach(function(t, i){ t.classList.toggle("active", i === 0); });
+    renderApi("request");
+
+    var hash = simpleHash(JSON.stringify(lastRequest) + JSON.stringify(lastResponse));
+    document.getElementById("hashVal").textContent = hash;
+    document.getElementById("integrityLine").style.display = "flex";
+  });
+})();
+</script>
+
+</body>
+</html>

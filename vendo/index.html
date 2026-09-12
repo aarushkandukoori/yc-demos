@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BuildOn — let your users extend your product</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e7e9ee;
+    --muted: #8b93a3;
+    --accent: #5eead4;
+    --accent-2: #7c9cff;
+    --warn: #f5a25a;
+    --danger: #f5716a;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 22px 32px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 { margin: 0; font-size: 19px; letter-spacing: 0.2px; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 640px; }
+  .host-badge {
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+    padding: 20px 32px 12px;
+    align-items: start;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .card h2 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+  }
+  .card h2 small { display: block; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  .builder label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 14px 0 6px;
+  }
+  select, input[type="text"] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 7px;
+    font-size: 13px;
+  }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--muted);
+    padding: 8px 10px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    cursor: pointer;
+    flex: 1;
+    text-align: center;
+    transition: all .12s ease;
+  }
+  .chip.active {
+    border-color: var(--accent);
+    color: var(--bg);
+    background: var(--accent);
+    font-weight: 600;
+  }
+  .preview-box {
+    margin-top: 14px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 40px;
+  }
+  .preview-box b { color: var(--text); }
+  button.primary {
+    margin-top: 16px;
+    width: 100%;
+    padding: 11px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #06231d;
+    font-weight: 700;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  button.primary:hover { filter: brightness(1.06); }
+  button.primary:disabled { opacity: .4; cursor: not-allowed; }
+  .sandbox-note {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .sandbox-note .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); margin-top: 4px; flex: none;
+  }
+
+  .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .dash-header h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+  }
+  .widget {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    position: relative;
+    animation: pop .25s ease;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .widget h3 { margin: 0 0 10px; font-size: 13.5px; }
+  .widget .del {
+    position: absolute; top: 10px; right: 10px;
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 14px;
+  }
+  .widget .del:hover { color: var(--danger); }
+  .widget-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 10px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+  }
+  .counter-val { font-size: 30px; font-weight: 700; color: var(--accent); }
+  .counter-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  table.mini { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.mini th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  table.mini td { padding: 5px 0; border-bottom: 1px solid #23272f; }
+  .tag { padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; }
+  .tag.high { background: #3a1f24; color: var(--danger); }
+  .tag.medium { background: #3a301f; color: var(--warn); }
+  .tag.low { background: #1f3a2c; color: var(--accent); }
+  .bar-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; margin: 6px 0; }
+  .bar-label { width: 70px; color: var(--muted); flex: none; }
+  .bar-track { flex: 1; background: #12151b; border-radius: 5px; height: 12px; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+  .bar-count { width: 22px; text-align: right; color: var(--muted); }
+
+  .automation-list { margin-top: 8px; }
+  .auto-item {
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    margin-bottom: 8px;
+    color: var(--muted);
+  }
+  .auto-item b { color: var(--text); }
+  .feed {
+    margin-top: 10px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  .feed-item {
+    padding: 7px 0;
+    border-bottom: 1px solid #23272f;
+    color: var(--muted);
+    display: flex;
+    gap: 8px;
+  }
+  .feed-item span.t { color: var(--accent); flex: none; }
+  footer {
+    text-align: center;
+    padding: 28px 20px 34px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Acme Helpdesk <span>+ BuildOn</span></h1>
+    <p>This is a mock support-desk product. The panel on the left is <b>not part of Acme's codebase</b> — it's an embedded layer end users can use to assemble their own widgets and automations on top of Acme's real ticket data, no engineering ticket required.</p>
+  </div>
+  <div class="host-badge">● running inside Acme Helpdesk · sandboxed</div>
+</header>
+
+<main>
+  <section class="card builder">
+    <h2>Build a widget<small>choose data, a filter, and a shape — it compiles instantly against live records</small></h2>
+
+    <label>1. Data source (Acme's real API)</label>
+    <div class="chip-row" id="sourceChips"></div>
+
+    <label>2. Filter</label>
+    <div class="row3">
+      <select id="fField"></select>
+      <select id="fOp">
+        <option value="eq">is</option>
+        <option value="neq">is not</option>
+        <option value="gt">&gt;</option>
+        <option value="lt">&lt;</option>
+      </select>
+      <select id="fVal"></select>
+    </div>
+
+    <label>3. Display as</label>
+    <div class="chip-row" id="shapeChips">
+      <div class="chip active" data-shape="table">Table</div>
+      <div class="chip" data-shape="counter">Counter</div>
+      <div class="chip" data-shape="bars">Bar chart</div>
+    </div>
+
+    <label>4. Title</label>
+    <input type="text" id="widgetTitle" placeholder="e.g. Unassigned urgent tickets">
+
+    <div class="preview-box" id="previewBox">Pick a source and filter to preview the match count.</div>
+
+    <button class="primary" id="addWidgetBtn">Add to my dashboard →</button>
+    <div class="sandbox-note"><div class="dot"></div> Runs in a sandboxed query engine against Acme's ticket API. It can only read the fields Acme exposed to it — it never touches Acme's source code or database directly.</div>
+  </section>
+
+  <section class="card">
+    <div class="dash-header">
+      <h2>Your dashboard <small style="text-transform:none;font-weight:400;">(rendered natively in Acme's own theme)</small></h2>
+    </div>
+    <div class="dash-grid" id="dashGrid">
+      <div class="widget-empty" id="dashEmpty">No custom widgets yet — build one on the left and it'll render here, live.</div>
+    </div>
+  </section>
+</main>
+
+<main style="grid-template-columns: 340px 1fr;">
+  <section class="card">
+    <h2>Automations<small>"when this happens, do that" — no code, runs on the same sandbox</small></h2>
+    <div class="row2" style="margin-top:14px;">
+      <select id="autoField"></select>
+      <select id="autoOp">
+        <option value="eq">is</option>
+      </select>
+    </div>
+    <select id="autoVal" style="margin-top:8px;"></select>
+    <label>then</label>
+    <select id="autoAction">
+      <option value="task">Create a follow-up task</option>
+      <option value="tag">Tag ticket "escalated"</option>
+      <option value="notify">Notify #support-leads</option>
+    </select>
+    <button class="primary" id="addRuleBtn">Save automation</button>
+    <div class="automation-list" id="ruleList"></div>
+  </section>
+
+  <section class="card">
+    <h2>Live activity feed<small>actions taken by your automations, inside Acme, in real time</small></h2>
+    <div class="feed" id="feed"><div class="feed-item"><span class="t">09:00</span> Waiting for a rule to fire — click "Run automations" below to simulate a new batch of tickets arriving.</div></div>
+    <button class="primary" id="runAutoBtn">Simulate new tickets arriving →</button>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Vendo (YC S26). Not affiliated with Vendo.</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- synthetic "Acme API" data ----------
+  const CUSTOMERS = ["Nova Freight", "Lumen Health", "Basil & Co", "Ridgeline Robotics", "Petal Finance", "Orchard Media"];
+  const PRIORITIES = ["low", "medium", "high"];
+  const STATUSES = ["open", "pending", "closed"];
+
+  function makeTickets(n) {
+    const rows = [];
+    for (let i = 1; i <= n; i++) {
+      rows.push({
+        id: "T-" + (1000 + i),
+        subject: ["Login fails on SSO", "Invoice mismatch", "Export stuck at 90%", "API rate limit question",
+                  "Dashboard blank after update", "Cannot invite teammate", "Refund request", "Slow report load"][i % 8],
+        customer: CUSTOMERS[i % CUSTOMERS.length],
+        priority: PRIORITIES[(i * 3) % 3],
+        status: STATUSES[(i * 5) % 3],
+        hours_open: (i * 7) % 48
+      });
+    }
+    return rows;
+  }
+
+  let tickets = makeTickets(24);
+
+  const FIELDS = [
+    { key: "priority", label: "Priority", values: PRIORITIES },
+    { key: "status", label: "Status", values: STATUSES },
+    { key: "customer", label: "Customer", values: CUSTOMERS },
+    { key: "hours_open", label: "Hours open", values: null }
+  ];
+
+  // ---------- sandboxed query engine (no eval, just interprets the config) ----------
+  function runFilter(rows, field, op, val) {
+    return rows.filter(r => {
+      const a = r[field];
+      const b = (field === "hours_open") ? Number(val) : val;
+      switch (op) {
+        case "eq": return a === b || String(a) === String(val);
+        case "neq": return String(a) !== String(val);
+        case "gt": return Number(a) > Number(val);
+        case "lt": return Number(a) < Number(val);
+        default: return false;
+      }
+    });
+  }
+
+  // ---------- builder UI wiring ----------
+  const sourceChips = document.getElementById("sourceChips");
+  ["Tickets", "Customers*"].forEach((label, idx) => {
+    const c = document.createElement("div");
+    c.className = "chip" + (idx === 0 ? " active" : "");
+    c.textContent = label;
+    if (idx !== 0) { c.style.opacity = 0.4; c.style.cursor = "not-allowed"; c.title = "Wire up more Acme endpoints the same way — demo ships with Tickets only"; }
+    else c.dataset.source = "tickets";
+    if (idx === 0) sourceChips.appendChild(c);
+    else sourceChips.appendChild(c);
+  });
+
+  const fField = document.getElementById("fField");
+  const fOp = document.getElementById("fOp");
+  const fVal = document.getElementById("fVal");
+  const autoField = document.getElementById("autoField");
+  const autoVal = document.getElementById("autoVal");
+
+  function fillFieldSelect(sel) {
+    sel.innerHTML = "";
+    FIELDS.forEach(f => {
+      const o = document.createElement("option");
+      o.value = f.key; o.textContent = f.label;
+      sel.appendChild(o);
+    });
+  }
+  fillFieldSelect(fField);
+  fillFieldSelect(autoField);
+
+  function fillValueSelect(sel, fieldKey) {
+    const f = FIELDS.find(x => x.key === fieldKey);
+    sel.innerHTML = "";
+    if (f.values) {
+      f.values.forEach(v => {
+        const o = document.createElement("option");
+        o.value = v; o.textContent = v;
+        sel.appendChild(o);
+      });
+    } else {
+      [6, 12, 24, 36].forEach(v => {
+        const o = document.createElement("option");
+        o.value = v; o.textContent = v + "h";
+        sel.appendChild(o);
+      });
+    }
+  }
+  fillValueSelect(fVal, fField.value);
+  fillValueSelect(autoVal, autoField.value);
+  fField.addEventListener("change", () => { fillValueSelect(fVal, fField.value); updatePreview(); });
+  autoField.addEventListener("change", () => fillValueSelect(autoVal, autoField.value));
+  fOp.addEventListener("change", updatePreview);
+  fVal.addEventListener("change", updatePreview);
+
+  const previewBox = document.getElementById("previewBox");
+  function updatePreview() {
+    const matches = runFilter(tickets, fField.value, fOp.value, fVal.value);
+    previewBox.innerHTML = `<b>${matches.length}</b> of ${tickets.length} tickets currently match this filter.`;
+  }
+  updatePreview();
+
+  // shape chips
+  let currentShape = "table";
+  document.getElementById("shapeChips").addEventListener("click", e => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    document.querySelectorAll("#shapeChips .chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    currentShape = chip.dataset.shape;
+  });
+
+  // ---------- rendering widgets ----------
+  const dashGrid = document.getElementById("dashGrid");
+  const dashEmpty = document.getElementById("dashEmpty");
+  let widgets = [];
+
+  function renderWidgetBody(shape, rows) {
+    if (shape === "counter") {
+      return `<div class="counter-val">${rows.length}</div><div class="counter-sub">of ${tickets.length} total tickets</div>`;
+    }
+    if (shape === "bars") {
+      const byCustomer = {};
+      rows.forEach(r => byCustomer[r.customer] = (byCustomer[r.customer] || 0) + 1);
+      const max = Math.max(1, ...Object.values(byCustomer));
+      const entries = Object.entries(byCustomer);
+      if (!entries.length) return `<div class="counter-sub">No matching tickets.</div>`;
+      return entries.map(([name, count]) => `
+        <div class="bar-row">
+          <div class="bar-label">${name}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(count/max*100).toFixed(0)}%"></div></div>
+          <div class="bar-count">${count}</div>
+        </div>`).join("");
+    }
+    // table
+    if (!rows.length) return `<div class="counter-sub">No matching tickets.</div>`;
+    return `<table class="mini"><thead><tr><th>ID</th><th>Subject</th><th>Priority</th></tr></thead><tbody>
+      ${rows.slice(0, 6).map(r => `<tr><td>${r.id}</td><td>${r.subject}</td><td><span class="tag ${r.priority}">${r.priority}</span></td></tr>`).join("")}
+    </tbody></table>`;
+  }
+
+  function renderDash() {
+    dashGrid.innerHTML = "";
+    if (!widgets.length) {
+      dashGrid.appendChild(dashEmpty);
+      return;
+    }
+    widgets.forEach((w, idx) => {
+      const rows = runFilter(tickets, w.field, w.op, w.val);
+      const el = document.createElement("div");
+      el.className = "widget";
+      el.innerHTML = `<button class="del" data-idx="${idx}">✕</button><h3>${w.title}</h3>${renderWidgetBody(w.shape, rows)}`;
+      dashGrid.appendChild(el);
+    });
+  }
+  renderDash();
+
+  dashGrid.addEventListener("click", e => {
+    const btn = e.target.closest(".del");
+    if (!btn) return;
+    widgets.splice(Number(btn.dataset.idx), 1);
+    renderDash();
+  });
+
+  document.getElementById("addWidgetBtn").addEventListener("click", () => {
+    const titleInput = document.getElementById("widgetTitle");
+    const title = titleInput.value.trim() || `${fField.value} ${fOp.value} ${fVal.value}`;
+    widgets.push({ field: fField.value, op: fOp.value, val: fVal.value, shape: currentShape, title });
+    titleInput.value = "";
+    renderDash();
+  });
+
+  // ---------- automations ----------
+  const ruleList = document.getElementById("ruleList");
+  const feed = document.getElementById("feed");
+  let rules = [];
+  let clock = 9 * 60;
+
+  function actionLabel(a) {
+    if (a === "task") return "created a follow-up task for";
+    if (a === "tag") return 'tagged "escalated" on';
+    return "notified #support-leads about";
+  }
+
+  function renderRules() {
+    ruleList.innerHTML = "";
+    rules.forEach(r => {
+      const div = document.createElement("div");
+      div.className = "auto-item";
+      div.innerHTML = `When <b>${r.field}</b> is <b>${r.val}</b> → <b>${document.querySelector(`#autoAction option[value="${r.action}"]`).textContent}</b>`;
+      ruleList.appendChild(div);
+    });
+  }
+
+  document.getElementById("addRuleBtn").addEventListener("click", () => {
+    rules.push({ field: autoField.value, val: autoVal.value, action: document.getElementById("autoAction").value });
+    renderRules();
+  });
+
+  function fmtClock(mins) {
+    const h = Math.floor(mins / 60) % 24, m = mins % 60;
+    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+  }
+
+  document.getElementById("runAutoBtn").addEventListener("click", () => {
+    if (!rules.length) {
+      addFeed("No automations saved yet — save one above first.");
+      return;
+    }
+    const batch = makeTickets(5).map((t, i) => ({ ...t, id: "T-" + (2000 + i + Math.floor(Math.random() * 900)) }));
+    tickets = tickets.concat(batch);
+    let fired = 0;
+    batch.forEach(t => {
+      rules.forEach(r => {
+        if (String(t[r.field]) === String(r.val)) {
+          fired++;
+          addFeed(`${actionLabel(r.action)} ${t.id} (${t.subject}) — rule: ${r.field} is ${r.val}`);
+        }
+      });
+    });
+    if (!fired) addFeed(`Checked ${batch.length} new tickets — no automation conditions matched this batch.`);
+    renderDash();
+    updatePreview();
+  });
+
+  function addFeed(text) {
+    clock += 3 + Math.floor(Math.random() * 9);
+    const item = document.createElement("div");
+    item.className = "feed-item";
+    item.innerHTML = `<span class="t">${fmtClock(clock)}</span> ${text}`;
+    feed.prepend(item);
+  }
+})();
+</script>
+</body>
+</html>
