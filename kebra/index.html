@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FieldLoop — Capture the job, let the back office file itself</title>
+<style>
+  :root{
+    --bg:#0f1418;
+    --panel:#161d23;
+    --panel2:#1c252c;
+    --border:#2a353d;
+    --text:#e7edf1;
+    --muted:#8ea1ab;
+    --accent:#3fb98c;
+    --accent2:#e0a83f;
+    --danger:#e0653f;
+    --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height:1.45;
+  }
+  header{
+    padding:28px 32px 18px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:0.2px;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:720px;
+  }
+  main{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:0;
+    min-height:640px;
+  }
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;}
+  }
+  .col{
+    padding:24px 28px;
+  }
+  .col.left{
+    border-right:1px solid var(--border);
+  }
+  .step-label{
+    text-transform:uppercase;
+    font-size:11px;
+    letter-spacing:1.2px;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px;
+    margin-bottom:16px;
+  }
+  .job-select{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+  }
+  .job-btn{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:9px 14px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:13px;
+  }
+  .job-btn.active{
+    border-color:var(--accent);
+    color:var(--accent);
+    background:#12241d;
+  }
+  .field-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+  .tag-btn{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:8px 10px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:13px;
+    text-align:left;
+  }
+  .tag-btn.selected{
+    border-color:var(--accent2);
+    background:#241d10;
+    color:var(--accent2);
+  }
+  .tag-btn.part.selected{
+    border-color:var(--accent);
+    background:#122019;
+    color:var(--accent);
+  }
+  textarea{
+    width:100%;
+    min-height:70px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    color:var(--text);
+    font-family:inherit;
+    font-size:13px;
+    padding:10px;
+    resize:vertical;
+  }
+  .primary-btn{
+    background:var(--accent);
+    color:#08130e;
+    border:none;
+    font-weight:600;
+    padding:12px 18px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:14px;
+    width:100%;
+    margin-top:6px;
+  }
+  .primary-btn:disabled{
+    background:#33403c;
+    color:#7c8a86;
+    cursor:not-allowed;
+  }
+  .reset-btn{
+    background:none;
+    border:1px solid var(--border);
+    color:var(--muted);
+    padding:8px 12px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:12px;
+    margin-top:8px;
+    width:100%;
+  }
+  .doc{
+    font-family:var(--mono);
+    font-size:12.5px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px;
+    min-height:180px;
+    white-space:pre-wrap;
+    color:#c9d6dc;
+  }
+  .doc .placeholder{color:var(--muted);}
+  .doc .field{color:var(--accent);}
+  .log{
+    margin-top:16px;
+  }
+  .log-entry{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+    padding:9px 0;
+    border-bottom:1px solid var(--border);
+    font-size:13px;
+    opacity:0;
+    animation:rise 0.35s ease forwards;
+  }
+  .log-entry:last-child{border-bottom:none;}
+  @keyframes rise{
+    from{opacity:0; transform:translateY(4px);}
+    to{opacity:1; transform:translateY(0);}
+  }
+  .log-icon{
+    width:20px;
+    text-align:center;
+    flex-shrink:0;
+  }
+  .log-title{font-weight:600;}
+  .log-sub{color:var(--muted); font-size:12px; margin-top:2px;}
+  .badge{
+    display:inline-block;
+    font-size:10px;
+    letter-spacing:0.6px;
+    text-transform:uppercase;
+    padding:2px 7px;
+    border-radius:20px;
+    margin-left:8px;
+  }
+  .badge.ok{background:#12291f; color:var(--accent);}
+  .badge.pending{background:#2b2413; color:var(--accent2);}
+  .inventory-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    padding:6px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .inventory-row:last-child{border-bottom:none;}
+  .inventory-count{
+    font-family:var(--mono);
+  }
+  .inventory-count.dropped{color:var(--danger);}
+  footer{
+    padding:20px 32px 32px;
+    border-top:1px solid var(--border);
+    color:var(--muted);
+    font-size:12.5px;
+  }
+  .section-title{
+    font-size:14px;
+    font-weight:600;
+    margin-bottom:12px;
+  }
+  .hint{
+    color:var(--muted);
+    font-size:12px;
+    margin-top:6px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Field<span>Loop</span> — capture the job once, let the paperwork file itself</h1>
+  <p>A toy demo of one idea: a technician taps through a job in plain language, and the back office (work order, warranty claim, inventory) updates itself in real time from that capture. All data below is synthetic and nothing leaves this page.</p>
+</header>
+
+<main>
+  <div class="col left">
+    <div class="step-label">Step 1 — pick a job on the board</div>
+    <div class="job-select" id="jobSelect"></div>
+
+    <div class="card">
+      <div class="step-label" style="margin-bottom:6px;">Step 2 — tap what you observed</div>
+      <div class="field-grid" id="symptomGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="step-label" style="margin-bottom:6px;">Step 3 — tap what you did</div>
+      <div class="field-grid" id="actionGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="step-label" style="margin-bottom:6px;">Step 4 — tap parts pulled from the truck</div>
+      <div class="field-grid" id="partsGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="step-label" style="margin-bottom:6px;">Step 5 — say it in your own words (optional)</div>
+      <textarea id="freeNote" placeholder="e.g. compressor short cycling, capacitor was bulged, swapped it, customer wants a follow up call"></textarea>
+    </div>
+
+    <button class="primary-btn" id="completeBtn" disabled>Complete job &amp; let the back office run</button>
+    <button class="reset-btn" id="resetBtn">Start over</button>
+  </div>
+
+  <div class="col right">
+    <div class="section-title">Auto-generated work order</div>
+    <div class="doc" id="docOutput"><span class="placeholder">Pick a job and start tapping — the work order writes itself as you go.</span></div>
+
+    <div class="section-title" style="margin-top:20px;">Back-office activity</div>
+    <div class="log" id="activityLog"><div class="hint">Nothing filed yet. Complete a job to watch dispatch, warranty, and inventory update.</div></div>
+
+    <div class="section-title" style="margin-top:20px;">Live truck inventory</div>
+    <div class="card" id="inventoryCard"></div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Kebra (YC S26). Not affiliated with Kebra.
+</footer>
+
+<script>
+(function(){
+
+  const jobs = [
+    {
+      id: "hvac",
+      label: "HVAC — no cool call",
+      customer: "R. Alvarez residence",
+      asset: "Trane XR16, installed 2019",
+      warranty: "Compressor + parts, 10yr, in force",
+      symptoms: ["System runs but no cold air", "Outdoor unit not spinning", "Loud clicking at startup", "Ice on refrigerant line"],
+      actions: ["Checked capacitor with meter", "Replaced run capacitor", "Cleared condenser coil debris", "Verified refrigerant charge", "Cycled system, confirmed cooling"],
+      parts: [
+        {name:"45/5 dual run capacitor", sku:"CAP-455", stock:6},
+        {name:"Contactor 40A", sku:"CTR-40A", stock:3},
+        {name:"Refrigerant R-410A (lb)", sku:"REF-410", stock:14}
+      ]
+    },
+    {
+      id: "water",
+      label: "Water heater — leak report",
+      customer: "Fenwick Ave duplex, unit B",
+      asset: "Rheem Performance 50gal, installed 2021",
+      warranty: "Tank, 6yr, in force",
+      symptoms: ["Puddle under tank", "Rust colored water", "Pilot will not stay lit", "Rumbling noise from tank"],
+      actions: ["Drained and inspected tank", "Replaced thermocouple", "Flushed sediment from tank", "Pressure tested T&P valve"],
+      parts: [
+        {name:"Thermocouple kit", sku:"THC-01", stock:8},
+        {name:"T&P relief valve", sku:"TPV-03", stock:5},
+        {name:"Anode rod, magnesium", sku:"ANR-M2", stock:4}
+      ]
+    },
+    {
+      id: "panel",
+      label: "Electrical — breaker tripping",
+      customer: "Union Street office suite",
+      asset: "Square D QO panel, 200A, installed 2016",
+      warranty: "Panel + breakers, 5yr, in force",
+      symptoms: ["Breaker trips under load", "Warm to touch at panel", "Flickering lights on circuit 8", "Burning smell near panel"],
+      actions: ["Torque checked all lugs", "Replaced 20A breaker", "Thermal scanned panel", "Labeled and re-mapped circuits"],
+      parts: [
+        {name:"QO 20A single pole breaker", sku:"BRK-20S", stock:7},
+        {name:"Panel label kit", sku:"LBL-PNL", stock:12},
+        {name:"Anti-oxidant compound", sku:"AOX-01", stock:9}
+      ]
+    }
+  ];
+
+  let currentJob = null;
+  let selectedSymptoms = new Set();
+  let selectedActions = new Set();
+  let selectedParts = new Set();
+  let completed = false;
+
+  const jobSelect = document.getElementById("jobSelect");
+  const symptomGrid = document.getElementById("symptomGrid");
+  const actionGrid = document.getElementById("actionGrid");
+  const partsGrid = document.getElementById("partsGrid");
+  const freeNote = document.getElementById("freeNote");
+  const docOutput = document.getElementById("docOutput");
+  const activityLog = document.getElementById("activityLog");
+  const inventoryCard = document.getElementById("inventoryCard");
+  const completeBtn = document.getElementById("completeBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  function renderJobButtons(){
+    jobSelect.innerHTML = "";
+    jobs.forEach(j => {
+      const b = document.createElement("button");
+      b.className = "job-btn" + (currentJob && currentJob.id === j.id ? " active" : "");
+      b.textContent = j.label;
+      b.onclick = () => selectJob(j.id);
+      jobSelect.appendChild(b);
+    });
+  }
+
+  function selectJob(id){
+    currentJob = jobs.find(j => j.id === id);
+    selectedSymptoms = new Set();
+    selectedActions = new Set();
+    selectedParts = new Set();
+    freeNote.value = "";
+    completed = false;
+    renderJobButtons();
+    renderGrids();
+    renderInventory();
+    updateDoc();
+    activityLog.innerHTML = '<div class="hint">Nothing filed yet. Complete a job to watch dispatch, warranty, and inventory update.</div>';
+    completeBtn.disabled = true;
+  }
+
+  function makeGrid(container, items, selectedSet, extraClass){
+    container.innerHTML = "";
+    items.forEach(item => {
+      const b = document.createElement("button");
+      const isPart = extraClass === "part";
+      const key = isPart ? item.name : item;
+      b.className = "tag-btn" + (extraClass ? " " + extraClass : "") + (selectedSet.has(key) ? " selected" : "");
+      b.textContent = isPart ? (item.name + " (" + item.stock + " on truck)") : item;
+      b.onclick = () => {
+        if (selectedSet.has(key)) selectedSet.delete(key); else selectedSet.add(key);
+        renderGrids();
+        updateDoc();
+        checkReady();
+      };
+      container.appendChild(b);
+    });
+  }
+
+  function renderGrids(){
+    if (!currentJob){
+      symptomGrid.innerHTML = '<div class="hint">Select a job first.</div>';
+      actionGrid.innerHTML = "";
+      partsGrid.innerHTML = "";
+      return;
+    }
+    makeGrid(symptomGrid, currentJob.symptoms, selectedSymptoms);
+    makeGrid(actionGrid, currentJob.actions, selectedActions);
+    makeGrid(partsGrid, currentJob.parts, selectedParts, "part");
+  }
+
+  function renderInventory(){
+    if (!currentJob){ inventoryCard.innerHTML = '<div class="hint">No job selected.</div>'; return; }
+    inventoryCard.innerHTML = "";
+    currentJob.parts.forEach(p => {
+      const used = selectedParts.has(p.name) && completed;
+      const remaining = used ? p.stock - 1 : p.stock;
+      const row = document.createElement("div");
+      row.className = "inventory-row";
+      row.innerHTML = '<span>' + p.name + ' <span style="color:var(--muted)">(' + p.sku + ')</span></span>' +
+        '<span class="inventory-count' + (used ? ' dropped' : '') + '">' + remaining + ' left' + (used ? ' ↓ 1' : '') + '</span>';
+      inventoryCard.appendChild(row);
+    });
+  }
+
+  function checkReady(){
+    completeBtn.disabled = !(currentJob && (selectedSymptoms.size || selectedActions.size));
+  }
+
+  function esc(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function updateDoc(){
+    if (!currentJob){
+      docOutput.innerHTML = '<span class="placeholder">Pick a job and start tapping — the work order writes itself as you go.</span>';
+      return;
+    }
+    let html = "";
+    html += '<span class="field">WORK ORDER</span>  #WO-' + (1000 + currentJob.id.length * 37) + '\n';
+    html += 'Customer:  ' + currentJob.customer + '\n';
+    html += 'Asset:     ' + currentJob.asset + '\n';
+    html += 'Warranty:  ' + currentJob.warranty + '\n\n';
+    html += '<span class="field">OBSERVED</span>\n';
+    html += (selectedSymptoms.size ? [...selectedSymptoms].map(s => '  - ' + esc(s)).join('\n') : '  (tap symptoms on the left)') + '\n\n';
+    html += '<span class="field">ACTIONS TAKEN</span>\n';
+    html += (selectedActions.size ? [...selectedActions].map(s => '  - ' + esc(s)).join('\n') : '  (tap actions on the left)') + '\n\n';
+    html += '<span class="field">PARTS USED</span>\n';
+    html += (selectedParts.size ? [...selectedParts].map(s => '  - ' + esc(s)).join('\n') : '  (none logged yet)') + '\n\n';
+    if (freeNote.value.trim()){
+      html += '<span class="field">TECH NOTE</span>\n  "' + esc(freeNote.value.trim()) + '"\n\n';
+    }
+    html += '<span class="field">STATUS</span>  ' + (completed ? 'Filed and closed' : 'Draft — in progress');
+    docOutput.innerHTML = html;
+  }
+
+  freeNote.addEventListener("input", updateDoc);
+
+  function addLogEntry(icon, title, sub, badgeText, badgeClass){
+    if (activityLog.querySelector(".hint")) activityLog.innerHTML = "";
+    const entry = document.createElement("div");
+    entry.className = "log-entry";
+    entry.innerHTML =
+      '<div class="log-icon">' + icon + '</div>' +
+      '<div><div class="log-title">' + title + (badgeText ? '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' : '') + '</div>' +
+      '<div class="log-sub">' + sub + '</div></div>';
+    activityLog.appendChild(entry);
+  }
+
+  function completeJob(){
+    if (!currentJob || completed) return;
+    completed = true;
+    completeBtn.disabled = true;
+    completeBtn.textContent = "Job filed";
+    updateDoc();
+
+    const steps = [];
+    steps.push(() => addLogEntry("📄", "Work order finalized", "Structured from " + selectedSymptoms.size + " observation(s) and " + selectedActions.size + " action(s).", "OK", "ok"));
+
+    if (currentJob.warranty.includes("in force")){
+      steps.push(() => addLogEntry("🛡️", "Warranty claim drafted", "Matched against: " + currentJob.warranty + ". Routed for carrier submission.", "PENDING", "pending"));
+    } else {
+      steps.push(() => addLogEntry("⚠️", "Warranty check skipped", "No active coverage found on file for this asset.", null, null));
+    }
+
+    if (selectedParts.size){
+      steps.push(() => addLogEntry("📦", "Inventory updated", [...selectedParts].join(", ") + " deducted from truck stock; reorder threshold checked.", "OK", "ok"));
+    }
+
+    steps.push(() => addLogEntry("📅", "Follow-up dispatched", "Next-visit reminder queued for " + currentJob.customer + " in 90 days.", "OK", "ok"));
+
+    steps.forEach((fn, i) => setTimeout(fn, 350 * (i + 1)));
+    setTimeout(() => { renderInventory(); }, 350 * steps.length + 100);
+  }
+
+  completeBtn.addEventListener("click", completeJob);
+  resetBtn.addEventListener("click", () => { currentJob = null; renderJobButtons(); renderGrids(); renderInventory(); updateDoc(); activityLog.innerHTML = '<div class="hint">Nothing filed yet. Complete a job to watch dispatch, warranty, and inventory update.</div>'; completeBtn.disabled = true; completeBtn.textContent = "Complete job & let the back office run"; freeNote.value=""; });
+
+  renderJobButtons();
+  renderGrids();
+  renderInventory();
+  updateDoc();
+
+})();
+</script>
+
+</body>
+</html>
