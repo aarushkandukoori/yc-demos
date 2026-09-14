@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nightshift — the hotel that answers itself</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#141b24;
+    --panel2:#1a2330;
+    --line:#243040;
+    --text:#e8edf3;
+    --muted:#8a97a8;
+    --accent:#4fd1a5;
+    --accent2:#5b9dff;
+    --warn:#f0b959;
+    --danger:#f0685f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #16202c 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:36px 24px 18px;
+    text-align:center;
+  }
+  header h1{
+    margin:0 0 8px;
+    font-size:28px;
+    letter-spacing:-0.02em;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0 auto;
+    max-width:560px;
+    color:var(--muted);
+    font-size:14.5px;
+    line-height:1.5;
+  }
+  main{
+    flex:1;
+    width:100%;
+    max-width:1100px;
+    margin:0 auto;
+    padding:20px 20px 40px;
+    display:grid;
+    grid-template-columns:1.15fr 1fr;
+    gap:20px;
+  }
+  @media (max-width:840px){ main{grid-template-columns:1fr;} }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:18px;
+  }
+  .card h2{
+    margin:0 0 4px;
+    font-size:15px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted);
+  }
+  .card .sub{
+    font-size:12.5px;
+    color:var(--muted);
+    margin-bottom:14px;
+  }
+
+  /* --- request composer --- */
+  .composer textarea{
+    width:100%;
+    min-height:64px;
+    resize:vertical;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    color:var(--text);
+    font-size:14px;
+    padding:10px 12px;
+    font-family:inherit;
+  }
+  .composer textarea:focus{outline:1px solid var(--accent2);}
+  .chip-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin:10px 0 12px;
+  }
+  .chip{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--muted);
+    font-size:12px;
+    padding:6px 10px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:.15s;
+  }
+  .chip:hover{border-color:var(--accent2); color:var(--text);}
+  .row{display:flex; gap:10px; align-items:center;}
+  button.primary{
+    background:var(--accent);
+    color:#06251b;
+    border:none;
+    font-weight:600;
+    font-size:14px;
+    padding:10px 18px;
+    border-radius:9px;
+    cursor:pointer;
+    transition:.15s;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:disabled{opacity:.5; cursor:default;}
+  .mode-toggle{
+    font-size:12px;
+    color:var(--muted);
+    margin-left:auto;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .mode-toggle input{accent-color:var(--accent);}
+
+  /* --- reasoning trace --- */
+  .trace{
+    margin-top:16px;
+    border-top:1px dashed var(--line);
+    padding-top:14px;
+    display:none;
+  }
+  .trace.show{display:block;}
+  .step{
+    display:flex;
+    gap:10px;
+    font-size:13px;
+    padding:6px 0;
+    opacity:0;
+    transform:translateY(4px);
+    animation:in .35s forwards;
+  }
+  @keyframes in{to{opacity:1; transform:none;}}
+  .step .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--accent2);
+    margin-top:5px;
+    flex:none;
+  }
+  .step b{color:var(--text);}
+  .step .detail{color:var(--muted);}
+  .verdict{
+    margin-top:12px;
+    padding:12px 14px;
+    border-radius:10px;
+    font-size:13.5px;
+    line-height:1.5;
+    border:1px solid var(--line);
+  }
+  .verdict.resolved{background:rgba(79,209,165,.08); border-color:rgba(79,209,165,.35);}
+  .verdict.dispatched{background:rgba(91,157,255,.08); border-color:rgba(91,157,255,.35);}
+  .verdict.escalated{background:rgba(240,185,89,.08); border-color:rgba(240,185,89,.35);}
+  .verdict .tag{
+    display:inline-block;
+    font-size:10.5px;
+    font-weight:700;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    padding:3px 8px;
+    border-radius:6px;
+    margin-bottom:6px;
+  }
+  .resolved .tag{background:var(--accent); color:#06251b;}
+  .dispatched .tag{background:var(--accent2); color:#04162f;}
+  .escalated .tag{background:var(--warn); color:#3a2400;}
+
+  /* --- ops queue --- */
+  .queue{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    max-height:560px;
+    overflow-y:auto;
+    padding-right:2px;
+  }
+  .ticket{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:11px 13px;
+    font-size:13px;
+    animation:in .3s forwards;
+  }
+  .ticket .top{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:4px;
+  }
+  .ticket .room{font-weight:600;}
+  .ticket .status{
+    font-size:10.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    padding:2px 7px;
+    border-radius:5px;
+    white-space:nowrap;
+    height:fit-content;
+  }
+  .status.resolved{background:rgba(79,209,165,.15); color:var(--accent);}
+  .status.dispatched{background:rgba(91,157,255,.15); color:var(--accent2);}
+  .status.escalated{background:rgba(240,185,89,.15); color:var(--warn);}
+  .ticket .msg{color:var(--muted); margin-bottom:3px;}
+  .ticket .meta{color:#5c6878; font-size:11px;}
+  .empty{color:var(--muted); font-size:13px; text-align:center; padding:30px 10px;}
+
+  .stat-row{
+    display:flex;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .stat{
+    flex:1;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 12px;
+    text-align:center;
+  }
+  .stat .n{font-size:20px; font-weight:700;}
+  .stat .l{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+
+  footer{
+    text-align:center;
+    padding:20px;
+    font-size:12px;
+    color:var(--muted);
+    border-top:1px solid var(--line);
+  }
+  footer strong{color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Night<span>shift</span></h1>
+  <p>A toy autonomous front desk. Type a guest request the way a hotel guest actually texts one, and watch it get read, decided on, and either resolved instantly or dispatched to the right department — no human dispatcher in the loop.</p>
+</header>
+
+<main>
+  <section class="card composer">
+    <h2>Guest channel</h2>
+    <div class="sub">Simulated SMS / in-room chat inbox. Nothing here calls a real service — it's synthetic logic running in your browser.</div>
+    <textarea id="input" placeholder="e.g. the ac in 412 is broken and it's freezing"></textarea>
+    <div class="chip-row" id="chips"></div>
+    <div class="row">
+      <button class="primary" id="send">Send as guest</button>
+      <label class="mode-toggle"><input type="checkbox" id="auto" checked> auto-generate live traffic</label>
+    </div>
+
+    <div class="trace" id="trace">
+      <div id="steps"></div>
+      <div class="verdict" id="verdict"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Operations queue</h2>
+    <div class="sub">Everything the system has triaged tonight.</div>
+    <div class="stat-row">
+      <div class="stat"><div class="n" id="statResolved">0</div><div class="l">Auto-resolved</div></div>
+      <div class="stat"><div class="n" id="statDispatched">0</div><div class="l">Dispatched</div></div>
+      <div class="stat"><div class="n" id="statEscalated">0</div><div class="l">Escalated</div></div>
+    </div>
+    <div class="queue" id="queue"><div class="empty">Waiting on the first request…</div></div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Axelrod (YC S26). <strong>Not affiliated with Axelrod.</strong>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- synthetic "brain": a tiny rules+keyword engine standing in for the real triage model ----
+  var CATEGORIES = [
+    {
+      id:"climate",
+      test:/\b(ac|a\/c|air ?con|heat(er|ing)?|cold|freezing|too hot|thermostat)\b/i,
+      dept:"Engineering",
+      action:"remote thermostat reset",
+      canAuto:true,
+      reply:function(room){ return "Reset the HVAC unit in room "+room+" remotely and nudged it to 71°F. If it's still off in 10 minutes, engineering will be dispatched automatically."; }
+    },
+    {
+      id:"towels",
+      test:/\b(towel|linen|pillow|blanket|toiletr(y|ies)|soap|shampoo)\b/i,
+      dept:"Housekeeping",
+      action:"supply run",
+      canAuto:false,
+      reply:function(room){ return "Queued a housekeeping supply run to room "+room+". Runner assigned, ETA under 12 minutes — no front desk call needed."; }
+    },
+    {
+      id:"wifi",
+      test:/\b(wifi|wi-fi|internet|network|password|connect)\b/i,
+      dept:"Systems",
+      action:"credential push",
+      canAuto:true,
+      reply:function(room){ return "Pushed a fresh guest network credential straight to the TV and confirmation text for room "+room+". No IT ticket generated."; }
+    },
+    {
+      id:"food",
+      test:/\b(room service|food|hungry|order|menu|breakfast|coffee)\b/i,
+      dept:"F&B",
+      action:"order routed to kitchen",
+      canAuto:false,
+      reply:function(room){ return "Routed the order straight to the kitchen queue for room "+room+" and started the prep timer. Guest gets an ETA text automatically."; }
+    },
+    {
+      id:"noise",
+      test:/\b(noise|loud|party|neighbor|shouting)\b/i,
+      dept:"Security",
+      action:"quiet patrol",
+      canAuto:false,
+      reply:function(room){ return "Dispatched a quiet floor patrol near room "+room+" and logged the complaint in case of repeat reports tonight."; }
+    },
+    {
+      id:"checkout",
+      test:/\b(check ?out|late check ?out|extend|extra hour)\b/i,
+      dept:"Front Office",
+      action:"policy-based approval",
+      canAuto:true,
+      reply:function(room){ return "Checked occupancy for the next arrival, confirmed the room is free until 3pm, and auto-approved late checkout for room "+room+"."; }
+    },
+    {
+      id:"billing",
+      test:/\b(charge|bill|refund|invoice|overcharged|dispute)\b/i,
+      dept:"Front Office",
+      action:"escalation",
+      canAuto:false,
+      escalate:true,
+      reply:function(room){ return "Billing disputes touch payment records, so this was escalated to the on-duty manager with the folio attached rather than resolved automatically."; }
+    },
+    {
+      id:"safety",
+      test:/\b(smoke|fire|leak|flood|medical|emergency|hurt|injur)\b/i,
+      dept:"Safety",
+      action:"immediate escalation",
+      canAuto:false,
+      escalate:true,
+      reply:function(room){ return "Flagged as a safety-critical report. Skipped triage entirely and rang the on-site manager and engineering lead in parallel."; }
+    }
+  ];
+
+  var SAMPLES = [
+    "room 214 ac is not working at all",
+    "can we get 2 more towels in 318",
+    "wifi password isn't working in room 501",
+    "want to order room service, room 109",
+    "room next to us (207) is way too loud",
+    "can I get a late checkout for 340, like 2pm?",
+    "I was double charged on my folio, room 415",
+    "smell smoke near the elevator on floor 6"
+  ];
+
+  var ROOMS = ["214","318","501","109","207","340","415","6th floor","622","118","233"];
+
+  var chipsEl = document.getElementById("chips");
+  SAMPLES.slice(0,5).forEach(function(s){
+    var c = document.createElement("div");
+    c.className = "chip";
+    c.textContent = s.length > 34 ? s.slice(0,34)+"…" : s;
+    c.title = s;
+    c.addEventListener("click", function(){ document.getElementById("input").value = s; });
+    chipsEl.appendChild(c);
+  });
+
+  var counts = {resolved:0, dispatched:0, escalated:0};
+  var queueEl = document.getElementById("queue");
+  var firstTicket = true;
+
+  function classify(text){
+    for (var i=0;i<CATEGORIES.length;i++){
+      if (CATEGORIES[i].test.test(text)) return CATEGORIES[i];
+    }
+    return null;
+  }
+
+  function extractRoom(text){
+    var m = text.match(/\b(\d{3,4})\b/);
+    return m ? m[1] : ROOMS[Math.floor(Math.random()*ROOMS.length)];
+  }
+
+  function verdictStatus(cat){
+    if (!cat) return "escalated";
+    if (cat.escalate) return "escalated";
+    return cat.canAuto ? "resolved" : "dispatched";
+  }
+
+  function pushTicket(text, cat, room, status){
+    if (firstTicket){ queueEl.innerHTML = ""; firstTicket = false; }
+    var t = document.createElement("div");
+    t.className = "ticket";
+    var dept = cat ? cat.dept : "Duty Manager";
+    t.innerHTML =
+      '<div class="top"><span class="room">Room '+room+'</span>' +
+      '<span class="status '+status+'">'+status+'</span></div>' +
+      '<div class="msg">"'+text.replace(/</g,"&lt;")+'"</div>' +
+      '<div class="meta">routed to '+dept+' · '+timeNow()+'</div>';
+    queueEl.insertBefore(t, queueEl.firstChild);
+    counts[status]++;
+    document.getElementById("statResolved").textContent = counts.resolved;
+    document.getElementById("statDispatched").textContent = counts.dispatched;
+    document.getElementById("statEscalated").textContent = counts.escalated;
+    while (queueEl.children.length > 40) queueEl.removeChild(queueEl.lastChild);
+  }
+
+  function timeNow(){
+    var d = new Date();
+    var h = d.getHours()%12 || 12;
+    var m = d.getMinutes().toString().padStart(2,"0");
+    return h+":"+m+(d.getHours()>=12?"pm":"am");
+  }
+
+  function runTrace(text){
+    var room = extractRoom(text);
+    var cat = classify(text);
+    var status = verdictStatus(cat);
+
+    var traceEl = document.getElementById("trace");
+    var stepsEl = document.getElementById("steps");
+    var verdictEl = document.getElementById("verdict");
+    stepsEl.innerHTML = "";
+    verdictEl.className = "verdict";
+    verdictEl.style.display = "none";
+    traceEl.classList.add("show");
+
+    var steps = [];
+    steps.push({t:"Parsed message", d:'detected room '+room+ (cat ? ", matched intent \""+cat.id+"\"" : ", no known intent matched")});
+    if (cat){
+      steps.push({t:"Checked department capacity", d: cat.dept+" queue depth: "+(1+Math.floor(Math.random()*3))+" — within normal range"});
+      if (cat.escalate){
+        steps.push({t:"Applied policy", d:"category requires human sign-off, skipping auto-resolution"});
+      } else if (cat.canAuto){
+        steps.push({t:"Checked automatable actions", d:cat.action+" is within the system's own authority — no staff needed"});
+      } else {
+        steps.push({t:"Checked automatable actions", d:cat.action+" needs a physical task, generating a work order instead of full auto-resolve"});
+      }
+    } else {
+      steps.push({t:"No confident match", d:"defaulting to human review rather than guessing"});
+    }
+
+    steps.forEach(function(s, i){
+      setTimeout(function(){
+        var div = document.createElement("div");
+        div.className = "step";
+        div.style.animationDelay = "0s";
+        div.innerHTML = '<div class="dot"></div><div><b>'+s.t+'.</b> <span class="detail">'+s.d+'</span></div>';
+        stepsEl.appendChild(div);
+      }, i*260);
+    });
+
+    setTimeout(function(){
+      var msg = cat ? cat.reply(room) : "No department matched this message confidently enough, so it was routed to the human duty manager for review instead of guessing.";
+      verdictEl.className = "verdict "+status;
+      verdictEl.style.display = "block";
+      verdictEl.innerHTML = '<span class="tag">'+status+'</span><div>'+msg+'</div>';
+      pushTicket(text, cat, room, status);
+    }, steps.length*260 + 200);
+  }
+
+  document.getElementById("send").addEventListener("click", function(){
+    var val = document.getElementById("input").value.trim();
+    if (!val) return;
+    runTrace(val);
+    document.getElementById("input").value = "";
+  });
+
+  document.getElementById("input").addEventListener("keydown", function(e){
+    if (e.key === "Enter" && !e.shiftKey){
+      e.preventDefault();
+      document.getElementById("send").click();
+    }
+  });
+
+  // ambient simulated traffic so the queue never looks dead
+  var autoBox = document.getElementById("auto");
+  var ambientTimer = null;
+  function scheduleAmbient(){
+    if (ambientTimer) clearTimeout(ambientTimer);
+    if (!autoBox.checked) return;
+    var delay = 3200 + Math.random()*3600;
+    ambientTimer = setTimeout(function(){
+      var s = SAMPLES[Math.floor(Math.random()*SAMPLES.length)];
+      var room = extractRoom(s);
+      var cat = classify(s);
+      var status = verdictStatus(cat);
+      pushTicket(s, cat, room, status);
+      scheduleAmbient();
+    }, delay);
+  }
+  autoBox.addEventListener("change", scheduleAmbient);
+  scheduleAmbient();
+
+  // seed a couple of tickets so the panel isn't empty on load
+  setTimeout(function(){
+    ["room 622 wifi keeps dropping","need towels sent to 118"].forEach(function(s){
+      var room = extractRoom(s), cat = classify(s), status = verdictStatus(cat);
+      pushTicket(s, cat, room, status);
+    });
+  }, 400);
+})();
+</script>
+
+</body>
+</html>
