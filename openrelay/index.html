@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ScatterMesh — Route Inference Anywhere</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #12161f;
+    --panel-2: #171c28;
+    --line: #232a3a;
+    --text: #dfe6f2;
+    --muted: #7d8aa3;
+    --accent: #5eead4;
+    --accent-2: #38bdf8;
+    --warn: #f59e0b;
+    --bad: #f87171;
+    --good: #34d399;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #16233a 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 40px 10px;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14.5px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 40px 40px;
+    width: 100%;
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 22px;
+  }
+  @media (max-width: 880px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  .job-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .job-form label {
+    font-size: 12.5px;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 5px;
+  }
+  select, button.primary {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 9px 10px;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .toggle-row {
+    display: flex;
+    gap: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px;
+  }
+  .toggle-row button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 7px 0;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .toggle-row button.active {
+    background: var(--accent);
+    color: #04231e;
+    font-weight: 600;
+  }
+  button.primary {
+    cursor: pointer;
+    background: linear-gradient(120deg, var(--accent), var(--accent-2));
+    color: #041019;
+    font-weight: 700;
+    border: none;
+    margin-top: 4px;
+    transition: transform .12s ease;
+  }
+  button.primary:hover { transform: translateY(-1px); }
+  button.primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  .gateway-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .gateway-line .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .gateway-line .dot.live { background: var(--good); box-shadow: 0 0 8px var(--good); }
+
+  #log {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.3px;
+    background: #080a10;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    height: 180px;
+    overflow-y: auto;
+    line-height: 1.65;
+  }
+  #log .l-route { color: var(--accent); }
+  #log .l-fail { color: var(--bad); }
+  #log .l-info { color: var(--muted); }
+  #log .l-cost { color: var(--accent-2); }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+  .stat {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .stat .num { font-size: 19px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  .nodes {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .node {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    position: relative;
+    transition: box-shadow .25s ease, border-color .25s ease;
+  }
+  .node .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .node .meta {
+    color: var(--muted);
+    font-size: 11.5px;
+    margin-top: 3px;
+  }
+  .node .status {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+  .status.idle { background: rgba(52,211,153,.15); color: var(--good); }
+  .status.busy { background: rgba(56,189,248,.18); color: var(--accent-2); }
+  .status.offline { background: rgba(248,113,113,.15); color: var(--bad); }
+  .node.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(94,234,212,.25); }
+  .node.excluded { opacity: .4; }
+  .node button.kill {
+    margin-top: 8px;
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--line);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .node button.kill:hover { border-color: var(--bad); color: var(--bad); }
+
+  footer {
+    text-align: center;
+    padding: 18px 20px 26px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--line);
+  }
+  footer strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Scatter<span>Mesh</span> — one API, any GPU on earth</h1>
+  <p>A toy router that spreads inference jobs across a pool of mismatched GPUs — gaming cards, workstation cards,
+     data-center accelerators, owned by nobody in particular — and picks a node per request the way a real
+     hardware-agnostic inference layer would: by fit, cost, and who's actually free right now. Everything below
+     runs client-side against synthetic nodes.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Submit an inference job</h2>
+    <div class="job-form">
+      <div>
+        <label for="workload">Workload</label>
+        <select id="workload">
+          <option value="chat7b">Chat model, 7B params (16GB VRAM, light compute)</option>
+          <option value="chat70b">Chat model, 70B params (80GB VRAM, heavy compute)</option>
+          <option value="sdxl">Image gen, SDXL (24GB VRAM, medium compute)</option>
+          <option value="whisper">Speech-to-text, Whisper large (10GB VRAM, light compute)</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Scheduler priority</label>
+        <div class="toggle-row" id="priorityToggle">
+          <button data-mode="cost" class="active">Cheapest fit</button>
+          <button data-mode="latency">Fastest finish</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label for="tokens">Est. output size</label>
+          <select id="tokens">
+            <option value="0.6">Small (quick reply)</option>
+            <option value="1" selected>Medium</option>
+            <option value="2.2">Large (long-form)</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="primary" id="submitBtn">Route job →</button>
+        </div>
+      </div>
+
+      <div class="gateway-line">
+        <span class="dot" id="gwDot"></span>
+        <span id="gwText">Gateway idle — waiting for a job.</span>
+      </div>
+    </div>
+
+    <h2 style="margin-top:18px">Routing log</h2>
+    <div id="log"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="statJobs">0</div><div class="lbl">Jobs routed</div></div>
+      <div class="stat"><div class="num" id="statFail">0</div><div class="lbl">Failovers</div></div>
+      <div class="stat"><div class="num" id="statCost">$0.00</div><div class="lbl">Total spend</div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Node pool (synthetic, click "kill" to simulate a drop)</h2>
+    <div class="nodes" id="nodeGrid"></div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by <strong>Aarush Kandukoori</strong>, inspired by OpenRelay (YC S26).
+  Not affiliated with OpenRelay.
+</footer>
+
+<script>
+(function () {
+  const WORKLOADS = {
+    chat7b:  { label: "Chat 7B",   vram: 16, computeBase: 0.35 },
+    chat70b: { label: "Chat 70B",  vram: 80, computeBase: 1.6  },
+    sdxl:    { label: "SDXL image", vram: 24, computeBase: 0.9 },
+    whisper: { label: "Whisper large", vram: 10, computeBase: 0.25 },
+  };
+
+  let nodes = [
+    { id: "n1", gpu: "RTX 3090",     vram: 24,  rate: 0.18, tier: 1.0, region: "us-east",  status: "idle" },
+    { id: "n2", gpu: "RTX 4090",     vram: 24,  rate: 0.29, tier: 0.75, region: "us-west",  status: "idle" },
+    { id: "n3", gpu: "RTX 5090",     vram: 32,  rate: 0.44, tier: 0.55, region: "eu-west",  status: "idle" },
+    { id: "n4", gpu: "RTX Pro 6000", vram: 96,  rate: 0.90, tier: 0.4,  region: "us-east",  status: "idle" },
+    { id: "n5", gpu: "H100 SXM",     vram: 80,  rate: 2.60, tier: 0.22, region: "us-central",status: "idle" },
+    { id: "n6", gpu: "H200",         vram: 141, rate: 3.20, tier: 0.18, region: "ap-south", status: "idle" },
+  ];
+
+  let priorityMode = "cost";
+  let jobsRouted = 0, failovers = 0, totalCost = 0;
+  const grid = document.getElementById("nodeGrid");
+  const log = document.getElementById("log");
+
+  function renderNodes(pickedId, excludedIds) {
+    grid.innerHTML = "";
+    nodes.forEach(n => {
+      const div = document.createElement("div");
+      div.className = "node";
+      if (pickedId === n.id) div.classList.add("picked");
+      if (excludedIds && excludedIds.has(n.id) && pickedId !== n.id) div.classList.add("excluded");
+      div.innerHTML = `
+        <div class="top">
+          <span>${n.gpu}</span>
+          <span class="status ${n.status}">${n.status}</span>
+        </div>
+        <div class="meta">${n.vram}GB VRAM · $${n.rate.toFixed(2)}/hr · ${n.region}</div>
+        <button class="kill" data-id="${n.id}">${n.status === "offline" ? "bring back online" : "kill this node"}</button>
+      `;
+      grid.appendChild(div);
+    });
+    grid.querySelectorAll(".kill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const n = nodes.find(x => x.id === btn.dataset.id);
+        if (n.status === "offline") { n.status = "idle"; }
+        else { n.status = "offline"; }
+        renderNodes();
+        logLine(`node ${n.gpu} (${n.id}) manually set ${n.status}`, "info");
+      });
+    });
+  }
+
+  function logLine(text, cls) {
+    const row = document.createElement("div");
+    row.className = "l-" + (cls || "info");
+    const t = new Date().toLocaleTimeString([], { hour12: false });
+    row.textContent = `[${t}] ${text}`;
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  document.getElementById("priorityToggle").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    priorityMode = btn.dataset.mode;
+    document.querySelectorAll("#priorityToggle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+  });
+
+  function estimate(node, workload, sizeMultiplier) {
+    const hours = workload.computeBase * node.tier * sizeMultiplier / 4; // toy formula
+    return { hours, cost: hours * node.rate };
+  }
+
+  function pickNode(workload, sizeMultiplier) {
+    const excluded = new Set();
+    const candidates = nodes.filter(n => {
+      const fits = n.vram >= workload.vram && n.status === "idle";
+      if (!fits) excluded.add(n.id);
+      return fits;
+    });
+    if (candidates.length === 0) return { pick: null, excluded };
+
+    const scored = candidates.map(n => {
+      const est = estimate(n, workload, sizeMultiplier);
+      return { n, est };
+    });
+
+    scored.sort((a, b) => {
+      if (priorityMode === "cost") return a.est.cost - b.est.cost;
+      return a.est.hours - b.est.hours;
+    });
+
+    return { pick: scored[0], excluded, allScored: scored };
+  }
+
+  function setGateway(state, text) {
+    const dot = document.getElementById("gwDot");
+    const txt = document.getElementById("gwText");
+    dot.classList.toggle("live", state === "live");
+    txt.textContent = text;
+  }
+
+  function runJob() {
+    const btn = document.getElementById("submitBtn");
+    btn.disabled = true;
+
+    const wKey = document.getElementById("workload").value;
+    const workload = WORKLOADS[wKey];
+    const sizeMultiplier = parseFloat(document.getElementById("tokens").value);
+
+    logLine(`incoming job: ${workload.label}, needs ${workload.vram}GB+ VRAM, mode=${priorityMode}`, "info");
+    setGateway("live", "Scanning pool for a node that fits...");
+
+    let attempt = 0;
+    const workingNodes = JSON.parse(JSON.stringify(nodes));
+
+    function attemptRoute() {
+      attempt++;
+      const { pick, excluded } = pickNode(workload, sizeMultiplier);
+
+      if (!pick) {
+        logLine(`no idle node has ${workload.vram}GB+ free — job queued, nothing to do in this toy`, "fail");
+        setGateway("idle", "Gateway idle — no capacity matched. Try again or kill fewer nodes.");
+        renderNodes(null, excluded);
+        btn.disabled = false;
+        return;
+      }
+
+      renderNodes(pick.n.id, excluded);
+      logLine(`candidate: ${pick.n.gpu} (${pick.n.id}, ${pick.n.region}) — est ${pick.est.hours.toFixed(2)}h @ $${pick.n.rate.toFixed(2)}/hr`, "route");
+
+      const node = nodes.find(x => x.id === pick.n.id);
+      node.status = "busy";
+      renderNodes(pick.n.id);
+
+      setGateway("live", `Dispatched to ${pick.n.gpu} (${pick.n.region})...`);
+
+      const willDrop = attempt === 1 && Math.random() < 0.28;
+
+      setTimeout(() => {
+        if (willDrop) {
+          node.status = "offline";
+          failovers++;
+          document.getElementById("statFail").textContent = failovers;
+          logLine(`${pick.n.gpu} (${pick.n.id}) dropped mid-flight — rerouting automatically`, "fail");
+          renderNodes();
+          setTimeout(attemptRoute, 500);
+          return;
+        }
+
+        const cost = pick.est.cost;
+        totalCost += cost;
+        jobsRouted++;
+        document.getElementById("statJobs").textContent = jobsRouted;
+        document.getElementById("statCost").textContent = "$" + totalCost.toFixed(2);
+        logLine(`completed on ${pick.n.gpu} — billed $${cost.toFixed(3)} for ${pick.est.hours.toFixed(2)}h`, "cost");
+        node.status = "idle";
+        setGateway("idle", "Gateway idle — job complete, node released back to the pool.");
+        renderNodes();
+        btn.disabled = false;
+      }, 900);
+    }
+
+    attemptRoute();
+  }
+
+  document.getElementById("submitBtn").addEventListener("click", runJob);
+
+  renderNodes();
+  logLine("pool online: 6 nodes across 5 regions, mixed hardware tiers", "info");
+})();
+</script>
+</body>
+</html>

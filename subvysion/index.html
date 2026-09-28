@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GroundTruth — Underground Utility Scan Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0b0f0d;
+    --panel: #121a17;
+    --panel-2: #17211c;
+    --line: #23332b;
+    --text: #e6f2ea;
+    --dim: #8aa598;
+    --accent: #4fe3a0;
+    --accent-2: #ffb454;
+    --danger: #ff5d5d;
+    --gas: #ffb454;
+    --water: #4fb8ff;
+    --power: #ff5d5d;
+    --sewer: #b98cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #16241d 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 16px 12px;
+  }
+  header { max-width: 980px; width: 100%; text-align: center; margin-bottom: 18px; }
+  .badge {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 3px 10px;
+    margin-bottom: 10px;
+  }
+  h1 { margin: 0 0 6px; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--dim); font-size: 14.5px; max-width: 620px; margin-inline: auto; }
+
+  .layout {
+    max-width: 980px;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    gap: 18px;
+  }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+  }
+
+  .site-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .site-header h2 { font-size: 14px; margin: 0; color: var(--dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  .coverage { font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  #site {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #0d1512;
+    cursor: crosshair;
+    display: block;
+    touch-action: none;
+  }
+
+  .hint { font-size: 12.5px; color: var(--dim); margin-top: 8px; }
+
+  .controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    background: #1b2620;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #06140d; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { background: #6cf0b4; }
+  button.danger-btn { background: var(--danger); color: #1c0505; border-color: var(--danger); font-weight: 600; }
+
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .side h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin: 0 0 10px; }
+
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 7px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  #selectionBox {
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 90px;
+    color: var(--dim);
+  }
+  #selectionBox b { color: var(--text); }
+  .risk-tag {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .risk-safe { background: rgba(79,227,160,0.15); color: var(--accent); }
+  .risk-danger { background: rgba(255,93,93,0.18); color: var(--danger); }
+
+  .signal-wrap { position: relative; }
+  #signal {
+    width: 100%;
+    height: 64px;
+    display: block;
+    background: #0d1512;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .stat-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--dim); margin-top: 6px; }
+  .stat-row b { color: var(--text); }
+
+  #digResult {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 10px;
+    border-radius: 8px;
+    display: none;
+  }
+  #digResult.show { display: block; }
+  #digResult.ok { background: rgba(79,227,160,0.12); border: 1px solid var(--accent); color: var(--accent); }
+  #digResult.bad { background: rgba(255,93,93,0.14); border: 1px solid var(--danger); color: var(--danger); }
+
+  footer {
+    max-width: 980px;
+    width: 100%;
+    text-align: center;
+    color: var(--dim);
+    font-size: 12px;
+    margin-top: 26px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge">Underground Scan Simulator</span>
+  <h1>GroundTruth: sweep the site, find what's buried</h1>
+  <p>A toy version of the core idea behind autonomous subsurface mapping: drag the scanner head across the lot to sweep ground-penetrating radar, reveal buried lines as you go, then click "Propose Dig Zone" to see if your excavation would hit anything.</p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <div class="site-header">
+      <h2>Site Sweep &mdash; Lot 14B</h2>
+      <div class="coverage">Coverage: <span id="coveragePct">0%</span></div>
+    </div>
+    <canvas id="site" width="960" height="600"></canvas>
+    <div class="hint">Click and drag the scanner (green dot) across the ground to sweep. Unswept ground stays foggy — just like an unscanned trench. Click a revealed line for material &amp; depth.</div>
+    <div class="controls">
+      <button class="primary" id="autoSweepBtn">Run Autonomous Sweep</button>
+      <button id="resetBtn">Reset Site</button>
+      <button id="digBtn">Propose Dig Zone</button>
+      <button class="danger-btn" id="clearDigBtn" style="display:none;">Clear Dig Zone</button>
+    </div>
+    <div id="digResult"></div>
+  </div>
+
+  <div class="side">
+    <div class="panel">
+      <h3>Legend</h3>
+      <div class="legend-item"><span class="swatch" style="background:var(--gas)"></span> Gas line</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--water)"></span> Water main</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--power)"></span> Power conduit</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--sewer)"></span> Sewer pipe</div>
+    </div>
+
+    <div class="panel">
+      <h3>Live GPR Return</h3>
+      <div class="signal-wrap"><canvas id="signal" width="240" height="64"></canvas></div>
+      <div class="stat-row"><span>Depth est.</span><b id="depthReadout">—</b></div>
+      <div class="stat-row"><span>Confidence</span><b id="confReadout">—</b></div>
+    </div>
+
+    <div class="panel">
+      <h3>Selected Asset</h3>
+      <div id="selectionBox">Sweep the lot, then click a revealed line to inspect it.</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by SubVysion (YC S26). Not affiliated with SubVysion.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("site");
+  var ctx = canvas.getContext("2d");
+  var W = canvas.width, H = canvas.height;
+
+  var sigCanvas = document.getElementById("signal");
+  var sigCtx = sigCanvas.getContext("2d");
+
+  // ---- Synthetic buried utility network -------------------------------
+  // Each utility is a polyline with a type, depth (ft), and material.
+  var utilities = [
+    {
+      type: "gas", color: getCssVar("--gas"), depth: 3.2, material: "coated steel",
+      points: [[40, 90], [260, 130], [520, 95], [760, 160], [930, 120]]
+    },
+    {
+      type: "water", color: getCssVar("--water"), depth: 5.0, material: "ductile iron",
+      points: [[20, 320], [200, 300], [420, 340], [650, 300], [900, 330]]
+    },
+    {
+      type: "power", color: getCssVar("--power"), depth: 2.1, material: "PVC-jacketed copper",
+      points: [[60, 480], [300, 460], [500, 500], [700, 470], [940, 500]]
+    },
+    {
+      type: "sewer", color: getCssVar("--sewer"), depth: 6.4, material: "vitrified clay",
+      points: [[10, 220], [180, 250], [400, 210], [620, 250], [880, 215]]
+    },
+    {
+      type: "gas", color: getCssVar("--gas"), depth: 2.8, material: "coated steel",
+      points: [[500, 95], [560, 260], [610, 430], [660, 470]]
+    }
+  ];
+
+  function getCssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  // ---- Fog-of-war coverage grid ----------------------------------------
+  var CELL = 12;
+  var cols = Math.ceil(W / CELL);
+  var rows = Math.ceil(H / CELL);
+  var revealed = new Uint8Array(cols * rows);
+
+  var scanner = { x: 60, y: 300, active: false };
+  var lastPos = null;
+
+  var digZone = null; // {x,y,w,h}
+  var selectedUtility = null;
+
+  function cellIndex(cx, cy) { return cy * cols + cx; }
+
+  function revealAt(x, y, radius) {
+    var cxMin = Math.max(0, Math.floor((x - radius) / CELL));
+    var cxMax = Math.min(cols - 1, Math.floor((x + radius) / CELL));
+    var cyMin = Math.max(0, Math.floor((y - radius) / CELL));
+    var cyMax = Math.min(rows - 1, Math.floor((y + radius) / CELL));
+    for (var cy = cyMin; cy <= cyMax; cy++) {
+      for (var cx = cxMin; cx <= cxMax; cx++) {
+        var ccx = cx * CELL + CELL / 2;
+        var ccy = cy * CELL + CELL / 2;
+        var d = Math.hypot(ccx - x, ccy - y);
+        if (d <= radius) revealed[cellIndex(cx, cy)] = 1;
+      }
+    }
+  }
+
+  function coveragePercent() {
+    var count = 0;
+    for (var i = 0; i < revealed.length; i++) count += revealed[i];
+    return count / revealed.length;
+  }
+
+  // ---- Geometry helpers --------------------------------------------------
+  function distToSegment(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay;
+    var len2 = dx * dx + dy * dy;
+    var t = len2 === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    var cx = ax + t * dx, cy = ay + t * dy;
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  function distToPolyline(px, py, points) {
+    var best = Infinity;
+    for (var i = 0; i < points.length - 1; i++) {
+      var d = distToSegment(px, py, points[i][0], points[i][1], points[i + 1][0], points[i + 1][1]);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  function isPolylineRevealed(points) {
+    // consider it "found" once >55% of its sampled length lies under revealed fog
+    var samples = 40;
+    var hit = 0, total = 0;
+    for (var i = 0; i < points.length - 1; i++) {
+      var ax = points[i][0], ay = points[i][1], bx = points[i + 1][0], by = points[i + 1][1];
+      for (var s = 0; s <= samples; s++) {
+        var t = s / samples;
+        var x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+        var cx = Math.min(cols - 1, Math.max(0, Math.floor(x / CELL)));
+        var cy = Math.min(rows - 1, Math.max(0, Math.floor(y / CELL)));
+        total++;
+        if (revealed[cellIndex(cx, cy)]) hit++;
+      }
+    }
+    return hit / total;
+  }
+
+  // ---- Drawing ------------------------------------------------------------
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // ground
+    ctx.fillStyle = "#0d1512";
+    ctx.fillRect(0, 0, W, H);
+
+    // subtle soil texture grid
+    ctx.strokeStyle = "rgba(255,255,255,0.02)";
+    for (var gx = 0; gx < W; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+    for (var gy = 0; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+
+    // utilities, clipped to revealed fog
+    utilities.forEach(function (u) {
+      var frac = isPolylineRevealed(u.points);
+      if (frac <= 0.02) return;
+      ctx.save();
+      clipToRevealed();
+      ctx.strokeStyle = u.color;
+      ctx.lineWidth = 6;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.globalAlpha = u === selectedUtility ? 1 : 0.9;
+      ctx.beginPath();
+      u.points.forEach(function (p, i) { i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]); });
+      ctx.stroke();
+      if (u === selectedUtility) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+    });
+
+    // fog overlay: darken unrevealed cells
+    ctx.fillStyle = "rgba(3,8,6,0.93)";
+    for (var cy = 0; cy < rows; cy++) {
+      for (var cx = 0; cx < cols; cx++) {
+        if (!revealed[cellIndex(cx, cy)]) {
+          ctx.fillRect(cx * CELL, cy * CELL, CELL, CELL);
+        }
+      }
+    }
+
+    // faint noise speckle over fog for texture
+    ctx.fillStyle = "rgba(255,255,255,0.015)";
+    for (var i = 0; i < 250; i++) {
+      var rx = Math.random() * W, ry = Math.random() * H;
+      var cx2 = Math.floor(rx / CELL), cy2 = Math.floor(ry / CELL);
+      if (!revealed[cellIndex(cx2, cy2)]) ctx.fillRect(rx, ry, 2, 2);
+    }
+
+    // dig zone
+    if (digZone) {
+      var overlaps = digZoneOverlapsAny();
+      ctx.fillStyle = overlaps ? "rgba(255,93,93,0.18)" : "rgba(79,227,160,0.16)";
+      ctx.strokeStyle = overlaps ? "#ff5d5d" : "#4fe3a0";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 6]);
+      ctx.fillRect(digZone.x, digZone.y, digZone.w, digZone.h);
+      ctx.strokeRect(digZone.x, digZone.y, digZone.w, digZone.h);
+      ctx.setLineDash([]);
+    }
+
+    // scanner head
+    ctx.beginPath();
+    ctx.fillStyle = "#4fe3a0";
+    ctx.shadowColor = "rgba(79,227,160,0.9)";
+    ctx.shadowBlur = 14;
+    ctx.arc(scanner.x, scanner.y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(79,227,160,0.5)";
+    ctx.lineWidth = 1.5;
+    ctx.arc(scanner.x, scanner.y, 34, 0, Math.PI * 2);
+    ctx.stroke();
+
+    document.getElementById("coveragePct").textContent = Math.round(coveragePercent() * 100) + "%";
+  }
+
+  function clipToRevealed() {
+    ctx.beginPath();
+    for (var cy = 0; cy < rows; cy++) {
+      for (var cx = 0; cx < cols; cx++) {
+        if (revealed[cellIndex(cx, cy)]) {
+          ctx.rect(cx * CELL, cy * CELL, CELL, CELL);
+        }
+      }
+    }
+    ctx.clip();
+  }
+
+  // ---- Signal scope ---------------------------------------------------
+  var signalHistory = [];
+  function pushSignal(strength) {
+    signalHistory.push(strength);
+    if (signalHistory.length > 80) signalHistory.shift();
+    drawSignal();
+  }
+
+  function drawSignal() {
+    var w = sigCanvas.width, h = sigCanvas.height;
+    sigCtx.clearRect(0, 0, w, h);
+    sigCtx.strokeStyle = "rgba(255,255,255,0.08)";
+    sigCtx.beginPath();
+    sigCtx.moveTo(0, h / 2);
+    sigCtx.lineTo(w, h / 2);
+    sigCtx.stroke();
+    if (signalHistory.length < 2) return;
+    sigCtx.strokeStyle = "#4fe3a0";
+    sigCtx.lineWidth = 1.5;
+    sigCtx.beginPath();
+    signalHistory.forEach(function (v, i) {
+      var x = (i / (signalHistory.length - 1)) * w;
+      var y = h / 2 - v * (h / 2 - 4);
+      i === 0 ? sigCtx.moveTo(x, y) : sigCtx.lineTo(x, y);
+    });
+    sigCtx.stroke();
+  }
+
+  function signalAt(x, y) {
+    // strongest nearby utility reflection, plus a little noise
+    var best = 0;
+    utilities.forEach(function (u) {
+      var d = distToPolyline(x, y, u.points);
+      var s = Math.max(0, 1 - d / 70);
+      if (s > best) best = s;
+    });
+    var noise = (Math.random() - 0.5) * 0.15;
+    return Math.max(-1, Math.min(1, best + noise));
+  }
+
+  function nearestUtilityDepth(x, y) {
+    var best = null, bestD = Infinity;
+    utilities.forEach(function (u) {
+      var d = distToPolyline(x, y, u.points);
+      if (d < bestD) { bestD = d; best = u; }
+    });
+    if (best && bestD < 70) {
+      return { depth: best.depth, conf: Math.max(0.4, 1 - bestD / 70) };
+    }
+    return null;
+  }
+
+  // ---- Pointer interaction --------------------------------------------
+  function toLocal(evt) {
+    var rect = canvas.getBoundingClientRect();
+    var cx = (evt.touches ? evt.touches[0].clientX : evt.clientX) - rect.left;
+    var cy = (evt.touches ? evt.touches[0].clientY : evt.clientY) - rect.top;
+    return { x: cx * (W / rect.width), y: cy * (H / rect.height) };
+  }
+
+  function sweepTo(x, y) {
+    scanner.x = x; scanner.y = y;
+    if (lastPos) {
+      var steps = Math.max(1, Math.ceil(Math.hypot(x - lastPos.x, y - lastPos.y) / 6));
+      for (var i = 0; i <= steps; i++) {
+        var t = i / steps;
+        revealAt(lastPos.x + (x - lastPos.x) * t, lastPos.y + (y - lastPos.y) * t, 30);
+      }
+    } else {
+      revealAt(x, y, 30);
+    }
+    lastPos = { x: x, y: y };
+
+    var s = signalAt(x, y);
+    pushSignal(s);
+    var nd = nearestUtilityDepth(x, y);
+    document.getElementById("depthReadout").textContent = nd ? nd.depth.toFixed(1) + " ft" : "—";
+    document.getElementById("confReadout").textContent = nd ? Math.round(nd.conf * 100) + "%" : "—";
+
+    draw();
+  }
+
+  var dragging = false;
+  canvas.addEventListener("mousedown", function (e) {
+    dragging = true;
+    var p = toLocal(e);
+    lastPos = null;
+    sweepTo(p.x, p.y);
+  });
+  canvas.addEventListener("mousemove", function (e) {
+    if (!dragging) return;
+    var p = toLocal(e);
+    sweepTo(p.x, p.y);
+  });
+  window.addEventListener("mouseup", function () { dragging = false; lastPos = null; });
+
+  canvas.addEventListener("touchstart", function (e) {
+    e.preventDefault(); dragging = true; lastPos = null;
+    sweepTo(toLocal(e).x, toLocal(e).y);
+  }, { passive: false });
+  canvas.addEventListener("touchmove", function (e) {
+    e.preventDefault();
+    if (!dragging) return;
+    sweepTo(toLocal(e).x, toLocal(e).y);
+  }, { passive: false });
+  window.addEventListener("touchend", function () { dragging = false; lastPos = null; });
+
+  canvas.addEventListener("click", function (e) {
+    if (digZone) return;
+    var p = toLocal(e);
+    var best = null, bestD = Infinity;
+    utilities.forEach(function (u) {
+      if (isPolylineRevealed(u.points) < 0.4) return;
+      var d = distToPolyline(p.x, p.y, u.points);
+      if (d < bestD) { bestD = d; best = u; }
+    });
+    if (best && bestD < 16) {
+      selectedUtility = best;
+      showSelection(best);
+      draw();
+    }
+  });
+
+  function showSelection(u) {
+    var box = document.getElementById("selectionBox");
+    var strikeRisk = u.depth < 3.5 ? "Elevated — shallow line" : "Standard depth clearance";
+    box.innerHTML =
+      "<b>" + u.type.toUpperCase() + " LINE</b><br>" +
+      "Material: " + u.material + "<br>" +
+      "Depth: " + u.depth.toFixed(1) + " ft below grade<br>" +
+      "Detection confidence: " + (85 + Math.round(Math.random() * 10)) + "%<br>" +
+      "<span class='risk-tag " + (u.depth < 3.5 ? "risk-danger" : "risk-safe") + "'>" + strikeRisk + "</span>";
+  }
+
+  // ---- Autonomous sweep animation --------------------------------------
+  var autoTimer = null;
+  document.getElementById("autoSweepBtn").addEventListener("click", function () {
+    if (autoTimer) return;
+    var t = 0;
+    var path = [];
+    for (var row = 40; row < H - 20; row += 24) {
+      path.push([20, row]);
+      path.push([W - 20, row]);
+      row += 24;
+      if (row < H - 20) { path.push([W - 20, row]); path.push([20, row]); }
+    }
+    var idx = 0;
+    lastPos = null;
+    autoTimer = setInterval(function () {
+      if (idx >= path.length) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        return;
+      }
+      sweepTo(path[idx][0], path[idx][1]);
+      idx++;
+    }, 12);
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    revealed = new Uint8Array(cols * rows);
+    selectedUtility = null;
+    digZone = null;
+    document.getElementById("clearDigBtn").style.display = "none";
+    document.getElementById("digResult").className = "";
+    document.getElementById("digResult").textContent = "";
+    document.getElementById("selectionBox").textContent = "Sweep the lot, then click a revealed line to inspect it.";
+    signalHistory = [];
+    drawSignal();
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    draw();
+  });
+
+  // ---- Dig zone proposal -------------------------------------------------
+  function digZoneOverlapsAny() {
+    if (!digZone) return false;
+    var hit = false;
+    utilities.forEach(function (u) {
+      for (var i = 0; i < u.points.length - 1; i++) {
+        if (segmentIntersectsRect(u.points[i], u.points[i + 1], digZone)) hit = true;
+      }
+    });
+    return hit;
+  }
+
+  function segmentIntersectsRect(p1, p2, rect) {
+    // sample along the segment; cheap and good enough for this toy
+    var samples = 30;
+    for (var s = 0; s <= samples; s++) {
+      var t = s / samples;
+      var x = p1[0] + (p2[0] - p1[0]) * t;
+      var y = p1[1] + (p2[1] - p1[1]) * t;
+      if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) return true;
+    }
+    return false;
+  }
+
+  document.getElementById("digBtn").addEventListener("click", function () {
+    digZone = { x: W / 2 - 90, y: H / 2 - 60, w: 180, h: 120 };
+    document.getElementById("clearDigBtn").style.display = "inline-block";
+    evaluateDig();
+    draw();
+  });
+
+  document.getElementById("clearDigBtn").addEventListener("click", function () {
+    digZone = null;
+    this.style.display = "none";
+    document.getElementById("digResult").className = "";
+    document.getElementById("digResult").textContent = "";
+    draw();
+  });
+
+  // allow dragging the dig zone once placed
+  canvas.addEventListener("mousedown", function (e) {
+    if (!digZone) return;
+    var p = toLocal(e);
+    if (p.x >= digZone.x && p.x <= digZone.x + digZone.w && p.y >= digZone.y && p.y <= digZone.y + digZone.h) {
+      draggingDig = true;
+      digOffset = { x: p.x - digZone.x, y: p.y - digZone.y };
+      dragging = false; // don't sweep while moving the box
+    }
+  });
+  var draggingDig = false, digOffset = { x: 0, y: 0 };
+  canvas.addEventListener("mousemove", function (e) {
+    if (!draggingDig || !digZone) return;
+    var p = toLocal(e);
+    digZone.x = Math.max(0, Math.min(W - digZone.w, p.x - digOffset.x));
+    digZone.y = Math.max(0, Math.min(H - digZone.h, p.y - digOffset.y));
+    evaluateDig();
+    draw();
+  });
+  window.addEventListener("mouseup", function () { draggingDig = false; });
+
+  function evaluateDig() {
+    var el = document.getElementById("digResult");
+    var overlaps = digZoneOverlapsAny();
+    var coveredEnough = coveragePercent() > 0.35;
+    el.classList.add("show");
+    if (overlaps) {
+      el.className = "show bad";
+      el.textContent = "⚠ Strike risk: proposed dig zone crosses at least one buried line. Drag the zone to clear it before excavating.";
+    } else if (!coveredEnough) {
+      el.className = "show bad";
+      el.textContent = "⚠ Insufficient scan coverage under this zone (" + Math.round(coveragePercent() * 100) + "%). Sweep more of the site before trusting this clearance.";
+    } else {
+      el.className = "show ok";
+      el.textContent = "✓ Clear: no known utilities intersect this dig zone based on current scan coverage.";
+    }
+  }
+
+  draw();
+  drawSignal();
+})();
+</script>
+</body>
+</html>

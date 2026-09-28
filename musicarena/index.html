@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Track Arena — Blind A/B Benchmark for AI Producers</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1b2330;
+    --line: #2a3444;
+    --ink: #e8edf5;
+    --dim: #8b98ab;
+    --accent: #7c5cff;
+    --accent-2: #37d0a8;
+    --warn: #ff8a5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    background: radial-gradient(circle at 20% -10%, #1c2334 0%, var(--bg) 55%);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 16px;
+  }
+  header { text-align: center; max-width: 720px; margin-bottom: 22px; }
+  header h1 {
+    font-size: 30px;
+    margin: 0 0 8px;
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p { color: var(--dim); margin: 0; font-size: 15px; line-height: 1.5; }
+  .task-bar {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 18px;
+    max-width: 720px;
+    width: 100%;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .task-bar .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
+  .task-bar .prompt { font-size: 15px; margin-top: 2px; }
+  .task-bar button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .task-bar button:hover { opacity: 0.9; }
+
+  .arena {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    max-width: 900px;
+    width: 100%;
+  }
+  @media (max-width: 720px) { .arena { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color .15s, transform .15s;
+  }
+  .card.voted-win { border-color: var(--accent-2); }
+  .card.voted-lose { opacity: 0.55; }
+
+  .card-head { display: flex; justify-content: space-between; align-items: center; }
+  .card-head .tag {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--dim);
+    background: var(--panel-2);
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .card-head .reveal-name { font-size: 12px; color: var(--accent-2); font-weight: 600; visibility: hidden; }
+  .card.revealed .reveal-name { visibility: visible; }
+
+  canvas.viz {
+    width: 100%;
+    height: 90px;
+    background: #0a0e15;
+    border-radius: 10px;
+    display: block;
+  }
+
+  .transport { display: flex; align-items: center; gap: 10px; }
+  .play-btn {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .play-btn:hover { border-color: var(--accent); }
+  .scrub { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; position: relative; overflow: hidden; }
+  .scrub .fill { position: absolute; inset: 0; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .time { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; width: 34px; text-align: right; }
+
+  .vote-btn {
+    margin-top: auto;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .vote-btn:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
+  .vote-btn:disabled { cursor: default; opacity: 0.5; }
+
+  .status-line {
+    text-align: center;
+    color: var(--dim);
+    font-size: 13px;
+    margin-top: 18px;
+    min-height: 18px;
+  }
+  .status-line b { color: var(--accent-2); }
+
+  section.board {
+    max-width: 900px;
+    width: 100%;
+    margin-top: 26px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  section.board h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+  }
+  section.board p.sub { color: var(--dim); font-size: 12px; margin: 0 0 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td.rating { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent-2); }
+  td.delta { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .delta.up { color: var(--accent-2); }
+  .delta.down { color: var(--warn); }
+  tr.mover td { background: rgba(124, 92, 255, 0.08); }
+
+  footer {
+    margin: 30px 0 10px;
+    color: var(--dim);
+    font-size: 12px;
+    text-align: center;
+    max-width: 700px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Track Arena</h1>
+  <p>Two AI producer agents get the same brief inside a virtual DAW. You hear both renders blind, pick the better one, and the leaderboard updates live — a toy version of crowdsourced head-to-head music benchmarking.</p>
+</header>
+
+<div class="task-bar">
+  <div>
+    <div class="label">Current brief</div>
+    <div class="prompt" id="taskPrompt">—</div>
+  </div>
+  <button id="newTaskBtn">New brief</button>
+</div>
+
+<div class="arena">
+  <div class="card" id="cardA">
+    <div class="card-head">
+      <span class="tag">RENDER A</span>
+      <span class="reveal-name" id="nameA"></span>
+    </div>
+    <canvas class="viz" id="vizA" width="400" height="90"></canvas>
+    <div class="transport">
+      <button class="play-btn" id="playA">▶</button>
+      <div class="scrub"><div class="fill" id="fillA"></div></div>
+      <div class="time" id="timeA">0:00</div>
+    </div>
+    <button class="vote-btn" id="voteA">Vote: A is better</button>
+  </div>
+
+  <div class="card" id="cardB">
+    <div class="card-head">
+      <span class="tag">RENDER B</span>
+      <span class="reveal-name" id="nameB"></span>
+    </div>
+    <canvas class="viz" id="vizB" width="400" height="90"></canvas>
+    <div class="transport">
+      <button class="play-btn" id="playB">▶</button>
+      <div class="scrub"><div class="fill" id="fillB"></div></div>
+      <div class="time" id="timeB">0:00</div>
+    </div>
+    <button class="vote-btn" id="voteB">Vote: B is better</button>
+  </div>
+</div>
+
+<div class="status-line" id="statusLine">Press play on each side, then cast your vote.</div>
+
+<section class="board">
+  <h2>Live leaderboard</h2>
+  <p class="sub">Elo-style ratings updated after every vote in this session. Synthetic agents and synthetic data — for demonstration only.</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Agent</th><th>Rating</th><th>Δ last vote</th><th>Votes</th></tr>
+    </thead>
+    <tbody id="boardBody"></tbody>
+  </table>
+</section>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by MusicArena (YC S26). Not affiliated with MusicArena.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- synthetic roster ----------
+  var AGENTS = [
+    { name: "ReaperPilot-7B",   style: "warm",    seed: 1.00 },
+    { name: "AbletonAct v3",    style: "bright",  seed: 1.13 },
+    { name: "LogicLoop-XL",     style: "sparse",  seed: 0.91 },
+    { name: "BeatSmith Turbo",  style: "dense",   seed: 1.07 },
+    { name: "SessionSynth-2",   style: "warm",    seed: 0.97 },
+    { name: "ChordCraft Mini",  style: "bright",  seed: 1.04 }
+  ];
+  AGENTS.forEach(function (a) { a.rating = 1200; a.votes = 0; a.lastDelta = null; });
+
+  var TASKS = [
+    "add a hook that answers the vocal phrase in the last 8 bars",
+    "reharmonize the bridge without changing the melody",
+    "build a drum fill that sets up the final chorus",
+    "double the bass an octave down for the last drop",
+    "write a 4-bar intro using only the existing sample pack",
+    "thicken the chorus with a counter-melody in the upper register"
+  ];
+
+  var K = 24; // elo K-factor
+
+  // ---------- audio engine (procedural, no external files) ----------
+  var AudioCtx = window.AudioContext || window.webkitAudioContext;
+  var ctx = null;
+  function getCtx() {
+    if (!ctx) ctx = new AudioCtx();
+    return ctx;
+  }
+
+  // Deterministic pseudo-random generator seeded per agent+task so replays match visuals
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  var SCALE = [0, 2, 4, 5, 7, 9, 11, 12]; // major scale semitone offsets
+  var BASE_FREQ = 220; // A3
+
+  // Build a short procedural "arrangement": array of {time, dur, freq, gain, type}
+  function buildArrangement(agent, taskIndex, seedOffset) {
+    var rnd = mulberry32(Math.floor((agent.seed * 1000 + taskIndex * 97 + seedOffset) * 997));
+    var notes = [];
+    var beats = 16;
+    var beatDur = 0.28;
+    var density = agent.style === "dense" ? 0.9 : agent.style === "sparse" ? 0.45 : 0.7;
+    var waveType = agent.style === "bright" ? "sawtooth" : agent.style === "warm" ? "sine" : "triangle";
+
+    for (var i = 0; i < beats; i++) {
+      if (rnd() < density) {
+        var degree = SCALE[Math.floor(rnd() * SCALE.length)];
+        var octave = rnd() < 0.25 ? 12 : 0;
+        var freq = BASE_FREQ * Math.pow(2, (degree + octave) / 12);
+        var dur = beatDur * (rnd() < 0.3 ? 1.8 : 1);
+        var gain = 0.12 + rnd() * 0.08;
+        notes.push({ time: i * beatDur, dur: dur, freq: freq, gain: gain, type: waveType });
+      }
+      // occasional bass note under the beat
+      if (i % 4 === 0) {
+        notes.push({ time: i * beatDur, dur: beatDur * 3.5, freq: BASE_FREQ / 4, gain: 0.18, type: "sine" });
+      }
+    }
+    notes.duration = beats * beatDur + 0.6;
+    return notes;
+  }
+
+  function playArrangement(notes, onEnd) {
+    var c = getCtx();
+    if (c.state === "suspended") c.resume();
+    var startAt = c.currentTime + 0.05;
+    var master = c.createGain();
+    master.gain.value = 0.9;
+    master.connect(c.destination);
+    var nodes = [];
+
+    notes.forEach(function (n) {
+      var osc = c.createOscillator();
+      var g = c.createGain();
+      osc.type = n.type;
+      osc.frequency.value = n.freq;
+      g.gain.setValueAtTime(0, startAt + n.time);
+      g.gain.linearRampToValueAtTime(n.gain, startAt + n.time + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, startAt + n.time + n.dur);
+      osc.connect(g);
+      g.connect(master);
+      osc.start(startAt + n.time);
+      osc.stop(startAt + n.time + n.dur + 0.05);
+      nodes.push(osc);
+    });
+
+    var stopTimer = setTimeout(function () {
+      master.disconnect();
+      if (onEnd) onEnd();
+    }, (notes.duration) * 1000 + 150);
+
+    return {
+      duration: notes.duration,
+      startedAt: performance.now(),
+      cancel: function () {
+        clearTimeout(stopTimer);
+        nodes.forEach(function (o) { try { o.stop(); } catch (e) {} });
+        try { master.disconnect(); } catch (e) {}
+      }
+    };
+  }
+
+  // ---------- waveform visualization (drawn from note data, not live audio) ----------
+  function drawViz(canvas, notes) {
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    var g = canvas.getContext("2d");
+    g.scale(dpr, dpr);
+    g.clearRect(0, 0, w, h);
+    var dur = notes.duration;
+    g.strokeStyle = "#2a3444";
+    g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+
+    notes.forEach(function (n) {
+      var x = (n.time / dur) * w;
+      var barW = Math.max(2, (n.dur / dur) * w * 0.7);
+      var amp = Math.min(1, n.gain * 5) * (h / 2 - 6);
+      var freqNorm = Math.min(1, Math.log2(n.freq / 55) / 6);
+      var hue = 250 - freqNorm * 100;
+      g.fillStyle = "hsl(" + hue + ", 80%, 65%)";
+      g.fillRect(x, h / 2 - amp, barW, amp * 2);
+    });
+  }
+
+  // ---------- session state ----------
+  var current = { taskIndex: 0, agentA: null, agentB: null, notesA: null, notesB: null, voted: false, playersA: null, playersB: null };
+
+  function pickTwoAgents() {
+    var idx = AGENTS.map(function (_, i) { return i; });
+    idx.sort(function () { return Math.random() - 0.5; });
+    return [idx[0], idx[1]];
+  }
+
+  function newRound() {
+    current.taskIndex = Math.floor(Math.random() * TASKS.length);
+    var picks = pickTwoAgents();
+    current.agentAIdx = picks[0];
+    current.agentBIdx = picks[1];
+    current.agentA = AGENTS[picks[0]];
+    current.agentB = AGENTS[picks[1]];
+    // random seedOffset so the same two agents don't always sound identical between rounds
+    current.seedOffset = Math.floor(Math.random() * 1000);
+    current.notesA = buildArrangement(current.agentA, current.taskIndex, current.seedOffset);
+    current.notesB = buildArrangement(current.agentB, current.taskIndex, current.seedOffset + 500);
+    current.voted = false;
+
+    document.getElementById("taskPrompt").textContent = TASKS[current.taskIndex];
+    ["A", "B"].forEach(function (side) {
+      var card = document.getElementById("card" + side);
+      card.classList.remove("voted-win", "voted-lose", "revealed");
+      document.getElementById("name" + side).textContent = "";
+      document.getElementById("vote" + side).disabled = false;
+      document.getElementById("vote" + side).textContent = "Vote: " + side + " is better";
+      document.getElementById("fill" + side).style.width = "0%";
+      document.getElementById("time" + side).textContent = "0:00";
+      document.getElementById("play" + side).textContent = "▶";
+      stopPlayback(side);
+    });
+    drawViz(document.getElementById("vizA"), current.notesA);
+    drawViz(document.getElementById("vizB"), current.notesB);
+    document.getElementById("statusLine").textContent = "Press play on each side, then cast your vote.";
+  }
+
+  var playback = { A: null, B: null };
+
+  function stopPlayback(side) {
+    if (playback[side]) { playback[side].cancel(); playback[side] = null; }
+  }
+
+  function fmtTime(s) {
+    var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return m + ":" + (sec < 10 ? "0" : "") + sec;
+  }
+
+  function togglePlay(side) {
+    var notes = side === "A" ? current.notesA : current.notesB;
+    var btn = document.getElementById("play" + side);
+    var fill = document.getElementById("fill" + side);
+    var time = document.getElementById("time" + side);
+
+    if (playback[side]) {
+      stopPlayback(side);
+      btn.textContent = "▶";
+      return;
+    }
+    btn.textContent = "❚❚";
+    playback[side] = playArrangement(notes, function () {
+      btn.textContent = "▶";
+      fill.style.width = "0%";
+      time.textContent = "0:00";
+      playback[side] = null;
+    });
+
+    var dur = notes.duration;
+    var raf;
+    function tick() {
+      if (!playback[side]) return;
+      var elapsed = (performance.now() - playback[side].startedAt) / 1000;
+      var pct = Math.min(100, (elapsed / dur) * 100);
+      fill.style.width = pct + "%";
+      time.textContent = fmtTime(Math.min(elapsed, dur));
+      if (pct < 100) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function expectedScore(rA, rB) {
+    return 1 / (1 + Math.pow(10, (rB - rA) / 400));
+  }
+
+  function applyVote(winnerSide) {
+    if (current.voted) return;
+    current.voted = true;
+
+    var winner = winnerSide === "A" ? current.agentA : current.agentB;
+    var loser = winnerSide === "A" ? current.agentB : current.agentA;
+
+    var expW = expectedScore(winner.rating, loser.rating);
+    var expL = 1 - expW;
+    var deltaW = K * (1 - expW);
+    var deltaL = K * (0 - expL);
+
+    winner.rating += deltaW;
+    loser.rating += deltaL;
+    winner.votes += 1;
+    loser.votes += 1;
+    winner.lastDelta = deltaW;
+    loser.lastDelta = deltaL;
+
+    // reveal
+    document.getElementById("nameA").textContent = current.agentA.name;
+    document.getElementById("nameB").textContent = current.agentB.name;
+    document.getElementById("cardA").classList.add("revealed");
+    document.getElementById("cardB").classList.add("revealed");
+
+    var winCard = document.getElementById("card" + winnerSide);
+    var loseCard = document.getElementById("card" + (winnerSide === "A" ? "B" : "A"));
+    winCard.classList.add("voted-win");
+    loseCard.classList.add("voted-lose");
+
+    document.getElementById("voteA").disabled = true;
+    document.getElementById("voteB").disabled = true;
+
+    document.getElementById("statusLine").innerHTML =
+      "You picked <b>" + winner.name + "</b> over " + loser.name +
+      " &mdash; rating " + winner.rating.toFixed(0) + " (+" + deltaW.toFixed(1) + ")" +
+      " vs " + loser.rating.toFixed(0) + " (" + deltaL.toFixed(1) + "). Click \"New brief\" to continue.";
+
+    renderBoard([winner.name, loser.name]);
+  }
+
+  function renderBoard(movedNames) {
+    var sorted = AGENTS.slice().sort(function (a, b) { return b.rating - a.rating; });
+    var body = document.getElementById("boardBody");
+    body.innerHTML = "";
+    sorted.forEach(function (a, i) {
+      var tr = document.createElement("tr");
+      if (movedNames && movedNames.indexOf(a.name) !== -1) tr.className = "mover";
+      var deltaHtml = "—";
+      if (a.lastDelta !== null) {
+        var cls = a.lastDelta >= 0 ? "up" : "down";
+        var sign = a.lastDelta >= 0 ? "+" : "";
+        deltaHtml = "<span class='delta " + cls + "'>" + sign + a.lastDelta.toFixed(1) + "</span>";
+      }
+      tr.innerHTML =
+        "<td>" + (i + 1) + "</td>" +
+        "<td>" + a.name + "</td>" +
+        "<td class='rating'>" + a.rating.toFixed(0) + "</td>" +
+        "<td class='delta'>" + deltaHtml + "</td>" +
+        "<td>" + a.votes + "</td>";
+      body.appendChild(tr);
+    });
+  }
+
+  // ---------- wire up ----------
+  document.getElementById("playA").addEventListener("click", function () { togglePlay("A"); });
+  document.getElementById("playB").addEventListener("click", function () { togglePlay("B"); });
+  document.getElementById("voteA").addEventListener("click", function () { applyVote("A"); });
+  document.getElementById("voteB").addEventListener("click", function () { applyVote("B"); });
+  document.getElementById("newTaskBtn").addEventListener("click", function () {
+    stopPlayback("A"); stopPlayback("B");
+    newRound();
+  });
+
+  renderBoard();
+  newRound();
+})();
+</script>
+
+</body>
+</html>

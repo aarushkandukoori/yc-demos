@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Basecamp — a devbox that never notices you left</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#151b23;
+    --panel2:#1c2531;
+    --border:#2a3441;
+    --text:#e6edf3;
+    --muted:#8b98a5;
+    --accent:#5ee6a5;
+    --accent2:#63b3ff;
+    --warn:#ffb454;
+    --danger:#ff6b6b;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 600px at 20% -10%, #16202c 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 16px 16px;
+  }
+  header{
+    max-width:920px;
+    width:100%;
+    text-align:center;
+    margin-bottom:22px;
+  }
+  header h1{
+    font-size:28px;
+    margin:0 0 8px;
+    letter-spacing:-0.02em;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    color:var(--muted);
+    margin:0;
+    font-size:15px;
+    max-width:620px;
+    margin:0 auto;
+    line-height:1.5;
+  }
+  .stage{
+    max-width:920px;
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 260px;
+    gap:16px;
+  }
+  @media (max-width:760px){
+    .stage{grid-template-columns:1fr;}
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+    box-shadow:0 10px 30px rgba(0,0,0,0.35);
+  }
+  .term{
+    display:flex;
+    flex-direction:column;
+    height:420px;
+  }
+  .term-bar{
+    background:var(--panel2);
+    padding:10px 14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    border-bottom:1px solid var(--border);
+  }
+  .dot{width:11px;height:11px;border-radius:50%;}
+  .d1{background:#ff5f57;} .d2{background:#febc2e;} .d3{background:#28c840;}
+  .term-title{
+    margin-left:10px;
+    font-size:12.5px;
+    color:var(--muted);
+    font-family:"SF Mono",Menlo,monospace;
+    flex:1;
+  }
+  .status-pill{
+    font-size:11px;
+    font-family:"SF Mono",Menlo,monospace;
+    padding:3px 9px;
+    border-radius:999px;
+    border:1px solid var(--border);
+  }
+  .status-pill.live{color:var(--accent);border-color:rgba(94,230,165,0.4);background:rgba(94,230,165,0.08);}
+  .status-pill.away{color:var(--warn);border-color:rgba(255,180,84,0.4);background:rgba(255,180,84,0.08);}
+  .term-body{
+    flex:1;
+    padding:14px 16px;
+    font-family:"SF Mono",Menlo,Consolas,monospace;
+    font-size:13px;
+    line-height:1.65;
+    overflow-y:auto;
+    background:
+      linear-gradient(var(--panel), var(--panel));
+  }
+  .term-body .line{white-space:pre-wrap;word-break:break-word;}
+  .line.cmd{color:var(--accent2);}
+  .line.cmd::before{content:"$ ";color:var(--muted);}
+  .line.out{color:#c9d1d9;}
+  .line.sys{color:var(--warn);font-style:italic;}
+  .line.tick{color:var(--muted);}
+  .term-input{
+    display:flex;
+    border-top:1px solid var(--border);
+    padding:10px 14px;
+    gap:8px;
+  }
+  .term-input span{
+    color:var(--muted);
+    font-family:"SF Mono",Menlo,monospace;
+    font-size:13px;
+    align-self:center;
+  }
+  .term-input input{
+    flex:1;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:var(--text);
+    font-family:"SF Mono",Menlo,monospace;
+    font-size:13px;
+  }
+  .sidebar{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:16px;
+  }
+  .card h3{
+    margin:0 0 10px;
+    font-size:12.5px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+  }
+  .laptop-btn{
+    width:100%;
+    padding:12px;
+    border-radius:9px;
+    border:1px solid var(--border);
+    background:var(--panel2);
+    color:var(--text);
+    font-size:13.5px;
+    font-weight:600;
+    cursor:pointer;
+    transition:transform .1s ease, border-color .15s ease;
+  }
+  .laptop-btn:hover{border-color:var(--accent2);}
+  .laptop-btn:active{transform:scale(0.98);}
+  .laptop-btn.closed{background:rgba(255,107,107,0.1);border-color:rgba(255,107,107,0.4);color:var(--danger);}
+  .hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:10px;
+    line-height:1.5;
+  }
+  .file-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:7px 0;
+    border-bottom:1px solid var(--border);
+    font-family:"SF Mono",Menlo,monospace;
+    font-size:12px;
+  }
+  .file-row:last-child{border-bottom:none;}
+  .file-row .synced{color:var(--accent);font-size:11px;}
+  .port-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:7px 0;
+    font-family:"SF Mono",Menlo,monospace;
+    font-size:12px;
+    border-bottom:1px solid var(--border);
+  }
+  .port-row:last-child{border-bottom:none;}
+  .port-row .local{color:var(--accent2);}
+  .quick-cmds{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:10px;
+  }
+  .quick-cmds button{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--muted);
+    font-family:"SF Mono",Menlo,monospace;
+    font-size:11px;
+    padding:5px 8px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .quick-cmds button:hover{color:var(--text);border-color:var(--accent2);}
+  footer{
+    max-width:920px;
+    width:100%;
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    margin:28px 0 8px;
+    line-height:1.6;
+  }
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    font-family:"SF Mono",Menlo,monospace;
+    color:var(--muted);
+    border:1px solid var(--border);
+    padding:3px 8px;
+    border-radius:999px;
+    margin-bottom:14px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge">toy demo · not the real product</span>
+  <h1>Close the laptop. The build <span>keeps going.</span></h1>
+  <p>A tiny simulation of a persistent cloud dev session: kick off a long-running job, "close your laptop," come back later, and reattach to find the terminal exactly where you left it — output and all.</p>
+</header>
+
+<div class="stage">
+  <div class="panel term">
+    <div class="term-bar">
+      <div class="dot d1"></div><div class="dot d2"></div><div class="dot d3"></div>
+      <div class="term-title">you@remote-box:~/app — tmux session "main"</div>
+      <div class="status-pill live" id="statusPill">● attached</div>
+    </div>
+    <div class="term-body" id="termBody">
+      <div class="line out">Welcome back. Session "main" has been running for 0s.</div>
+      <div class="line out">Try: run build   |   run server   |   ls</div>
+    </div>
+    <div class="term-input">
+      <span>$</span>
+      <input id="cmdInput" type="text" placeholder="type a command and hit enter…" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="card">
+      <h3>Your Laptop</h3>
+      <button class="laptop-btn" id="laptopBtn">💻 Close laptop lid</button>
+      <div class="hint" id="laptopHint">The session lives on the remote box, not on your machine — closing the lid won't kill anything running.</div>
+    </div>
+
+    <div class="card">
+      <h3>Synced folder</h3>
+      <div id="fileList">
+        <div class="file-row"><span>app/server.py</span><span class="synced">synced</span></div>
+        <div class="file-row"><span>app/index.html</span><span class="synced">synced</span></div>
+        <div class="file-row"><span>build.log</span><span class="synced">synced</span></div>
+      </div>
+      <div class="hint">Edits made here would show up on the remote box in real time — no git push, no rsync.</div>
+    </div>
+
+    <div class="card">
+      <h3>Ports</h3>
+      <div id="portList">
+        <div class="port-row"><span>—</span><span>no server running</span></div>
+      </div>
+      <div class="hint">Start a server and its remote port gets mapped straight to localhost.</div>
+    </div>
+
+    <div class="card">
+      <h3>Quick commands</h3>
+      <div class="quick-cmds">
+        <button data-cmd="run build">run build</button>
+        <button data-cmd="run server">run server</button>
+        <button data-cmd="ls">ls</button>
+        <button data-cmd="clear">clear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Prized (YC S26). Not affiliated with Prized.
+</footer>
+
+<script>
+(function(){
+  const termBody = document.getElementById('termBody');
+  const cmdInput = document.getElementById('cmdInput');
+  const laptopBtn = document.getElementById('laptopBtn');
+  const laptopHint = document.getElementById('laptopHint');
+  const statusPill = document.getElementById('statusPill');
+  const portList = document.getElementById('portList');
+
+  let laptopClosed = false;
+  let sessionStart = Date.now();
+  let queuedWhileAway = [];
+  let backgroundJobs = []; // {name, totalSteps, doneSteps, intervalId, kind}
+  let serverRunning = false;
+  let awayTicker = null;
+
+  function addLine(text, cls){
+    const div = document.createElement('div');
+    div.className = 'line ' + (cls || 'out');
+    div.textContent = text;
+    termBody.appendChild(div);
+    termBody.scrollTop = termBody.scrollHeight;
+    return div;
+  }
+
+  function addCmdLine(text){
+    addLine(text, 'cmd');
+  }
+
+  function formatUptime(ms){
+    const s = Math.floor(ms/1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s/60);
+    const rem = s % 60;
+    return m + 'm ' + rem + 's';
+  }
+
+  function runBuild(){
+    if (backgroundJobs.find(j => j.kind === 'build')){
+      addLine('build already running.', 'sys');
+      return;
+    }
+    addLine('starting build… (this normally takes ~40s, watch it survive a laptop close)', 'sys');
+    const job = { kind:'build', step:0, total:8 };
+    backgroundJobs.push(job);
+    job.intervalId = setInterval(() => {
+      job.step++;
+      const pct = Math.round((job.step/job.total)*100);
+      const msg = 'build: compiling step ' + job.step + '/' + job.total + ' (' + pct + '%)';
+      if (laptopClosed){
+        queuedWhileAway.push({text: msg, cls:'out'});
+      } else {
+        addLine(msg, 'out');
+      }
+      if (job.step >= job.total){
+        clearInterval(job.intervalId);
+        backgroundJobs = backgroundJobs.filter(j => j !== job);
+        const doneMsg = 'build finished ✓  (0 errors)';
+        if (laptopClosed){
+          queuedWhileAway.push({text: doneMsg, cls:'out'});
+        } else {
+          addLine(doneMsg, 'out');
+        }
+      }
+    }, 900);
+  }
+
+  function runServer(){
+    if (serverRunning){
+      addLine('server already listening on remote:8000 → localhost:8000', 'sys');
+      return;
+    }
+    serverRunning = true;
+    addLine('starting dev server on remote port 8000…', 'sys');
+    setTimeout(() => {
+      const msg = 'server up — Local: http://localhost:8000 (forwarded from remote:8000)';
+      if (laptopClosed){
+        queuedWhileAway.push({text: msg, cls:'out'});
+      } else {
+        addLine(msg, 'out');
+      }
+      portList.innerHTML = '<div class="port-row"><span>remote:8000</span><span class="local">→ localhost:8000</span></div>';
+    }, 700);
+  }
+
+  function runLs(){
+    addLine('app/server.py   app/index.html   build.log   node_modules/', 'out');
+  }
+
+  function handleCommand(raw){
+    const cmd = raw.trim();
+    if (!cmd) return;
+    addCmdLine(cmd);
+    if (laptopClosed){
+      addLine('(queued — lid is closed, but this will run when you reattach)', 'sys');
+    }
+    if (cmd === 'run build') return runBuild();
+    if (cmd === 'run server') return runServer();
+    if (cmd === 'ls') return runLs();
+    if (cmd === 'clear'){ termBody.innerHTML = ''; return; }
+    addLine(cmd.split(' ')[0] + ': command not found — try "run build", "run server", or "ls"', 'sys');
+  }
+
+  cmdInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter'){
+      handleCommand(cmdInput.value);
+      cmdInput.value = '';
+    }
+  });
+
+  document.querySelectorAll('.quick-cmds button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      handleCommand(btn.getAttribute('data-cmd'));
+    });
+  });
+
+  laptopBtn.addEventListener('click', () => {
+    laptopClosed = !laptopClosed;
+    if (laptopClosed){
+      laptopBtn.textContent = '💻 Reopen laptop';
+      laptopBtn.classList.add('closed');
+      laptopHint.textContent = 'Lid closed. Your machine is asleep — but the remote box is still running everything below.';
+      statusPill.textContent = '● detached (session persists)';
+      statusPill.classList.remove('live');
+      statusPill.classList.add('away');
+      addLine('— laptop closed. tmux session "main" detaches, keeps running on the box —', 'sys');
+      const detachTime = Date.now();
+      awayTicker = setInterval(() => {
+        const away = formatUptime(Date.now() - detachTime);
+        statusPill.textContent = '● detached ' + away + ' (session persists)';
+      }, 1000);
+    } else {
+      laptopBtn.textContent = '💻 Close laptop lid';
+      laptopBtn.classList.remove('closed');
+      laptopHint.textContent = 'The session lives on the remote box, not on your machine — closing the lid won\'t kill anything running.';
+      statusPill.textContent = '● attached';
+      statusPill.classList.add('live');
+      statusPill.classList.remove('away');
+      clearInterval(awayTicker);
+      addLine('— reopened lid, reattaching to tmux session "main" —', 'sys');
+      if (queuedWhileAway.length){
+        addLine('catching up on ' + queuedWhileAway.length + ' line(s) that happened while you were away:', 'sys');
+        queuedWhileAway.forEach(l => addLine(l.text, l.cls));
+        queuedWhileAway = [];
+      } else {
+        addLine('nothing new happened while you were away — session idle.', 'out');
+      }
+    }
+  });
+
+  cmdInput.focus();
+})();
+</script>
+
+</body>
+</html>

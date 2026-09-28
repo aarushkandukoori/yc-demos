@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Closing Runway — Title Intake Demo</title>
+<style>
+  :root {
+    --bg: #0f1418;
+    --panel: #161d23;
+    --panel-2: #1c242b;
+    --border: #2a343c;
+    --ink: #e8eef2;
+    --ink-dim: #93a3ac;
+    --accent: #4fd1a5;
+    --accent-dim: #2f7a5c;
+    --warn: #f2b84b;
+    --bad: #f2685b;
+    --good: #4fd1a5;
+    --mono: "SF Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 28px 32px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.02em; }
+  header p { margin: 0; color: var(--ink-dim); font-size: 14px; max-width: 640px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 32px 60px; }
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card + .card { margin-top: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-dim); }
+
+  .deal-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    font-size: 13.5px;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .deal-btn:hover { border-color: var(--accent-dim); }
+  .deal-btn.active { border-color: var(--accent); background: #16241f; }
+  .deal-btn .addr { font-weight: 600; }
+  .deal-btn .sub { color: var(--ink-dim); font-size: 12px; margin-top: 3px; }
+
+  .run-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--accent);
+    color: #06251a;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .run-btn:hover:not(:disabled) { filter: brightness(1.08); }
+
+  .contract-raw {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-dim);
+    background: #0c1013;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    white-space: pre-wrap;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .gauge-wrap { display: flex; align-items: center; gap: 18px; }
+  .gauge { position: relative; width: 92px; height: 92px; flex-shrink: 0; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .pct {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700;
+  }
+  .gauge-label { color: var(--ink-dim); font-size: 13px; }
+  .gauge-status { font-size: 15px; font-weight: 700; margin-top: 2px; }
+
+  table.extract { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.extract td { padding: 7px 4px; border-bottom: 1px solid var(--border); }
+  table.extract td:first-child { color: var(--ink-dim); width: 42%; }
+  table.extract td:last-child { font-family: var(--mono); }
+
+  .flag {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    margin-bottom: 10px;
+  }
+  .flag.resolved { opacity: 0.55; }
+  .flag .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .flag.high .dot { background: var(--bad); }
+  .flag.med .dot { background: var(--warn); }
+  .flag .body { flex: 1; }
+  .flag .title { font-weight: 600; font-size: 13.5px; }
+  .flag .detail { color: var(--ink-dim); font-size: 12.5px; margin-top: 2px; }
+  .flag button {
+    background: transparent;
+    border: 1px solid var(--accent-dim);
+    color: var(--accent);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .flag button:hover { background: rgba(79,209,165,0.12); }
+  .flag button:disabled { border-color: var(--border); color: var(--ink-dim); cursor: default; }
+
+  .checklist { list-style: none; margin: 0; padding: 0; font-size: 13.5px; }
+  .checklist li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .checklist li:last-child { border-bottom: none; }
+  .check-box { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--ink-dim); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .checklist li.done .check-box { background: var(--good); border-color: var(--good); color: #06251a; }
+  .checklist li.done span.label { color: var(--ink-dim); text-decoration: line-through; }
+
+  .empty-state { color: var(--ink-dim); font-size: 13.5px; padding: 20px 0; }
+  .pulse { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  footer {
+    text-align: center;
+    color: var(--ink-dim);
+    font-size: 12px;
+    padding: 30px 20px 40px;
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Closing Runway</h1>
+  <p>A toy demo of automated title intake: drop in a purchase contract, watch the engine pull the deal terms, cross-check them against the county title chain, and flag what stands between this file and a clean close.</p>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+
+    <div>
+      <div class="card">
+        <h2>1. Pick an incoming contract</h2>
+        <div id="dealList"></div>
+        <button class="run-btn" id="runBtn" disabled>Run title intake</button>
+      </div>
+
+      <div class="card">
+        <h2>Raw contract text</h2>
+        <div class="contract-raw" id="rawText">Select a deal to preview the source document…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Closing readiness</h2>
+        <div class="gauge-wrap">
+          <div class="gauge">
+            <svg width="92" height="92" viewBox="0 0 92 92">
+              <circle cx="46" cy="46" r="40" stroke="#2a343c" stroke-width="9" fill="none"></circle>
+              <circle id="gaugeArc" cx="46" cy="46" r="40" stroke="var(--accent)" stroke-width="9" fill="none"
+                stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="251.2"></circle>
+            </svg>
+            <div class="pct" id="gaugePct">—</div>
+          </div>
+          <div>
+            <div class="gauge-label">Deal file status</div>
+            <div class="gauge-status" id="gaugeStatus">Awaiting intake</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Extracted deal terms</h2>
+        <div id="extractArea"><div class="empty-state">Run intake to extract terms from the contract.</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Title chain flags</h2>
+        <div id="flagArea"><div class="empty-state">No flags yet — run intake first.</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Closing checklist</h2>
+        <ul class="checklist" id="checklistArea"></ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Vestris (YC S26). Not affiliated with Vestris.</footer>
+
+<script>
+// ---------- synthetic data ----------
+const DEALS = [
+  {
+    id: "d1",
+    address: "412 Larkspur Ln, Austin, TX",
+    sub: "Purchase price $612,000 · closing in 19 days",
+    raw:
+`PURCHASE AND SALE AGREEMENT
+Property: 412 Larkspur Ln, Austin, TX 78745
+Buyer: Marcus T. Owusu
+Seller: Dana R. Whitfield
+Purchase Price: $612,000.00
+Earnest Money: $12,000.00 held by Redline Title Co.
+Closing Date: October 8, 2026
+Financing: Conventional, 30yr, lender TBD
+Title Company: Redline Title Co.
+Special Stipulations: Seller to clear existing HOA lien prior to closing.`,
+    extract: {
+      "Buyer": "Marcus T. Owusu",
+      "Seller": "Dana R. Whitfield",
+      "Price": "$612,000.00",
+      "Earnest Money": "$12,000.00",
+      "Closing Date": "Oct 8, 2026",
+      "Financing": "Conventional, 30yr"
+    },
+    flags: [
+      { id: "f1", sev: "high", title: "Unresolved HOA lien on record",
+        detail: "County record shows a $2,140 HOA lien filed 2025-03-11 under seller 'D. R. Whitfield'. Contract requires it cleared before closing — no payoff letter on file yet." },
+      { id: "f2", sev: "med", title: "Seller name variant across documents",
+        detail: "Vesting deed lists seller as 'Dana Renee Whitfield'; contract lists 'Dana R. Whitfield'. Needs a name-affidavit to avoid a chain-of-title gap." }
+    ],
+    checklist: ["Order title search", "Extract & verify deal terms", "Resolve title flags", "Confirm lender payoff figures", "Schedule closing"]
+  },
+  {
+    id: "d2",
+    address: "89 Coral Reef Ct, Tampa, FL",
+    sub: "Purchase price $348,500 · closing in 11 days",
+    raw:
+`PURCHASE AND SALE AGREEMENT
+Property: 89 Coral Reef Ct, Tampa, FL 33615
+Buyer: Priya & Andrew Nolan
+Seller: Coastal Bay Holdings LLC
+Purchase Price: $348,500.00
+Earnest Money: $6,500.00 held by Anchor Title Group.
+Closing Date: September 30, 2026
+Financing: FHA
+Title Company: Anchor Title Group.
+Special Stipulations: None.`,
+    extract: {
+      "Buyer": "Priya & Andrew Nolan",
+      "Seller": "Coastal Bay Holdings LLC",
+      "Price": "$348,500.00",
+      "Earnest Money": "$6,500.00",
+      "Closing Date": "Sep 30, 2026",
+      "Financing": "FHA"
+    },
+    flags: [
+      { id: "f3", sev: "high", title: "Judgment lien attached to seller entity",
+        detail: "A $41,200 civil judgment against 'Coastal Bay Holdings LLC' was filed 2024-11-02 in the same county — needs a subordination or payoff before insuring clear title." },
+      { id: "f4", sev: "med", title: "Missing prior deed in chain",
+        detail: "Public record has a 6-month gap between the 2021 and 2023 recorded deeds. Likely an unrecorded transfer — request the missing instrument from the seller's attorney." }
+    ],
+    checklist: ["Order title search", "Extract & verify deal terms", "Resolve title flags", "Confirm lender payoff figures", "Schedule closing"]
+  },
+  {
+    id: "d3",
+    address: "1027 Birchwood Ave, Columbus, OH",
+    sub: "Purchase price $255,000 · closing in 26 days",
+    raw:
+`PURCHASE AND SALE AGREEMENT
+Property: 1027 Birchwood Ave, Columbus, OH 43201
+Buyer: Kevin Alvarez
+Seller: Margaret & Louis Feld
+Purchase Price: $255,000.00
+Earnest Money: $4,000.00 held by Meridian Title & Escrow.
+Closing Date: October 15, 2026
+Financing: Cash
+Title Company: Meridian Title & Escrow.
+Special Stipulations: Sellers to provide estoppel from Birchwood HOA.`,
+    extract: {
+      "Buyer": "Kevin Alvarez",
+      "Seller": "Margaret & Louis Feld",
+      "Price": "$255,000.00",
+      "Earnest Money": "$4,000.00",
+      "Closing Date": "Oct 15, 2026",
+      "Financing": "Cash"
+    },
+    flags: [
+      { id: "f5", sev: "med", title: "HOA estoppel not yet on file",
+        detail: "Contract requires a current HOA estoppel letter from Birchwood HOA. None has been received or logged in the deal file." }
+    ],
+    checklist: ["Order title search", "Extract & verify deal terms", "Resolve title flags", "Confirm lender payoff figures", "Schedule closing"]
+  }
+];
+
+let activeDeal = null;
+let resolvedFlags = new Set();
+let checklistDone = new Set();
+let intakeRun = false;
+
+const dealListEl = document.getElementById("dealList");
+const runBtn = document.getElementById("runBtn");
+const rawTextEl = document.getElementById("rawText");
+const extractArea = document.getElementById("extractArea");
+const flagArea = document.getElementById("flagArea");
+const checklistArea = document.getElementById("checklistArea");
+const gaugeArc = document.getElementById("gaugeArc");
+const gaugePct = document.getElementById("gaugePct");
+const gaugeStatus = document.getElementById("gaugeStatus");
+
+function renderDealList() {
+  dealListEl.innerHTML = "";
+  DEALS.forEach(d => {
+    const btn = document.createElement("button");
+    btn.className = "deal-btn" + (activeDeal && activeDeal.id === d.id ? " active" : "");
+    btn.innerHTML = `<div class="addr">${d.address}</div><div class="sub">${d.sub}</div>`;
+    btn.onclick = () => selectDeal(d.id);
+    dealListEl.appendChild(btn);
+  });
+}
+
+function selectDeal(id) {
+  activeDeal = DEALS.find(d => d.id === id);
+  resolvedFlags = new Set();
+  checklistDone = new Set(["Order title search"]);
+  intakeRun = false;
+  rawTextEl.textContent = activeDeal.raw;
+  runBtn.disabled = false;
+  extractArea.innerHTML = '<div class="empty-state">Run intake to extract terms from the contract.</div>';
+  flagArea.innerHTML = '<div class="empty-state">No flags yet — run intake first.</div>';
+  renderDealList();
+  renderChecklist();
+  updateGauge();
+}
+
+function runIntake() {
+  runBtn.disabled = true;
+  runBtn.textContent = "Scanning county records…";
+  extractArea.innerHTML = '<div class="empty-state pulse">Parsing contract and cross-checking title chain…</div>';
+  flagArea.innerHTML = '';
+
+  setTimeout(() => {
+    intakeRun = true;
+    checklistDone.add("Extract & verify deal terms");
+    renderExtract();
+    renderFlags();
+    renderChecklist();
+    updateGauge();
+    runBtn.textContent = "Re-run title intake";
+    runBtn.disabled = false;
+  }, 900);
+}
+
+function renderExtract() {
+  const rows = Object.entries(activeDeal.extract)
+    .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+  extractArea.innerHTML = `<table class="extract">${rows}</table>`;
+}
+
+function renderFlags() {
+  if (activeDeal.flags.length === 0) {
+    flagArea.innerHTML = '<div class="empty-state">No title chain issues detected. File is clean.</div>';
+    return;
+  }
+  flagArea.innerHTML = "";
+  activeDeal.flags.forEach(f => {
+    const resolved = resolvedFlags.has(f.id);
+    const div = document.createElement("div");
+    div.className = "flag " + f.sev + (resolved ? " resolved" : "");
+    div.innerHTML = `
+      <div class="dot"></div>
+      <div class="body">
+        <div class="title">${f.title}</div>
+        <div class="detail">${resolved ? "Resolved — payoff/affidavit logged to file." : f.detail}</div>
+      </div>
+      <button ${resolved ? "disabled" : ""} data-fid="${f.id}">${resolved ? "Cleared" : "Resolve"}</button>
+    `;
+    div.querySelector("button").onclick = (e) => resolveFlag(f.id);
+    flagArea.appendChild(div);
+  });
+}
+
+function resolveFlag(fid) {
+  resolvedFlags.add(fid);
+  const allResolved = activeDeal.flags.every(f => resolvedFlags.has(f.id));
+  if (allResolved) checklistDone.add("Resolve title flags");
+  renderFlags();
+  renderChecklist();
+  updateGauge();
+}
+
+const CHECKLIST_ORDER = ["Order title search", "Extract & verify deal terms", "Resolve title flags", "Confirm lender payoff figures", "Schedule closing"];
+
+function renderChecklist() {
+  checklistArea.innerHTML = "";
+  CHECKLIST_ORDER.forEach(step => {
+    // "Confirm lender payoff figures" auto-completes once flags are resolved for demo flow;
+    // "Schedule closing" only unlocks once everything above is done.
+    if (step === "Confirm lender payoff figures" && checklistDone.has("Resolve title flags")) {
+      checklistDone.add(step);
+    }
+    if (step === "Schedule closing" && CHECKLIST_ORDER.slice(0, 4).every(s => checklistDone.has(s))) {
+      checklistDone.add(step);
+    }
+    const done = checklistDone.has(step);
+    const li = document.createElement("li");
+    li.className = done ? "done" : "";
+    li.innerHTML = `<div class="check-box">${done ? "✓" : ""}</div><span class="label">${step}</span>`;
+    checklistArea.appendChild(li);
+  });
+}
+
+function updateGauge() {
+  let pct = 0;
+  if (activeDeal) {
+    const total = CHECKLIST_ORDER.length;
+    const done = CHECKLIST_ORDER.filter(s => checklistDone.has(s)).length;
+    pct = Math.round((done / total) * 100);
+  }
+  const circumference = 251.2;
+  const offset = circumference - (circumference * pct / 100);
+  gaugeArc.style.stroke = pct >= 100 ? "var(--good)" : pct >= 50 ? "var(--accent)" : "var(--warn)";
+  gaugeArc.setAttribute("stroke-dashoffset", offset);
+  gaugePct.textContent = activeDeal ? pct + "%" : "—";
+  gaugeStatus.textContent = !activeDeal ? "Awaiting intake"
+    : pct >= 100 ? "Clear to close"
+    : pct >= 50 ? "In progress"
+    : "Needs attention";
+}
+
+runBtn.addEventListener("click", () => {
+  if (!intakeRun) runIntake();
+  else runIntake();
+});
+
+renderDealList();
+renderChecklist();
+updateGauge();
+</script>
+</body>
+</html>

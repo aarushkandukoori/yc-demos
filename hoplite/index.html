@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Foreman — watch an agent ship your ticket</title>
+<style>
+  :root{
+    --bg:#0b0e14;
+    --panel:#131826;
+    --panel2:#1a2032;
+    --border:#242c42;
+    --text:#e7ebf5;
+    --muted:#8b93ab;
+    --accent:#5ee6c1;
+    --accent-dim:#2e5a4f;
+    --warn:#f0b95c;
+    --danger:#f0705c;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 800px at 80% -10%, #16233a 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 32px 12px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:-0.02em;
+  }
+  header h1 span{ color:var(--accent); }
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:680px;
+    line-height:1.5;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:20px;
+    padding:24px 32px;
+  }
+  @media (max-width: 900px){
+    main{ grid-template-columns:1fr; }
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:18px;
+  }
+  .panel h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0 0 14px;
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:var(--muted);
+    margin:14px 0 6px;
+  }
+  select, textarea, input[type=text]{
+    width:100%;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:13px;
+    font-family:inherit;
+    resize:vertical;
+  }
+  textarea{ min-height:70px; }
+  .repo-meta{
+    margin-top:10px;
+    font-size:12px;
+    color:var(--muted);
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 12px;
+    line-height:1.6;
+  }
+  .repo-meta code{ color:var(--accent); font-family:var(--mono); }
+  button{
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    font-size:13px;
+    font-weight:600;
+    padding:11px 16px;
+    font-family:inherit;
+  }
+  .btn-primary{
+    background:var(--accent);
+    color:#06110d;
+    width:100%;
+    margin-top:16px;
+  }
+  .btn-primary:disabled{
+    background:#2b3346;
+    color:#666f88;
+    cursor:not-allowed;
+  }
+  .btn-primary:hover:not(:disabled){ filter:brightness(1.08); }
+  .btn-ghost{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text);
+  }
+  .btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .presets{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:8px;
+  }
+  .preset-chip{
+    font-size:11px;
+    padding:6px 10px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:var(--panel2);
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .preset-chip:hover{ border-color:var(--accent); color:var(--accent); }
+
+  .thread{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    min-height:360px;
+  }
+  .placeholder{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    font-size:13px;
+    border:1px dashed var(--border);
+    border-radius:10px;
+    padding:40px;
+    text-align:center;
+  }
+  .step{
+    display:grid;
+    grid-template-columns:24px 1fr;
+    gap:10px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 14px;
+    opacity:0;
+    transform:translateY(6px);
+    animation:rise 0.35s ease forwards;
+  }
+  @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+  .step .dot{
+    width:22px; height:22px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px;
+    border:1px solid var(--border);
+    background:var(--panel);
+    color:var(--muted);
+    margin-top:2px;
+  }
+  .step.done .dot{ background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+  .step.active .dot{ background:var(--accent-dim); border-color:var(--accent); color:var(--accent); animation:pulse 1s infinite; }
+  .step.wait .dot{ background:#3a2f1a; border-color:var(--warn); color:var(--warn); }
+  @keyframes pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(94,230,193,0.4);} 50%{ box-shadow:0 0 0 5px rgba(94,230,193,0);} }
+  .step h3{ margin:0 0 3px; font-size:13.5px; }
+  .step p{ margin:0; color:var(--muted); font-size:12.5px; line-height:1.5; }
+  .step pre{
+    margin:8px 0 0;
+    background:#0d1220;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:10px;
+    font-size:11.5px;
+    font-family:var(--mono);
+    overflow-x:auto;
+    color:#c9d3e8;
+  }
+  .diff-add{ color:#7ee6b3; }
+  .diff-rem{ color:#f0908080; text-decoration:line-through; }
+
+  .approve-box{
+    margin-top:8px;
+    display:flex;
+    gap:8px;
+  }
+  .approve-box button{ padding:8px 12px; font-size:12px; }
+  .btn-approve{ background:var(--warn); color:#1c1404; }
+  .btn-deny{ background:transparent; border:1px solid var(--danger); color:var(--danger); }
+
+  .pr-card{
+    border:1px solid var(--accent);
+    background:linear-gradient(180deg, rgba(94,230,193,0.08), transparent);
+    border-radius:10px;
+    padding:16px;
+    margin-top:4px;
+  }
+  .pr-card .pr-title{ font-size:14px; font-weight:600; margin-bottom:4px; }
+  .pr-card .pr-meta{ color:var(--muted); font-size:12px; margin-bottom:10px; }
+  .checks{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; }
+  .checks div{ display:flex; align-items:center; gap:8px; }
+  .checks .ok{ color:var(--accent); }
+
+  footer{
+    padding:16px 32px 26px;
+    border-top:1px solid var(--border);
+    color:var(--muted);
+    font-size:12px;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Foreman <span>— hand it a ticket, watch it ship</span></h1>
+  <p>A toy simulation of a cloud dev agent: point it at a repo, describe the task, and it plans, edits, tests, and opens a pull request in an isolated sandbox — pausing whenever it hits something that needs your say-so. Everything below runs entirely in your browser with fake data; no repo is touched.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1. Configure the run</h2>
+
+    <label for="repo">Repository</label>
+    <select id="repo">
+      <option value="storefront">acme/storefront-web</option>
+      <option value="billing">acme/billing-service</option>
+      <option value="mobile">acme/mobile-api</option>
+    </select>
+    <div class="repo-meta" id="repoMeta"></div>
+
+    <label for="task">Task for the agent</label>
+    <textarea id="task" placeholder="e.g. Add rate limiting to the /checkout endpoint"></textarea>
+    <div class="presets">
+      <span class="preset-chip" data-t="Add rate limiting to the /checkout endpoint">rate limit checkout</span>
+      <span class="preset-chip" data-t="Fix the flaky retry logic in the payment webhook handler">fix flaky webhook retry</span>
+      <span class="preset-chip" data-t="Add a /health endpoint that checks DB connectivity">add health endpoint</span>
+    </div>
+
+    <button class="btn-primary" id="runBtn">Assign to agent</button>
+    <button class="btn-ghost" id="resetBtn" style="width:100%;margin-top:8px;">Reset</button>
+  </section>
+
+  <section class="panel">
+    <h2>2. Agent thread</h2>
+    <div class="thread" id="thread">
+      <div class="placeholder" id="placeholder">Pick a repo and a task, then click "Assign to agent" to start a run.</div>
+    </div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Hoplite (YC S26). Not affiliated with Hoplite.</footer>
+
+<script>
+(function(){
+  const REPOS = {
+    storefront: { branch: "main", lang: "TypeScript / Next.js", tests: "142 passing", files: 386 },
+    billing:    { branch: "main", lang: "Go", tests: "89 passing", files: 214 },
+    mobile:     { branch: "develop", lang: "Python / FastAPI", tests: "63 passing", files: 151 },
+  };
+
+  const repoSelect = document.getElementById("repo");
+  const repoMeta = document.getElementById("repoMeta");
+  const taskInput = document.getElementById("task");
+  const runBtn = document.getElementById("runBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const thread = document.getElementById("thread");
+  const placeholder = document.getElementById("placeholder");
+
+  function renderRepoMeta(){
+    const r = REPOS[repoSelect.value];
+    repoMeta.innerHTML =
+      "branch <code>" + r.branch + "</code> &middot; " + r.lang + "<br>" +
+      r.files + " files indexed &middot; last test run: " + r.tests;
+  }
+  repoSelect.addEventListener("change", renderRepoMeta);
+  renderRepoMeta();
+
+  document.querySelectorAll(".preset-chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      taskInput.value = chip.getAttribute("data-t");
+    });
+  });
+
+  let running = false;
+  let timers = [];
+
+  function clearTimers(){
+    timers.forEach(clearTimeout);
+    timers = [];
+  }
+
+  function reset(){
+    clearTimers();
+    running = false;
+    runBtn.disabled = false;
+    runBtn.textContent = "Assign to agent";
+    thread.innerHTML = "";
+    placeholder.style.display = "flex";
+    thread.appendChild(placeholder);
+  }
+  resetBtn.addEventListener("click", reset);
+
+  function addStep(opts){
+    // opts: {icon, title, body, html, id}
+    const el = document.createElement("div");
+    el.className = "step active";
+    if(opts.id) el.id = opts.id;
+    el.innerHTML =
+      '<div class="dot">' + opts.icon + '</div>' +
+      '<div><h3>' + opts.title + '</h3><p>' + opts.body + '</p>' + (opts.html || '') + '</div>';
+    thread.appendChild(el);
+    thread.scrollTop = thread.scrollHeight;
+    return el;
+  }
+
+  function markDone(el){
+    el.classList.remove("active", "wait");
+    el.classList.add("done");
+    el.querySelector(".dot").textContent = "✓";
+  }
+
+  function taskShape(task){
+    const t = task.toLowerCase();
+    if(t.includes("rate limit")){
+      return {
+        plan: "Add a token-bucket rate limiter middleware in front of the checkout route, backed by the existing Redis cache instance.",
+        file: "src/routes/checkout.ts",
+        diff: [
+          '<span class="diff-rem">- router.post("/checkout", handleCheckout);</span>',
+          '<span class="diff-add">+ router.post("/checkout", rateLimit({ windowMs: 10_000, max: 5 }), handleCheckout);</span>'
+        ],
+        testline: "checkout.ratelimit.test.ts",
+        prTitle: "Add rate limiting to /checkout",
+      };
+    }
+    if(t.includes("webhook") || t.includes("retry")){
+      return {
+        plan: "Replace the fixed-delay retry with exponential backoff and jitter in the payment webhook consumer, and cap retries at 5.",
+        file: "internal/webhook/retry.go",
+        diff: [
+          '<span class="diff-rem">- time.Sleep(2 * time.Second)</span>',
+          '<span class="diff-add">+ time.Sleep(backoffWithJitter(attempt))</span>'
+        ],
+        testline: "retry_test.go",
+        prTitle: "Fix flaky webhook retry with backoff + jitter",
+      };
+    }
+    return {
+      plan: "Add a lightweight /health route that pings the primary DB pool and returns latency plus pool stats as JSON.",
+      file: "app/routes/health.py",
+      diff: [
+        '<span class="diff-rem">- # no health route yet</span>',
+        '<span class="diff-add">+ @router.get("/health")\n+ async def health():\n+     return await db_ping_status()</span>'
+      ],
+      testline: "test_health.py",
+      prTitle: "Add DB-aware /health endpoint",
+    };
+  }
+
+  function run(){
+    if(running) return;
+    const task = taskInput.value.trim();
+    if(!task){
+      taskInput.focus();
+      taskInput.style.borderColor = "var(--danger)";
+      setTimeout(function(){ taskInput.style.borderColor = ""; }, 900);
+      return;
+    }
+    running = true;
+    placeholder.style.display = "none";
+    thread.innerHTML = "";
+    runBtn.disabled = true;
+    runBtn.textContent = "Running…";
+
+    const repo = REPOS[repoSelect.value];
+    const shape = taskShape(task);
+    let delay = 0;
+    const step = (fn, wait) => { timers.push(setTimeout(fn, delay += wait)); };
+
+    step(function(){
+      const el = addStep({
+        icon: "1",
+        title: "Sandbox provisioned",
+        body: "Cloned " + repoSelect.options[repoSelect.selectedIndex].text + " at branch " + repo.branch + " into an isolated container with your MCPs and CLI tools pre-installed."
+      });
+      timers.push(setTimeout(function(){ markDone(el); }, 500));
+    }, 200);
+
+    step(function(){
+      const el = addStep({
+        icon: "2",
+        title: "Plan drafted",
+        body: shape.plan
+      });
+      timers.push(setTimeout(function(){ markDone(el); }, 600));
+    }, 900);
+
+    step(function(){
+      const el = addStep({
+        icon: "3",
+        title: "Editing " + shape.file,
+        body: "Applying the change and updating the adjacent test file.",
+        html: '<pre>' + shape.diff.join("\n") + '</pre>'
+      });
+      timers.push(setTimeout(function(){ markDone(el); }, 700));
+    }, 1000);
+
+    step(function(){
+      const el = addStep({
+        icon: "!",
+        title: "Approval needed: install dependency",
+        body: "The change needs a new package added to the manifest. This touches the dependency lockfile, so the agent is pausing for your go-ahead before continuing.",
+        html: '<div class="approve-box"><button class="btn-approve" id="approveBtn">Approve</button><button class="btn-deny" id="denyBtn">Deny</button></div>'
+      });
+      el.classList.remove("active");
+      el.classList.add("wait");
+      el.querySelector(".dot").textContent = "?";
+
+      document.getElementById("approveBtn").addEventListener("click", function(){
+        markDone(el);
+        el.querySelector("p").textContent += " — approved by you.";
+        el.querySelector(".approve-box").remove();
+        continueAfterApproval();
+      });
+      document.getElementById("denyBtn").addEventListener("click", function(){
+        el.classList.remove("wait");
+        el.classList.add("done");
+        el.querySelector(".dot").textContent = "✕";
+        el.querySelector("p").textContent += " — denied. Run halted so you can redirect the agent.";
+        el.querySelector(".approve-box").remove();
+        runBtn.disabled = false;
+        runBtn.textContent = "Assign to agent";
+        running = false;
+      });
+    }, 1100);
+
+    function continueAfterApproval(){
+      let d2 = 0;
+      const step2 = (fn, wait) => { timers.push(setTimeout(fn, d2 += wait)); };
+
+      step2(function(){
+        const el = addStep({
+          icon: "4",
+          title: "Running test suite in headless preview",
+          body: "Spinning up the app in the sandbox and driving it with a real browser to confirm the route still responds under load."
+        });
+        timers.push(setTimeout(function(){ markDone(el); }, 900));
+      }, 300);
+
+      step2(function(){
+        const el = addStep({
+          icon: "5",
+          title: "Tests green",
+          body: repo.tests.replace(/\d+/, function(n){ return (parseInt(n)+1); }) + ", including new file " + shape.testline + "."
+        });
+        timers.push(setTimeout(function(){ markDone(el); }, 500));
+      }, 1200);
+
+      step2(function(){
+        const el = addStep({
+          icon: "6",
+          title: "Opening pull request",
+          body: "Packaging the diff, test run, and preview recording as verification evidence.",
+          html:
+            '<div class="pr-card">' +
+              '<div class="pr-title">' + shape.prTitle + '</div>' +
+              '<div class="pr-meta">' + repoSelect.options[repoSelect.selectedIndex].text + ' &middot; ' + repo.branch + ' ← agent/task-4471</div>' +
+              '<div class="checks">' +
+                '<div class="ok">✓ unit tests</div>' +
+                '<div class="ok">✓ headless browser preview</div>' +
+                '<div class="ok">✓ lint &amp; type-check</div>' +
+              '</div>' +
+            '</div>'
+        });
+        timers.push(setTimeout(function(){
+          markDone(el);
+          runBtn.disabled = false;
+          runBtn.textContent = "Assign to agent";
+          running = false;
+        }, 700));
+      }, 900);
+    }
+  }
+
+  runBtn.addEventListener("click", run);
+})();
+</script>
+
+</body>
+</html>

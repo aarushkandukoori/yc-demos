@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Recall — turn your workday into searchable memory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --bg:#0b0d12;
+    --panel:#12151c;
+    --panel2:#171b24;
+    --border:#242a36;
+    --text:#e7ebf3;
+    --muted:#8791a8;
+    --accent:#5ee6c4;
+    --accent2:#7c9cff;
+    --warn:#ffb454;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%, #16233a 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:32px 40px 12px;
+    border-bottom:1px solid var(--border);
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:700;
+    font-size:20px;
+    letter-spacing:-0.02em;
+  }
+  .brand .dot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0 4px rgba(94,230,196,0.15);
+  }
+  header p{
+    margin:8px 0 20px;
+    color:var(--muted);
+    max-width:640px;
+    line-height:1.5;
+    font-size:14px;
+  }
+  main{
+    display:grid;
+    grid-template-columns:1.1fr 1fr;
+    gap:20px;
+    padding:24px 40px 20px;
+  }
+  @media (max-width:980px){ main{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:18px 18px 14px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .panel-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .panel-title h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0;
+    font-weight:600;
+  }
+  .rec-toggle{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    color:var(--muted);
+    cursor:pointer;
+    user-select:none;
+  }
+  .rec-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#3a4152;
+    transition:background .2s;
+  }
+  .rec-dot.live{
+    background:#ff5c5c;
+    box-shadow:0 0 0 0 rgba(255,92,92,0.6);
+    animation:pulse 1.6s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(255,92,92,0.55);}
+    70%{box-shadow:0 0 0 8px rgba(255,92,92,0);}
+    100%{box-shadow:0 0 0 0 rgba(255,92,92,0);}
+  }
+
+  #feed{
+    flex:1;
+    overflow-y:auto;
+    max-height:520px;
+    padding-right:4px;
+  }
+  .event{
+    display:flex;
+    gap:10px;
+    padding:9px 8px;
+    border-radius:8px;
+    border-bottom:1px solid var(--border);
+    animation:fadeIn .35s ease;
+  }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:none;} }
+  .event:last-child{border-bottom:none;}
+  .event .app-icon{
+    flex:0 0 30px;
+    width:30px;height:30px;
+    border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;
+    font-weight:700;
+    background:var(--panel2);
+    border:1px solid var(--border);
+  }
+  .event .body{flex:1; min-width:0;}
+  .event .top-line{
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+    font-size:12.5px;
+    color:var(--muted);
+    margin-bottom:2px;
+  }
+  .event .top-line .app{color:var(--text); font-weight:600;}
+  .event .title{font-size:13px; color:#c7cede; margin-bottom:2px;}
+  .event .snippet{
+    font-size:12.5px;
+    color:var(--muted);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  mark{
+    background:rgba(94,230,196,0.28);
+    color:#eafff8;
+    border-radius:3px;
+    padding:0 2px;
+  }
+
+  .search-row{
+    display:flex;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  input[type=text]{
+    flex:1;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:13.5px;
+    outline:none;
+  }
+  input[type=text]:focus{border-color:var(--accent2);}
+  button{
+    background:var(--accent);
+    color:#06231c;
+    border:none;
+    border-radius:8px;
+    padding:10px 16px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  button:hover{filter:brightness(1.08);}
+  button.secondary{
+    background:transparent;
+    color:var(--text);
+    border:1px solid var(--border);
+    font-weight:600;
+  }
+  button.secondary:hover{border-color:var(--accent2);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+
+  .suggestions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:14px;
+  }
+  .chip{
+    font-size:11.5px;
+    color:var(--muted);
+    border:1px solid var(--border);
+    padding:5px 10px;
+    border-radius:100px;
+    cursor:pointer;
+  }
+  .chip:hover{color:var(--text); border-color:var(--accent2);}
+
+  #answer{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px;
+    font-size:13.5px;
+    line-height:1.55;
+    color:#d7dcea;
+    min-height:60px;
+  }
+  #answer .placeholder{color:var(--muted);}
+  #answer .cite{
+    font-size:11.5px;
+    color:var(--accent2);
+    display:block;
+    margin-top:2px;
+  }
+  #sources{
+    margin-top:12px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .source{
+    font-size:12px;
+    color:var(--muted);
+    border-left:2px solid var(--accent2);
+    padding:2px 0 2px 10px;
+  }
+  .source b{color:var(--text);}
+
+  .agent-box{
+    margin-top:16px;
+    border-top:1px dashed var(--border);
+    padding-top:14px;
+  }
+  .agent-box h3{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    margin:0 0 8px;
+  }
+  pre{
+    background:#0a0c11;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px;
+    font-size:12px;
+    color:#9be8d8;
+    overflow-x:auto;
+    margin:0;
+    line-height:1.5;
+  }
+  .hint{font-size:11.5px; color:var(--muted); margin-top:8px;}
+
+  footer{
+    padding:22px 40px 34px;
+    color:var(--muted);
+    font-size:12px;
+    text-align:center;
+    border-top:1px solid var(--border);
+    margin-top:8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span> Recall</div>
+  <p>A toy model of "screen recording as company memory": every window you touch becomes a searchable, timestamped
+     record, and any answer pulled from that record can be turned into a standing automation. Nothing here leaves
+     your browser — the activity feed below is synthetic sample data, generated locally.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-title">
+      <h2>Live activity capture</h2>
+      <div class="rec-toggle" id="recToggle">
+        <span class="rec-dot live" id="recDot"></span>
+        <span id="recLabel">recording</span>
+      </div>
+    </div>
+    <div id="feed"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title"><h2>Ask your memory</h2></div>
+    <div class="search-row">
+      <input type="text" id="query" placeholder="e.g. what did we quote the acme contract at?" />
+      <button id="askBtn">Ask</button>
+    </div>
+    <div class="suggestions" id="suggestions"></div>
+    <div id="answer"><span class="placeholder">Ask a question about the activity feed on the left — answers are
+      assembled from the exact captured snippets, with sources cited below.</span></div>
+    <div id="sources"></div>
+
+    <div class="agent-box" id="agentBox" style="display:none;">
+      <h3>Turn this into an agent</h3>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">Recall noticed a pattern in the matched
+        activity and drafted a standing rule you could deploy instead of answering this manually next time.</p>
+      <pre id="agentCode"></pre>
+      <button class="secondary" id="deployBtn" style="margin-top:10px;">Deploy this agent</button>
+      <div class="hint" id="deployStatus"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by screenpipe (YC S26). Not affiliated with screenpipe.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- synthetic activity generator ----------
+  var APPS = [
+    {name:"Slack", icon:"S", color:"#7c9cff"},
+    {name:"Chrome", icon:"C", color:"#ffb454"},
+    {name:"Docs", icon:"D", color:"#5ee6c4"},
+    {name:"VS Code", icon:"</>", color:"#7c9cff"},
+    {name:"Zoom", icon:"Z", color:"#ff8a8a"},
+    {name:"Notion", icon:"N", color:"#c7cede"},
+    {name:"Mail", icon:"@", color:"#ffb454"}
+  ];
+
+  var SCRIPT = [
+    {app:"Slack", title:"#sales-acme", text:"Priya: quoted Acme the annual plan at $42,000/yr with a 10% multi-seat discount if they sign by Friday."},
+    {app:"Chrome", title:"Acme Corp — pricing sheet.pdf", text:"Viewing pricing sheet: Growth tier $3,500/mo, Enterprise tier custom, minimum 25 seats."},
+    {app:"Docs", title:"Acme MSA — draft v3", text:"Section 4.2: Customer shall pay Vendor $42,000 annually, invoiced quarterly, net 30."},
+    {app:"Zoom", title:"Acme Corp x us — kickoff", text:"Transcript: \"so to confirm, the discounted annual number is 42k, locked for 12 months\" — Priya, 14:02."},
+    {app:"Slack", title:"#eng-standup", text:"Marcus: onboarding flow for Acme needs SSO before their security review on the 30th."},
+    {app:"VS Code", title:"sso_provider.py", text:"# TODO: Acme requires SAML, not OAuth — see security review doc"},
+    {app:"Mail", title:"Re: Acme security questionnaire", text:"Attaching SOC2 report and the SSO implementation timeline requested by their infosec team."},
+    {app:"Notion", title:"Q3 roadmap", text:"SSO/SAML support — priority raised to P0 after Acme deal, target ship date Sep 30."},
+    {app:"Slack", title:"#sales-globex", text:"Dana: Globex wants a pilot, proposed 30 days free then $1,800/mo for up to 10 seats."},
+    {app:"Chrome", title:"Globex — competitor comparison", text:"Comparing us against Vendor X on latency and on-device storage."},
+    {app:"Docs", title:"Globex pilot agreement", text:"Pilot period: 30 days. Post-pilot rate: $1,800/month, cancel anytime with 7 days notice."},
+    {app:"Zoom", title:"Globex weekly sync", text:"Transcript: \"the blocker for Globex going live is the CSV export feature\" — Dana, 09:41."},
+    {app:"VS Code", title:"export_csv.py", text:"# implementing CSV export for Globex pilot, due before next weekly sync"},
+    {app:"Slack", title:"#eng-standup", text:"Marcus: CSV export for Globex is merged, deploying to staging tonight."},
+    {app:"Mail", title:"Globex pilot — kickoff confirmed", text:"Confirming pilot starts Monday, CSV export will be live by then."},
+    {app:"Notion", title:"Hiring plan", text:"Opening a founding support engineer role, budget approved at $145,000 base + equity."},
+    {app:"Chrome", title:"Support eng — job post draft", text:"Editing job description, adding 'on-call rotation' and 'startup experience preferred'."},
+    {app:"Slack", title:"#hiring", text:"Priya: got 40 applicants for the support eng role in the first two days, shortlisting 6 for screens."},
+    {app:"Zoom", title:"Candidate screen — J. Alvarez", text:"Transcript: \"my last role I handled on-call for a 24/7 uptime SLA\" — candidate, 11:15."},
+    {app:"Mail", title:"Offer — J. Alvarez", text:"Extending offer at $145,000 base, standard 4-year equity vest, start date flexible."},
+    {app:"Docs", title:"Board update — September", text:"ARR at $310k, up from $260k last month, driven mainly by the Acme annual contract."},
+    {app:"Slack", title:"#exec", text:"Founder: board wants churn breakdown before Thursday's meeting, can eng pull the numbers."},
+    {app:"VS Code", title:"churn_report.sql", text:"-- query for monthly churn by plan tier, used for board update"},
+    {app:"Notion", title:"Churn analysis — Sep", text:"Churn concentrated in the $49/mo self-serve tier, 6.2% monthly, enterprise churn near zero."},
+    {app:"Chrome", title:"Zendesk — ticket #4821", text:"Customer reports search results feel stale after reconnecting laptop, filed as a sync bug."},
+    {app:"VS Code", title:"sync_worker.rs", text:"// fix: local index wasn't re-indexing after sleep/wake, root cause of ticket #4821"},
+    {app:"Slack", title:"#eng-standup", text:"Marcus: shipped the sleep/wake re-index fix, closing ticket #4821."},
+    {app:"Mail", title:"Re: search feels stale", text:"Following up with the customer — the sync-after-sleep bug is fixed in today's release."}
+  ];
+
+  var feedEl = document.getElementById("feed");
+  var events = []; // {id, app, title, text, ts}
+  var idCounter = 0;
+
+  function appMeta(name){
+    for (var i=0;i<APPS.length;i++){ if (APPS[i].name===name) return APPS[i]; }
+    return APPS[0];
+  }
+
+  function fmtTime(d){
+    var h = d.getHours(), m = d.getMinutes();
+    var ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12; if (h===0) h = 12;
+    return h + ":" + (m<10?"0":"") + m + " " + ampm;
+  }
+
+  function renderEvent(ev){
+    var meta = appMeta(ev.app);
+    var div = document.createElement("div");
+    div.className = "event";
+    div.dataset.id = ev.id;
+    div.innerHTML =
+      '<div class="app-icon" style="color:'+meta.color+'">'+meta.icon+'</div>' +
+      '<div class="body">' +
+        '<div class="top-line"><span class="app">'+ev.app+'</span><span>'+fmtTime(ev.ts)+'</span></div>' +
+        '<div class="title">'+escapeHtml(ev.title)+'</div>' +
+        '<div class="snippet">'+escapeHtml(ev.text)+'</div>' +
+      '</div>';
+    feedEl.insertBefore(div, feedEl.firstChild);
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"]/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];
+    });
+  }
+
+  function pushEvent(script){
+    idCounter++;
+    var ev = {
+      id: idCounter,
+      app: script.app,
+      title: script.title,
+      text: script.text,
+      ts: new Date()
+    };
+    events.push(ev);
+    renderEvent(ev);
+  }
+
+  // seed the first batch immediately so the demo isn't empty
+  var seedCount = 6;
+  for (var i=0;i<seedCount;i++){ pushEvent(SCRIPT[i]); }
+  var nextIndex = seedCount;
+
+  // ---------- simulated continuous recording ----------
+  var recording = true;
+  var recDot = document.getElementById("recDot");
+  var recLabel = document.getElementById("recLabel");
+  var recToggle = document.getElementById("recToggle");
+  var timer = null;
+
+  function tick(){
+    if (nextIndex >= SCRIPT.length){ nextIndex = 0; } // loop the sample script
+    pushEvent(SCRIPT[nextIndex]);
+    nextIndex++;
+  }
+
+  function startRecording(){
+    recording = true;
+    recDot.classList.add("live");
+    recLabel.textContent = "recording";
+    timer = setInterval(tick, 2200);
+  }
+  function stopRecording(){
+    recording = false;
+    recDot.classList.remove("live");
+    recLabel.textContent = "paused";
+    clearInterval(timer);
+  }
+  recToggle.addEventListener("click", function(){
+    if (recording) stopRecording(); else startRecording();
+  });
+  startRecording();
+
+  // ---------- search / ask memory ----------
+  var STOPWORDS = {"the":1,"a":1,"an":1,"what":1,"did":1,"we":1,"is":1,"was":1,"to":1,"for":1,"of":1,"at":1,"on":1,"in":1,"our":1,"i":1,"do":1,"does":1,"and":1,"with":1,"that":1};
+
+  function tokenize(s){
+    return s.toLowerCase().replace(/[^a-z0-9$%.\s]/g," ").split(/\s+/).filter(function(t){
+      return t.length>1 && !STOPWORDS[t];
+    });
+  }
+
+  function scoreEvent(ev, terms){
+    var hay = (ev.title + " " + ev.text).toLowerCase();
+    var score = 0;
+    terms.forEach(function(t){
+      if (hay.indexOf(t) !== -1) score += (ev.text.toLowerCase().indexOf(t)!==-1 ? 2 : 1);
+    });
+    return score;
+  }
+
+  function highlight(text, terms){
+    var out = escapeHtml(text);
+    terms.forEach(function(t){
+      if (!t) return;
+      var re = new RegExp("(" + t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + ")", "ig");
+      out = out.replace(re, "<mark>$1</mark>");
+    });
+    return out;
+  }
+
+  var answerEl = document.getElementById("answer");
+  var sourcesEl = document.getElementById("sources");
+  var agentBox = document.getElementById("agentBox");
+  var agentCode = document.getElementById("agentCode");
+  var deployBtn = document.getElementById("deployBtn");
+  var deployStatus = document.getElementById("deployStatus");
+
+  function runQuery(qRaw){
+    var q = qRaw.trim();
+    if (!q){ return; }
+    var terms = tokenize(q);
+    if (!terms.length){
+      answerEl.innerHTML = '<span class="placeholder">Try including a keyword — a company name, a dollar figure, a feature.</span>';
+      sourcesEl.innerHTML = "";
+      agentBox.style.display = "none";
+      return;
+    }
+    var scored = events.map(function(ev){ return {ev:ev, score:scoreEvent(ev, terms)}; })
+                        .filter(function(r){ return r.score>0; })
+                        .sort(function(a,b){ return b.score-a.score; });
+
+    if (!scored.length){
+      answerEl.innerHTML = '<span class="placeholder">No captured activity matches that yet — recording is still filling in the timeline, try again in a moment.</span>';
+      sourcesEl.innerHTML = "";
+      agentBox.style.display = "none";
+      return;
+    }
+
+    var top = scored.slice(0, 3);
+    var summary = "Based on " + top.length + " captured moment" + (top.length>1?"s":"") + ": " +
+      top.map(function(r){ return "“" + r.ev.text + "”"; }).join("  ");
+    answerEl.innerHTML = '<div>' + highlight(summary, terms) + '</div>' +
+      '<span class="cite">assembled from ' + top.length + ' source event' + (top.length>1?'s':'') + ' — never re-typed, pulled verbatim from the recording</span>';
+
+    sourcesEl.innerHTML = "";
+    top.forEach(function(r){
+      var d = document.createElement("div");
+      d.className = "source";
+      d.innerHTML = '<b>' + r.ev.app + '</b> — ' + escapeHtml(r.ev.title) + ' · ' + fmtTime(r.ev.ts);
+      sourcesEl.appendChild(d);
+    });
+
+    // synthesize a plausible "agent" rule from the matched pattern
+    var bestApp = top[0].ev.app;
+    var keyTerm = terms.find(function(t){ return t.length>3; }) || terms[0];
+    agentCode.textContent =
+      "on new_activity:\n" +
+      "  if app in [\"Slack\", \"Mail\", \"Zoom\", \"Docs\"]\n" +
+      "     and mentions(\"" + keyTerm + "\"):\n" +
+      "      extract(fields: [amount, party, date])\n" +
+      "      update(\"" + guessDoc(keyTerm) + "\", with: extracted)\n" +
+      "      notify(channel: \"#" + guessChannel(bestApp) + "\", if: value_changed)\n";
+    agentBox.style.display = "block";
+    deployStatus.textContent = "";
+    deployBtn.disabled = false;
+    deployBtn.textContent = "Deploy this agent";
+  }
+
+  function guessDoc(term){
+    if (/acme|globex|contract|pricing|deal/.test(term)) return "deal tracker";
+    if (/hiring|offer|candidate/.test(term)) return "hiring pipeline";
+    if (/bug|ticket|sync|fix/.test(term)) return "eng issue log";
+    return "team knowledge base";
+  }
+  function guessChannel(app){
+    if (app==="Slack" || app==="Zoom") return "sales-ops";
+    if (app==="VS Code") return "eng-alerts";
+    return "team-updates";
+  }
+
+  document.getElementById("askBtn").addEventListener("click", function(){
+    runQuery(document.getElementById("query").value);
+  });
+  document.getElementById("query").addEventListener("keydown", function(e){
+    if (e.key === "Enter") runQuery(this.value);
+  });
+
+  deployBtn.addEventListener("click", function(){
+    deployBtn.disabled = true;
+    deployBtn.textContent = "Deploying…";
+    setTimeout(function(){
+      deployBtn.textContent = "Deployed (simulated)";
+      deployStatus.textContent = "This agent would now run silently in the background, watching future activity for this same pattern.";
+    }, 700);
+  });
+
+  var suggestions = [
+    "what did we quote acme at?",
+    "why did globex want a pilot?",
+    "what's the offer for the support eng hire?",
+    "what caused ticket 4821?",
+    "what's driving september churn?"
+  ];
+  var sugEl = document.getElementById("suggestions");
+  suggestions.forEach(function(s){
+    var chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = s;
+    chip.addEventListener("click", function(){
+      document.getElementById("query").value = s;
+      runQuery(s);
+    });
+    sugEl.appendChild(chip);
+  });
+
+})();
+</script>
+</body>
+</html>

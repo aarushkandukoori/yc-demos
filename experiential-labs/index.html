@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tollgate — turn traffic into a model you own</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel-2: #171f2b;
+    --border: #26313f;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --accent: #4fd1a5;
+    --accent-2: #5b9dff;
+    --warn: #f2b84b;
+    --danger: #f2704b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 20% -10%, #14202c 0%, var(--bg) 60%);
+    color: var(--text);
+    padding: 32px 24px 16px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header { margin-bottom: 24px; }
+  header h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  header h1 .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+  }
+  header p { color: var(--muted); margin: 0; max-width: 640px; line-height: 1.5; font-size: 14px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 340px 1fr 320px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .card h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+
+  select, textarea, button {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13.5px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 9px 10px;
+  }
+  textarea { resize: vertical; min-height: 64px; margin-top: 8px; }
+  select { margin-bottom: 4px; }
+
+  button {
+    cursor: pointer;
+    font-weight: 600;
+    border: 1px solid var(--accent-2);
+    background: linear-gradient(180deg, #1b3a5c, #15304d);
+    color: #cfe4ff;
+    margin-top: 10px;
+    transition: transform .08s ease, opacity .15s ease;
+  }
+  button:hover { opacity: .92; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary {
+    border-color: var(--accent);
+    background: linear-gradient(180deg, #1b4a3c, #143a30);
+    color: #d3ffe9;
+  }
+
+  .sample-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sample-btns span {
+    font-size: 11.5px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer;
+    background: var(--panel-2);
+  }
+  .sample-btns span:hover { color: var(--text); border-color: var(--accent-2); }
+
+  .log {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 520px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .req {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    font-size: 13px;
+    animation: fadeIn .25s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity:1; transform:none; } }
+  .req .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .req .prompt { color: var(--text); font-weight: 500; }
+  .badge {
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+    font-weight: 700;
+    letter-spacing: .02em;
+  }
+  .badge.frontier { background: #2b2440; color: #c7b6ff; border: 1px solid #4a3d75; }
+  .badge.owned { background: #143a30; color: #7dffc4; border: 1px solid #1f6b4e; }
+  .badge.cache { background: #3a2f14; color: #ffd97d; border: 1px solid #6b551f; }
+  .req .resp { color: var(--muted); font-size: 12.5px; margin-top: 4px; line-height: 1.4; }
+  .req .meta { display: flex; gap: 12px; margin-top: 6px; font-size: 11px; color: var(--muted); }
+  .req .meta b { color: var(--text); }
+
+  .stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .v { font-weight: 700; }
+  .v.good { color: var(--accent); }
+  .v.mid { color: var(--warn); }
+
+  canvas { width: 100%; height: 130px; display: block; margin-top: 8px; }
+
+  .eval table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  .eval th, .eval td { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--border); }
+  .eval th { color: var(--muted); font-weight: 600; }
+  .eval td.ok { color: var(--accent); font-weight: 700; }
+  .eval td.no { color: var(--danger); font-weight: 700; }
+
+  .progress-wrap { height: 6px; border-radius: 4px; background: var(--panel-2); overflow: hidden; margin-top: 6px; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); width: 0%; transition: width .4s ease; }
+
+  footer {
+    margin-top: 28px;
+    padding: 16px 0 8px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dot"></span>Tollgate</h1>
+    <p>A single endpoint sits in front of every model you call. It routes each request, watches the traffic pile up,
+    and — once there's enough of it — trains a smaller model on your own usage patterns that you own outright.
+    Send a few requests below, then train it and watch the gateway shift traffic onto the cheaper model it just built.</p>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: request composer -->
+    <div class="card">
+      <h2>Send a request</h2>
+      <select id="category">
+        <option value="ticket">Support ticket routing</option>
+        <option value="extract">Order ID extraction</option>
+        <option value="sentiment">Review sentiment</option>
+        <option value="summary">One-line summary</option>
+      </select>
+      <textarea id="promptBox" placeholder="Type a prompt, or pick a sample below..."></textarea>
+      <div class="sample-btns" id="samples"></div>
+      <button class="primary" id="sendBtn">Send through gateway →</button>
+      <button id="burstBtn">Send 8 at once (simulate real traffic)</button>
+    </div>
+
+    <!-- CENTER: live log -->
+    <div class="card">
+      <h2>Gateway log</h2>
+      <div class="log" id="log">
+        <div class="req" style="color:var(--muted); text-align:center; border-style:dashed;">
+          No requests yet — send one to see how it's routed.
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: training / stats -->
+    <div class="card">
+      <h2>Traffic buffer</h2>
+      <div class="stat-row"><span>Requests logged</span><span class="v" id="bufCount">0</span></div>
+      <div class="stat-row"><span>Unique prompts seen</span><span class="v" id="uniqueCount">0</span></div>
+      <div class="stat-row"><span>Cache hit rate</span><span class="v" id="cacheRate">0%</span></div>
+      <div class="progress-wrap"><div class="progress-bar" id="bufProgress"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="bufHint">12 requests until the next training round is worthwhile.</div>
+      <button class="primary" id="trainBtn" disabled>Train owned model on traffic</button>
+
+      <h2 style="margin-top:18px;">Owned model</h2>
+      <div class="stat-row"><span>Version</span><span class="v" id="modelVersion">— (untrained)</span></div>
+      <div class="stat-row"><span>Eval accuracy</span><span class="v" id="modelAcc">—</span></div>
+      <div class="stat-row"><span>Cost / request</span><span class="v" id="modelCost">—</span></div>
+      <div class="stat-row"><span>Live traffic share</span><span class="v" id="modelShare">0%</span></div>
+      <canvas id="chart" width="280" height="130"></canvas>
+
+      <div class="eval">
+        <h2 style="margin-top:16px;">Held-out eval (not in training buffer)</h2>
+        <table>
+          <thead><tr><th>Question</th><th>Frontier</th><th>Owned</th></tr></thead>
+          <tbody id="evalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Experiential Labs (YC S26). Not affiliated with Experiential Labs.
+  </footer>
+</div>
+
+<script>
+(function () {
+  const CATEGORIES = {
+    ticket: {
+      label: "ticket-routing",
+      samples: [
+        "My invoice shows double charges this month",
+        "The app crashes when I export a report",
+        "I want to cancel my subscription",
+        "Can you reset my API key, it leaked"
+      ],
+      frontierAnswer: p => "→ routes to: " + (/charge|invoice|cancel/i.test(p) ? "Billing" : /crash|error|export|api/i.test(p) ? "Engineering" : "General"),
+    },
+    extract: {
+      label: "entity-extraction",
+      samples: [
+        "Order #A19283 hasn't shipped in 9 days",
+        "Refund request for order 55521, wrong size",
+        "Tracking says order ORD-9931 is delayed",
+        "Where is my package, order 4471?"
+      ],
+      frontierAnswer: p => {
+        const m = p.match(/[A-Z]{0,4}-?\d{3,7}/);
+        return "→ order_id: " + (m ? m[0] : "not found");
+      },
+    },
+    sentiment: {
+      label: "sentiment",
+      samples: [
+        "Absolutely love this, works exactly as promised",
+        "Broke on day two, total waste of money",
+        "It's fine, does the job, nothing special",
+        "Support was slow but the product itself is great"
+      ],
+      frontierAnswer: p => {
+        const neg = /broke|waste|slow|terrible|bad/i.test(p);
+        const pos = /love|great|amazing|exactly/i.test(p);
+        return "→ sentiment: " + (neg && !pos ? "negative" : pos ? "positive" : "neutral");
+      },
+    },
+    summary: {
+      label: "one-line-summary",
+      samples: [
+        "The quarterly report shows revenue up 12% driven mostly by the enterprise tier, while churn ticked up slightly in SMB.",
+        "After three rounds of testing the new onboarding flow reduced signup drop-off by roughly a third.",
+        "The incident was caused by a misconfigured cache TTL that served stale pricing data for six minutes.",
+        "Customer interviews this week pointed to slow search as the top complaint across all segments."
+      ],
+      frontierAnswer: p => "→ " + p.split(" ").slice(0, 7).join(" ") + "...",
+    },
+  };
+
+  const EVAL_SETS = {
+    ticket: ["My card was charged twice, please help", "The export button does nothing"],
+    extract: ["Order 88213 never arrived", "Please check order ORD-102 status"],
+    sentiment: ["This is the worst purchase I've made", "Pretty solid, would buy again"],
+    summary: ["Latency dropped 40% after we moved the cache layer closer to the edge, cutting p99 significantly."],
+  };
+
+  const FRONTIER_COST = 0.014;
+  const OWNED_COST = 0.0011;
+  const TRAIN_THRESHOLD = 12;
+
+  let buffer = [];       // all logged requests {category, prompt}
+  let seenPrompts = new Set();
+  let cacheHits = 0;
+  let modelVersion = 0;
+  let acc = {};           // per-category accuracy, 0-100
+  let trainedSince = 0;   // requests added since last training
+  let history = [];       // chart points {v, acc, cost}
+  let totalSent = 0, ownedSent = 0;
+
+  Object.keys(CATEGORIES).forEach(c => acc[c] = 0);
+
+  const el = id => document.getElementById(id);
+  const samplesBox = el("samples");
+  const categorySel = el("category");
+  const promptBox = el("promptBox");
+
+  function renderSamples() {
+    const cat = categorySel.value;
+    samplesBox.innerHTML = "";
+    CATEGORIES[cat].samples.forEach(s => {
+      const span = document.createElement("span");
+      span.textContent = s.length > 34 ? s.slice(0, 34) + "…" : s;
+      span.title = s;
+      span.onclick = () => { promptBox.value = s; };
+      samplesBox.appendChild(span);
+    });
+  }
+  categorySel.onchange = renderSamples;
+  renderSamples();
+
+  function overallAcc() {
+    const cats = Object.keys(acc);
+    return cats.reduce((s, c) => s + acc[c], 0) / cats.length;
+  }
+
+  function routeDecision(cat) {
+    // Owned model only takes traffic once validated (avg acc >= 90) for that category
+    if (acc[cat] >= 90) return "owned";
+    return "frontier";
+  }
+
+  function logRequest(cat, prompt, forcedRoute) {
+    totalSent++;
+    const isCache = seenPrompts.has(cat + "::" + prompt);
+    seenPrompts.add(cat + "::" + prompt);
+    if (isCache) cacheHits++;
+
+    let route = forcedRoute || (isCache ? "cache" : routeDecision(cat));
+    if (route === "owned") ownedSent++;
+
+    const answerFn = CATEGORIES[cat].frontierAnswer;
+    const answer = answerFn(prompt);
+    let cost, label;
+    if (route === "cache") { cost = 0.0001; label = "cache hit"; }
+    else if (route === "owned") { cost = OWNED_COST; label = "owned v" + modelVersion; }
+    else { cost = FRONTIER_COST; label = "frontier"; }
+
+    buffer.push({ cat, prompt });
+    trainedSince++;
+
+    renderLogEntry({ cat, prompt, answer, route, cost, label });
+    updateStats();
+  }
+
+  function renderLogEntry({ cat, prompt, answer, route, cost, label }) {
+    const log = el("log");
+    if (log.children.length === 1 && log.children[0].style.borderStyle === "dashed") {
+      log.innerHTML = "";
+    }
+    const div = document.createElement("div");
+    div.className = "req";
+    const badgeClass = route === "cache" ? "cache" : route === "owned" ? "owned" : "frontier";
+    div.innerHTML = `
+      <div class="top">
+        <span class="prompt">${escapeHtml(prompt.length > 60 ? prompt.slice(0,60)+"…" : prompt)}</span>
+        <span class="badge ${badgeClass}">${label}</span>
+      </div>
+      <div class="resp">${escapeHtml(answer)}</div>
+      <div class="meta"><span>category: <b>${CATEGORIES[cat].label}</b></span><span>cost: <b>$${cost.toFixed(4)}</b></span></div>
+    `;
+    log.insertBefore(div, log.firstChild);
+    while (log.children.length > 40) log.removeChild(log.lastChild);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function updateStats() {
+    el("bufCount").textContent = buffer.length;
+    el("uniqueCount").textContent = seenPrompts.size;
+    el("cacheRate").textContent = totalSent ? Math.round((cacheHits / totalSent) * 100) + "%" : "0%";
+    const pct = Math.min(100, (trainedSince / TRAIN_THRESHOLD) * 100);
+    el("bufProgress").style.width = pct + "%";
+    const remaining = Math.max(0, TRAIN_THRESHOLD - trainedSince);
+    el("bufHint").textContent = remaining > 0
+      ? remaining + " more requests until the next training round is worthwhile."
+      : "Enough fresh traffic collected — training is ready.";
+    el("trainBtn").disabled = trainedSince < TRAIN_THRESHOLD;
+    el("modelShare").textContent = totalSent ? Math.round((ownedSent / totalSent) * 100) + "%" : "0%";
+  }
+
+  function train() {
+    if (trainedSince < TRAIN_THRESHOLD) return;
+    const btn = el("trainBtn");
+    btn.disabled = true;
+    btn.textContent = "Training on " + trainedSince + " examples…";
+
+    setTimeout(() => {
+      modelVersion++;
+      // accuracy improves per category based on how many examples of that category are in the buffer,
+      // diminishing returns via sqrt, plus a little noise
+      const counts = {};
+      buffer.forEach(r => counts[r.cat] = (counts[r.cat] || 0) + 1);
+      Object.keys(CATEGORIES).forEach(c => {
+        const n = counts[c] || 0;
+        const gain = Math.sqrt(n) * 9 + (n > 0 ? 4 : 0);
+        const noise = (Math.random() - 0.3) * 4;
+        acc[c] = Math.max(acc[c], Math.min(97, acc[c] + gain + noise));
+      });
+
+      trainedSince = 0;
+      history.push({ v: modelVersion, acc: overallAcc(), cost: OWNED_COST });
+
+      el("modelVersion").textContent = "v" + modelVersion;
+      const oa = overallAcc();
+      const accSpan = el("modelAcc");
+      accSpan.textContent = oa.toFixed(1) + "%";
+      accSpan.className = "v " + (oa >= 90 ? "good" : "mid");
+      el("modelCost").textContent = "$" + OWNED_COST.toFixed(4) + (oa >= 90 ? " (live)" : " (not yet routed — below 90% gate)");
+
+      btn.textContent = "Train owned model on traffic";
+      renderEval();
+      drawChart();
+      updateStats();
+    }, 900);
+  }
+
+  function simulateOwnedAnswer(cat, prompt, quality) {
+    const correct = CATEGORIES[cat].frontierAnswer(prompt);
+    if (Math.random() * 100 < quality) return correct;
+    // plausible near-miss
+    return correct.replace(/\d+/, m => String(Math.max(0, parseInt(m) + (Math.random() > 0.5 ? 1 : -1))));
+  }
+
+  function renderEval() {
+    const rows = [];
+    Object.keys(EVAL_SETS).forEach(cat => {
+      EVAL_SETS[cat].forEach(q => {
+        const frontier = CATEGORIES[cat].frontierAnswer(q);
+        const owned = modelVersion > 0 ? simulateOwnedAnswer(cat, q, acc[cat]) : "—";
+        const match = owned === frontier;
+        rows.push({ q, frontier, owned, match });
+      });
+    });
+    el("evalBody").innerHTML = rows.map(r => `
+      <tr>
+        <td>${escapeHtml(r.q.length > 42 ? r.q.slice(0,42)+"…" : r.q)}</td>
+        <td>${escapeHtml(r.frontier)}</td>
+        <td class="${r.owned === '—' ? '' : (r.match ? 'ok' : 'no')}">${escapeHtml(r.owned)}</td>
+      </tr>
+    `).join("");
+  }
+  renderEval();
+
+  function drawChart() {
+    const c = el("chart");
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (history.length === 0) {
+      ctx.fillStyle = "#5a6675";
+      ctx.font = "11px sans-serif";
+      ctx.fillText("Train the model to see accuracy climb across versions.", 8, c.height / 2);
+      return;
+    }
+    const padL = 28, padB = 16, padT = 8, padR = 8;
+    const w = c.width - padL - padR, h = c.height - padT - padB;
+    // axes
+    ctx.strokeStyle = "#26313f";
+    ctx.beginPath();
+    ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + h); ctx.lineTo(padL + w, padT + h);
+    ctx.stroke();
+    ctx.fillStyle = "#5a6675";
+    ctx.font = "10px sans-serif";
+    ctx.fillText("100%", 2, padT + 6);
+    ctx.fillText("0%", 10, padT + h + 4);
+
+    const stepX = history.length > 1 ? w / (history.length - 1) : 0;
+    ctx.strokeStyle = "#4fd1a5";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    history.forEach((pt, i) => {
+      const x = padL + stepX * i;
+      const y = padT + h - (pt.acc / 100) * h;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // gate line at 90%
+    ctx.strokeStyle = "#f2b84b";
+    ctx.setLineDash([3, 3]);
+    const gateY = padT + h - 0.9 * h;
+    ctx.beginPath();
+    ctx.moveTo(padL, gateY); ctx.lineTo(padL + w, gateY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "#7dffc4";
+    history.forEach((pt, i) => {
+      const x = padL + stepX * i;
+      const y = padT + h - (pt.acc / 100) * h;
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  drawChart();
+
+  el("sendBtn").onclick = () => {
+    const cat = categorySel.value;
+    const prompt = promptBox.value.trim() || CATEGORIES[cat].samples[Math.floor(Math.random() * CATEGORIES[cat].samples.length)];
+    logRequest(cat, prompt);
+    promptBox.value = "";
+  };
+
+  el("burstBtn").onclick = () => {
+    const cats = Object.keys(CATEGORIES);
+    for (let i = 0; i < 8; i++) {
+      const cat = cats[Math.floor(Math.random() * cats.length)];
+      const pool = CATEGORIES[cat].samples;
+      const prompt = pool[Math.floor(Math.random() * pool.length)];
+      logRequest(cat, prompt);
+    }
+  };
+
+  el("trainBtn").onclick = train;
+
+  updateStats();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Operator Relay — Human-in-the-loop Robot Dispatch (demo)</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#121822;
+    --panel2:#161f2c;
+    --line:#243040;
+    --text:#dbe6f0;
+    --dim:#7d90a3;
+    --accent:#4fd1c5;
+    --accent2:#f6ad55;
+    --danger:#fc8181;
+    --ok:#68d391;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'SF Mono',Consolas,Monaco,monospace;
+    background:radial-gradient(circle at 20% 0%, #142131 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 32px 12px;
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:0.5px;
+  }
+  header p{
+    margin:0;
+    color:var(--dim);
+    font-size:13px;
+    max-width:640px;
+    line-height:1.5;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:1fr 360px;
+    gap:20px;
+    padding:12px 32px 24px;
+  }
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;}
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+  }
+  .panel h2{
+    margin:0 0 10px;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--dim);
+    font-weight:600;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    background:#0d1420;
+    border-radius:6px;
+    border:1px solid var(--line);
+    cursor:pointer;
+  }
+  .controls{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  button{
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid var(--line);
+    padding:8px 14px;
+    border-radius:6px;
+    font-family:inherit;
+    font-size:13px;
+    cursor:pointer;
+    transition:all .15s;
+  }
+  button:hover:not(:disabled){
+    border-color:var(--accent);
+    color:var(--accent);
+  }
+  button:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+  }
+  .dpad{
+    display:grid;
+    grid-template-columns:repeat(3,40px);
+    grid-template-rows:repeat(3,40px);
+    gap:4px;
+    margin-top:10px;
+  }
+  .dpad button{
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:16px;
+  }
+  .status-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+    font-size:13px;
+  }
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:4px 10px;
+    border-radius:20px;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:0.3px;
+  }
+  .badge.autonomous{background:rgba(104,211,145,0.12);color:var(--ok);border:1px solid rgba(104,211,145,0.35);}
+  .badge.pending{background:rgba(246,173,85,0.12);color:var(--accent2);border:1px solid rgba(246,173,85,0.35);}
+  .badge.human{background:rgba(79,209,197,0.12);color:var(--accent);border:1px solid rgba(79,209,197,0.35);}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+  .stats{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:4px;
+  }
+  .stat{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+  }
+  .stat .v{font-size:20px;font-weight:700;}
+  .stat .k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;}
+  #log{
+    height:200px;
+    overflow-y:auto;
+    font-size:12px;
+    line-height:1.6;
+    background:#0a0f17;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:10px 12px;
+    color:#9db2c7;
+  }
+  #log .req{color:var(--accent2);}
+  #log .ok{color:var(--ok);}
+  #log .human{color:var(--accent);}
+  #log .sys{color:var(--dim);}
+  footer{
+    text-align:center;
+    padding:14px;
+    font-size:12px;
+    color:var(--dim);
+    border-top:1px solid var(--line);
+  }
+  .hint{
+    font-size:12px;
+    color:var(--dim);
+    margin-top:10px;
+    line-height:1.5;
+  }
+  .latency{
+    font-variant-numeric:tabular-nums;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Operator Relay <span style="color:var(--dim);font-weight:400;">— human-in-the-loop dispatch demo</span></h1>
+  <p>A toy warehouse robot drives itself until it hits something it can't resolve alone. At that point it opens a
+  teleop request — like an API call, but the handler on the other end is a person. You are that person.
+  Take the stick when it pings you, clear the blocker, hand control back. All data below is synthetic.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="status-row">
+      <span id="statusBadge" class="badge autonomous"><span class="dot"></span>AUTONOMOUS</span>
+      <span class="hint" style="margin:0;">click grid to drop a new obstacle</span>
+    </div>
+    <canvas id="grid" width="640" height="440"></canvas>
+    <div class="controls">
+      <button id="btnReset">↺ reset run</button>
+      <button id="btnObstacle">+ spawn blocker</button>
+      <span class="hint" style="margin:0;">or use WASD once you're patched in as operator</span>
+    </div>
+    <div class="dpad" id="dpad">
+      <span></span><button data-dir="0,-1">▲</button><span></span>
+      <button data-dir="-1,0">◀</button><button data-dir="0,0" id="btnRelease">●</button><button data-dir="1,0">▶</button>
+      <span></span><button data-dir="0,1">▼</button><span></span>
+    </div>
+    <p class="hint" id="modeHint">Robot is driving itself. The d-pad lights up only while a teleop session is active.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Live stats</h2>
+    <div class="stats">
+      <div class="stat"><div class="v" id="statAuto">100%</div><div class="k">Autonomy uptime</div></div>
+      <div class="stat"><div class="v" id="statCalls">0</div><div class="k">Teleop calls</div></div>
+      <div class="stat"><div class="v"><span id="statLatency" class="latency">—</span></div><div class="k">Last handoff latency</div></div>
+      <div class="stat"><div class="v" id="statDelivered">0</div><div class="k">Deliveries completed</div></div>
+    </div>
+    <h2 style="margin-top:18px;">Dispatch log</h2>
+    <div id="log"></div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Aktoria Robotics (YC S26). Not affiliated with Aktoria Robotics.
+</footer>
+
+<script>
+(function(){
+  const canvas = document.getElementById('grid');
+  const ctx = canvas.getContext('2d');
+  const cols = 16, rows = 11;
+  const cw = canvas.width / cols, ch = canvas.height / rows;
+
+  let goal = {x: cols-2, y: rows-2};
+  let robot, obstacles, path, mode, escalationTimer, latencyStart, autoTicks, manualTicks, calls, deliveries, log;
+
+  function cell(x,y){ return {x: Math.max(0,Math.min(cols-1,x)), y: Math.max(0,Math.min(rows-1,y))}; }
+
+  function key(p){ return p.x+','+p.y; }
+
+  function reset(){
+    robot = {x:1, y:1};
+    obstacles = new Set();
+    // a few starter shelves so the warehouse isn't empty
+    [[5,2],[5,3],[5,4],[9,6],[9,7],[9,8],[12,2],[12,3]].forEach(([x,y])=>obstacles.add(x+','+y));
+    mode = 'auto'; // auto | pending | human
+    escalationTimer = null;
+    latencyStart = null;
+    autoTicks = 0; manualTicks = 0; calls = 0; deliveries = 0;
+    log = [];
+    pushLog('sys', 'system boot — autonomy stack online, teleop bridge idle');
+    updateBadge();
+    updateStats();
+    computePath();
+  }
+
+  function pushLog(cls, text){
+    log.unshift({cls, text, t: new Date().toLocaleTimeString()});
+    if(log.length > 60) log.pop();
+    const el = document.getElementById('log');
+    el.innerHTML = log.map(l => `<div class="${l.cls}">[${l.t}] ${l.text}</div>`).join('');
+  }
+
+  function updateBadge(){
+    const b = document.getElementById('statusBadge');
+    const hint = document.getElementById('modeHint');
+    b.className = 'badge ' + (mode==='auto'?'autonomous':mode==='pending'?'pending':'human');
+    b.innerHTML = '<span class="dot"></span>' + (mode==='auto'?'AUTONOMOUS':mode==='pending'?'ESCALATING…':'HUMAN OPERATOR ACTIVE');
+    hint.textContent = mode==='auto'
+      ? "Robot is driving itself. The d-pad lights up only while a teleop session is active."
+      : mode==='pending'
+        ? "Blocker detected. Opening a teleop session and waiting for an operator to pick up..."
+        : "You're patched in. Use WASD or the d-pad to route around the blocker, then hit release.";
+    document.querySelectorAll('#dpad button').forEach(btn => btn.disabled = mode !== 'human');
+  }
+
+  function updateStats(){
+    const total = autoTicks + manualTicks;
+    const pct = total === 0 ? 100 : Math.round(100 * autoTicks / total);
+    document.getElementById('statAuto').textContent = pct + '%';
+    document.getElementById('statCalls').textContent = calls;
+    document.getElementById('statDelivered').textContent = deliveries;
+  }
+
+  // simple BFS path around known obstacles
+  function computePath(){
+    const startKey = key(robot);
+    const goalKey = key(goal);
+    if(startKey === goalKey){ path = []; return; }
+    const q = [robot];
+    const prev = {};
+    const seen = new Set([startKey]);
+    let found = false;
+    while(q.length){
+      const cur = q.shift();
+      if(key(cur) === goalKey){ found = true; break; }
+      const neighbors = [
+        {x:cur.x+1,y:cur.y},{x:cur.x-1,y:cur.y},
+        {x:cur.x,y:cur.y+1},{x:cur.x,y:cur.y-1}
+      ];
+      for(const n of neighbors){
+        if(n.x<0||n.y<0||n.x>=cols||n.y>=rows) continue;
+        const k = key(n);
+        if(seen.has(k) || obstacles.has(k)) continue;
+        seen.add(k);
+        prev[k] = cur;
+        q.push(n);
+      }
+    }
+    if(!found){ path = null; return; }
+    const rev = [];
+    let cur = goal;
+    while(key(cur) !== startKey){
+      rev.push(cur);
+      cur = prev[key(cur)];
+    }
+    rev.reverse();
+    path = rev;
+  }
+
+  function step(){
+    if(mode === 'auto'){
+      if(path === null){
+        triggerEscalation('path blocked — no route around blocker within sensor range');
+        return;
+      }
+      if(path && path.length){
+        robot = path.shift();
+        autoTicks++;
+      }
+      // did we run into a fresh obstacle right ahead? re-check
+      if(path && path.length === 0 && key(robot) === key(goal)){
+        deliveries++;
+        pushLog('ok', `delivery complete — payload dropped at ${goal.x},${goal.y}`);
+        goal = randomGoal();
+        computePath();
+      } else if(path && path.length === 0){
+        computePath();
+      }
+    } else if(mode === 'human'){
+      manualTicks++;
+    }
+    updateStats();
+    draw();
+  }
+
+  function randomGoal(){
+    let g;
+    do {
+      g = {x: 1+Math.floor(Math.random()*(cols-2)), y: 1+Math.floor(Math.random()*(rows-2))};
+    } while(obstacles.has(key(g)) || key(g)===key(robot));
+    return g;
+  }
+
+  function triggerEscalation(reason){
+    if(mode !== 'auto') return;
+    mode = 'pending';
+    calls++;
+    updateBadge();
+    pushLog('req', `POST /teleop/request  reason="${reason}"`);
+    const latency = 60 + Math.floor(Math.random()*260);
+    document.getElementById('statLatency').textContent = latency + 'ms';
+    latencyStart = performance.now();
+    escalationTimer = setTimeout(()=>{
+      mode = 'human';
+      updateBadge();
+      pushLog('human', `200 OK  operator_assigned=you  latency=${latency}ms`);
+      draw();
+    }, latency);
+    draw();
+  }
+
+  function releaseControl(){
+    if(mode !== 'human') return;
+    mode = 'auto';
+    updateBadge();
+    pushLog('ok', 'handoff_complete — control returned to autonomy stack');
+    computePath();
+    draw();
+  }
+
+  function tryMove(dx,dy){
+    if(mode !== 'human') return;
+    const n = {x: robot.x+dx, y: robot.y+dy};
+    if(n.x<0||n.y<0||n.x>=cols||n.y>=rows) return;
+    if(obstacles.has(key(n))){
+      pushLog('sys', 'bump — blocker still occupies target cell');
+      return;
+    }
+    robot = n;
+    manualTicks++;
+    updateStats();
+    draw();
+    if(key(robot) === key(goal)){
+      deliveries++;
+      pushLog('ok', `delivery complete (manual) — payload dropped at ${goal.x},${goal.y}`);
+      goal = randomGoal();
+      releaseControl();
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    for(let x=0;x<=cols;x++){ ctx.beginPath(); ctx.moveTo(x*cw,0); ctx.lineTo(x*cw,canvas.height); ctx.stroke(); }
+    for(let y=0;y<=rows;y++){ ctx.beginPath(); ctx.moveTo(0,y*ch); ctx.lineTo(canvas.width,y*ch); ctx.stroke(); }
+
+    // obstacles
+    ctx.fillStyle = '#2c3a4d';
+    obstacles.forEach(k=>{
+      const [x,y] = k.split(',').map(Number);
+      ctx.fillRect(x*cw+2, y*ch+2, cw-4, ch-4);
+    });
+
+    // path preview (auto mode only)
+    if(mode==='auto' && path){
+      ctx.fillStyle = 'rgba(79,209,197,0.18)';
+      path.forEach(p=> ctx.fillRect(p.x*cw+cw*0.3, p.y*ch+ch*0.3, cw*0.4, ch*0.4));
+    }
+
+    // goal
+    ctx.fillStyle = 'rgba(246,173,85,0.85)';
+    ctx.beginPath();
+    ctx.arc(goal.x*cw+cw/2, goal.y*ch+ch/2, Math.min(cw,ch)*0.28, 0, Math.PI*2);
+    ctx.fill();
+
+    // robot
+    const color = mode==='auto' ? '#68d391' : mode==='pending' ? '#f6ad55' : '#4fd1c5';
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(robot.x*cw+cw/2, robot.y*ch+ch/2, Math.min(cw,ch)*0.32, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // interactions
+  canvas.addEventListener('click', (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+    const x = Math.floor((e.clientX - rect.left) * scaleX / cw);
+    const y = Math.floor((e.clientY - rect.top) * scaleY / ch);
+    const k = x+','+y;
+    if(key(robot)===k || key(goal)===k) return;
+    if(obstacles.has(k)){ obstacles.delete(k); }
+    else { obstacles.add(k); }
+    if(mode==='auto') computePath();
+    draw();
+  });
+
+  document.getElementById('btnObstacle').addEventListener('click', ()=>{
+    if(!path || path.length < 2) return;
+    // place a blocker a couple steps ahead of the robot on its current path
+    const idx = Math.min(1, path.length-1);
+    const target = path[idx];
+    if(key(target)===key(robot) || key(target)===key(goal)) return;
+    obstacles.add(key(target));
+    if(mode==='auto') computePath();
+    draw();
+  });
+
+  document.getElementById('btnReset').addEventListener('click', reset);
+
+  document.querySelectorAll('#dpad button[data-dir]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [dx,dy] = btn.dataset.dir.split(',').map(Number);
+      if(dx===0 && dy===0) return;
+      tryMove(dx,dy);
+    });
+  });
+  document.getElementById('btnRelease').addEventListener('click', releaseControl);
+
+  window.addEventListener('keydown', (e)=>{
+    const k = e.key.toLowerCase();
+    if(k==='w') tryMove(0,-1);
+    else if(k==='s') tryMove(0,1);
+    else if(k==='a') tryMove(-1,0);
+    else if(k==='d') tryMove(1,0);
+    else if(k===' ') { e.preventDefault(); releaseControl(); }
+  });
+
+  reset();
+  draw();
+  setInterval(step, 550);
+
+  // occasionally force an escalation even without a manual blocker, so the
+  // loop is visible without any clicking
+  setInterval(()=>{
+    if(mode==='auto' && Math.random() < 0.35){
+      const aheadIdx = Math.min(0, (path?path.length:1)-1);
+      if(path && path.length){
+        const ahead = path[aheadIdx];
+        if(ahead && key(ahead)!==key(goal)){
+          obstacles.add(key(ahead));
+          computePath();
+          triggerEscalation('unmodeled obstacle in path — confidence below threshold');
+        }
+      }
+    }
+  }, 4000);
+})();
+</script>
+
+</body>
+</html>

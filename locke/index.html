@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Statehouse — Agentic Government Affairs, Toy Demo</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #141b24;
+    --panel-2: #1b2430;
+    --border: #263140;
+    --ink: #e7edf5;
+    --ink-dim: #93a3b8;
+    --accent: #4f9dff;
+    --accent-dim: #2a3f5c;
+    --good: #4fd68b;
+    --warn: #e8b84f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: radial-gradient(circle at 20% 0%, #16202c 0%, var(--bg) 55%);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 32px 40px 12px;
+    max-width: 1080px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 8px 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--ink-dim);
+    font-size: 14.5px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 20px 40px 60px;
+    width: 100%;
+    flex: 1;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 22px;
+  }
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    color: var(--ink);
+  }
+  .panel .hint {
+    color: var(--ink-dim);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .presets {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .preset-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--ink-dim);
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--ink); }
+  .preset-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--ink); }
+  textarea {
+    width: 100%;
+    min-height: 78px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--ink);
+    padding: 12px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 12px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  button.run {
+    background: var(--accent);
+    color: #06121f;
+    border: none;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 11px 20px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  button.run:hover { filter: brightness(1.08); }
+  button.run:disabled { opacity: 0.5; cursor: default; }
+  .status {
+    font-size: 13px;
+    color: var(--ink-dim);
+    font-family: ui-monospace, monospace;
+    min-height: 18px;
+  }
+  .status .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--good);
+    margin-right: 7px;
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  #results { display: none; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+
+  .stakeholder {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 14px;
+    margin-bottom: 10px;
+  }
+  .stakeholder .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .stakeholder .name { font-weight: 600; font-size: 14px; }
+  .stakeholder .score {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .stakeholder .desc { color: var(--ink-dim); font-size: 12.5px; margin-top: 4px; line-height: 1.4; }
+  .bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.6s ease; width: 0%; }
+
+  .bill {
+    border-left: 3px solid var(--warn);
+    background: var(--panel-2);
+    border-radius: 0 10px 10px 0;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    font-size: 12.5px;
+  }
+  .bill .tag {
+    display: inline-block;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--warn);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .bill .title { color: var(--ink); font-weight: 600; margin-bottom: 3px; }
+  .bill .meta { color: var(--ink-dim); }
+
+  .draft-box {
+    background: #0a0f16;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    font-size: 13.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    color: #d7e0ec;
+    font-family: ui-monospace, "SF Mono", monospace;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+  .persona-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .persona-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--ink-dim);
+    padding: 6px 12px;
+    border-radius: 7px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .persona-btn.active { border-color: var(--good); color: var(--good); }
+
+  footer {
+    text-align: center;
+    padding: 22px 20px 30px;
+    font-size: 12px;
+    color: var(--ink-dim);
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Toy demo · agentic government affairs</div>
+  <h1>Statehouse — watch an agent turn a company profile into a government affairs move</h1>
+  <p class="sub">Describe what a company does. A toy agent pipeline scans a synthetic feed of pending
+  federal rules, matches you to the agencies and committees actually relevant to your work, and
+  drafts a first-contact outreach note — the three things an in-house government affairs team spends
+  most of its week doing by hand.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>1 · Describe the company</h2>
+    <div class="hint">Pick a preset or write your own one-liner.</div>
+    <div class="presets" id="presets"></div>
+    <textarea id="companyInput" maxlength="240"></textarea>
+    <div class="row">
+      <button class="run" id="runBtn">Run agent</button>
+      <div class="status" id="statusLine"></div>
+    </div>
+  </div>
+
+  <div id="results">
+    <div class="grid">
+      <div class="panel">
+        <h2>2 · Matched stakeholders</h2>
+        <div class="hint">Ranked by relevance to the profile above, out of a synthetic roster of agencies &amp; committees.</div>
+        <div id="stakeholderList"></div>
+      </div>
+      <div class="panel">
+        <h2>3 · Live regulatory signals</h2>
+        <div class="hint">Pending items from a synthetic tracker that overlap with this company's footprint.</div>
+        <div id="billList"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>4 · Drafted outreach</h2>
+      <div class="hint">Generated from the top-matched stakeholder + the highest-signal bill. Pick a tone.</div>
+      <div class="persona-row" id="personaRow"></div>
+      <div class="draft-box" id="draftBox"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Locke (YC S26). Not affiliated with Locke.
+</footer>
+
+<script>
+(function () {
+  // ---------- synthetic data ----------
+  var PRESETS = [
+    { label: "AI drug discovery", text: "We use machine learning models to discover new small-molecule drug candidates and run automated wet-lab validation for pharma partners." },
+    { label: "Data center developer", text: "We build and operate large-scale data centers for AI training workloads, with heavy grid power draw and cooling infrastructure." },
+    { label: "Autonomous trucking", text: "We build self-driving software for long-haul freight trucks operating on interstate highways." },
+    { label: "Defense drone maker", text: "We manufacture small autonomous drones for perimeter surveillance and battlefield logistics, sold to defense agencies." },
+    { label: "Healthcare AI scribe", text: "We build an AI agent that listens to doctor-patient visits and writes clinical notes directly into hospital records." }
+  ];
+
+  var STAKEHOLDERS = [
+    { name: "FDA — Center for Drug Evaluation", keywords: ["drug","pharma","clinical","molecule","health","medical","patient","hospital"], desc: "Oversees drug approval pathways and software-as-medical-device guidance." },
+    { name: "Dept. of Energy — Office of Electricity", keywords: ["power","grid","energy","data center","cooling","infrastructure"], desc: "Sets grid interconnection and large-load reliability policy." },
+    { name: "NHTSA (Transportation)", keywords: ["truck","vehicle","driving","highway","freight","transportation","autonomous"], desc: "Regulates vehicle safety standards, including autonomous driving systems." },
+    { name: "House Armed Services Committee", keywords: ["defense","drone","military","battlefield","surveillance","weapons"], desc: "Congressional oversight of defense procurement and dual-use tech." },
+    { name: "HHS Office of the National Coordinator", keywords: ["health","hospital","clinical","patient","medical","records","doctor"], desc: "Sets health IT interoperability and patient data rules." },
+    { name: "NIST — AI Safety Institute", keywords: ["ai","model","machine learning","algorithm","training","autonomous"], desc: "Publishes AI risk-management frameworks referenced across agencies." },
+    { name: "Senate Commerce Committee", keywords: ["ai","data","technology","software","infrastructure","autonomous"], desc: "Primary Senate venue for tech and infrastructure legislation." },
+    { name: "FAA — Unmanned Aircraft Systems", keywords: ["drone","aircraft","airspace","surveillance","unmanned"], desc: "Governs airspace access for drones and unmanned aircraft." },
+    { name: "DoD — Defense Innovation Unit", keywords: ["defense","drone","military","dual-use","procurement","autonomous"], desc: "Fast-tracks commercial tech into defense procurement pipelines." },
+    { name: "FERC", keywords: ["power","grid","energy","electricity","data center"], desc: "Regulates interstate electricity transmission and wholesale power markets." }
+  ];
+
+  var BILLS = [
+    { tag: "Draft rule", title: "AI Model Risk Disclosure Requirements", meta: "NIST · comment period open", keywords: ["ai","model","machine learning","algorithm","autonomous","training"] },
+    { tag: "Pending bill", title: "Grid Reliability for Large Load Interconnection Act", meta: "Senate Energy · introduced", keywords: ["power","grid","energy","data center","cooling","electricity"] },
+    { tag: "NPRM", title: "Autonomous Vehicle Safety Framework Update", meta: "NHTSA · 60-day comment window", keywords: ["truck","vehicle","driving","highway","autonomous","transportation"] },
+    { tag: "Markup", title: "Small UAS Defense Procurement Streamlining Act", meta: "House Armed Services · markup scheduled", keywords: ["defense","drone","military","procurement","unmanned"] },
+    { tag: "Draft rule", title: "Clinical AI Documentation Standards", meta: "HHS ONC · comment period open", keywords: ["health","hospital","clinical","patient","medical","records"] },
+    { tag: "Pending bill", title: "Accelerated Therapeutic Pathways Act", meta: "House Energy & Commerce · introduced", keywords: ["drug","pharma","clinical","molecule","patient"] }
+  ];
+
+  var PERSONAS = {
+    direct: "direct & technical",
+    diplomatic: "measured & diplomatic",
+    urgent: "time-sensitive"
+  };
+
+  // ---------- tokenizing / scoring ----------
+  function tokenize(text) {
+    return text.toLowerCase().match(/[a-z-]+/g) || [];
+  }
+
+  function score(tokens, keywords) {
+    var hits = 0;
+    keywords.forEach(function (kw) {
+      var kwTokens = kw.split(" ");
+      var joined = tokens.join(" ");
+      if (joined.indexOf(kw) !== -1) hits += kwTokens.length;
+    });
+    return hits;
+  }
+
+  // ---------- render helpers ----------
+  var presetsEl = document.getElementById("presets");
+  var input = document.getElementById("companyInput");
+  PRESETS.forEach(function (p, i) {
+    var btn = document.createElement("button");
+    btn.className = "preset-btn";
+    btn.textContent = p.label;
+    btn.onclick = function () {
+      document.querySelectorAll(".preset-btn").forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      input.value = p.text;
+    };
+    presetsEl.appendChild(btn);
+    if (i === 0) { btn.classList.add("active"); input.value = p.text; }
+  });
+
+  var runBtn = document.getElementById("runBtn");
+  var statusLine = document.getElementById("statusLine");
+  var results = document.getElementById("results");
+  var stakeholderList = document.getElementById("stakeholderList");
+  var billList = document.getElementById("billList");
+  var draftBox = document.getElementById("draftBox");
+  var personaRow = document.getElementById("personaRow");
+
+  var lastMatches = null;
+  var currentPersona = "direct";
+
+  Object.keys(PERSONAS).forEach(function (key) {
+    var btn = document.createElement("button");
+    btn.className = "persona-btn" + (key === currentPersona ? " active" : "");
+    btn.textContent = PERSONAS[key];
+    btn.onclick = function () {
+      currentPersona = key;
+      document.querySelectorAll(".persona-btn").forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      if (lastMatches) renderDraft(lastMatches);
+    };
+    personaRow.appendChild(btn);
+  });
+
+  var STEPS = [
+    "parsing company profile...",
+    "scanning synthetic agency & committee roster...",
+    "cross-referencing pending regulatory feed...",
+    "drafting first-contact outreach..."
+  ];
+
+  runBtn.onclick = function () {
+    var text = input.value.trim();
+    if (!text) return;
+    runBtn.disabled = true;
+    results.style.display = "none";
+    var tokens = tokenize(text);
+    var i = 0;
+    statusLine.innerHTML = '<span class="dot"></span>' + STEPS[0];
+    var interval = setInterval(function () {
+      i++;
+      if (i < STEPS.length) {
+        statusLine.innerHTML = '<span class="dot"></span>' + STEPS[i];
+        return;
+      }
+      clearInterval(interval);
+      statusLine.innerHTML = '<span class="dot" style="background:var(--good)"></span>done';
+      runBtn.disabled = false;
+      var matches = compute(tokens, text);
+      lastMatches = matches;
+      renderStakeholders(matches.stakeholders);
+      renderBills(matches.bills);
+      renderDraft(matches);
+      results.style.display = "block";
+    }, 420);
+  };
+
+  function compute(tokens, rawText) {
+    var stakeholders = STAKEHOLDERS.map(function (s) {
+      return { name: s.name, desc: s.desc, score: score(tokens, s.keywords) };
+    }).sort(function (a, b) { return b.score - a.score; });
+
+    var bills = BILLS.map(function (b) {
+      return { tag: b.tag, title: b.title, meta: b.meta, score: score(tokens, b.keywords) };
+    }).sort(function (a, b) { return b.score - a.score; });
+
+    var maxS = Math.max(1, stakeholders[0].score);
+    stakeholders.forEach(function (s) { s.pct = Math.round((s.score / maxS) * 100); });
+
+    return {
+      rawText: rawText,
+      stakeholders: stakeholders.slice(0, 4),
+      bills: bills.filter(function (b) { return b.score > 0; }).slice(0, 3).length
+        ? bills.filter(function (b) { return b.score > 0; }).slice(0, 3)
+        : bills.slice(0, 2)
+    };
+  }
+
+  function renderStakeholders(list) {
+    stakeholderList.innerHTML = "";
+    list.forEach(function (s) {
+      var div = document.createElement("div");
+      div.className = "stakeholder";
+      div.innerHTML =
+        '<div class="top"><span class="name">' + s.name + '</span>' +
+        '<span class="score">match ' + s.pct + '%</span></div>' +
+        '<div class="desc">' + s.desc + '</div>' +
+        '<div class="bar"><div style="width:0%"></div></div>';
+      stakeholderList.appendChild(div);
+      requestAnimationFrame(function () {
+        div.querySelector(".bar > div").style.width = s.pct + "%";
+      });
+    });
+  }
+
+  function renderBills(list) {
+    billList.innerHTML = "";
+    list.forEach(function (b) {
+      var div = document.createElement("div");
+      div.className = "bill";
+      div.innerHTML =
+        '<div class="tag">' + b.tag + '</div>' +
+        '<div class="title">' + b.title + '</div>' +
+        '<div class="meta">' + b.meta + '</div>';
+      billList.appendChild(div);
+    });
+  }
+
+  function renderDraft(matches) {
+    var top = matches.stakeholders[0];
+    var bill = matches.bills[0];
+    var summary = matches.rawText.length > 90 ? matches.rawText.slice(0, 90) + "..." : matches.rawText;
+
+    var opener = {
+      direct: "I'll keep this brief. ",
+      diplomatic: "I hope this finds you well. ",
+      urgent: "Flagging this ahead of the comment deadline. "
+    }[currentPersona];
+
+    var ask = {
+      direct: "Could we get 20 minutes this week to walk through it?",
+      diplomatic: "We'd welcome the chance to share more context whenever convenient.",
+      urgent: "Given the comment window, a short call in the next few days would help us align early."
+    }[currentPersona];
+
+    draftBox.textContent =
+      "To: " + top.name + "\n" +
+      "Re: " + bill.title + "\n\n" +
+      opener + "We're a team working on: " + summary + "\n\n" +
+      "We saw that " + top.name + " is currently active on \"" + bill.title +
+      "\" (" + bill.meta + "), and it intersects directly with what we're building.\n\n" +
+      "We'd like to share our perspective as an operator in this space before the record closes, " +
+      "and understand how you're thinking about implementation.\n\n" +
+      ask;
+  }
+})();
+</script>
+</body>
+</html>

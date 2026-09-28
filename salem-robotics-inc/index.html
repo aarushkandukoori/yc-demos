@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sentry Loop — Autonomous Inspection Mission Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0b1116; --panel:#121a22; --panel2:#0e151b; --line:#233140;
+    --text:#dbe6ee; --dim:#7d93a6; --accent:#37e0b0; --accent2:#5db8ff;
+    --warn:#ffb648; --bad:#ff5d5d; --good:#37e0b0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(circle at 20% -10%, #16222c 0%, var(--bg) 55%);
+    color:var(--text); min-height:100vh; display:flex; flex-direction:column;
+  }
+  header{
+    padding:22px 32px 12px; display:flex; align-items:baseline; justify-content:space-between;
+    border-bottom:1px solid var(--line); flex-wrap:wrap; gap:10px;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .logo{
+    width:30px; height:30px; border-radius:8px;
+    background:conic-gradient(from 220deg, var(--accent), var(--accent2), var(--accent));
+    box-shadow:0 0 18px rgba(55,224,176,.35);
+  }
+  h1{font-size:18px; margin:0; letter-spacing:.3px;}
+  .tag{color:var(--dim); font-size:12.5px; margin-top:2px;}
+  .stagebar{display:flex; gap:6px; font-size:12px;}
+  .stage{
+    padding:6px 12px; border-radius:20px; border:1px solid var(--line); color:var(--dim);
+  }
+  .stage.active{border-color:var(--accent); color:var(--accent); background:rgba(55,224,176,.08);}
+  .stage.done{border-color:var(--accent2); color:var(--accent2);}
+
+  main{flex:1; display:grid; grid-template-columns:1.3fr 1fr; gap:0; min-height:0;}
+  @media (max-width:900px){ main{grid-template-columns:1fr;} }
+
+  .stage-panel{padding:20px 28px 28px; border-right:1px solid var(--line); min-width:0;}
+  .side-panel{padding:20px 28px 28px; min-width:0; background:var(--panel2);}
+
+  h2{font-size:15px; margin:0 0 4px; color:var(--text);}
+  .sub{color:var(--dim); font-size:12.5px; margin:0 0 16px;}
+
+  /* PLAN STAGE */
+  .floorplan-wrap{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px;
+  }
+  svg#floor{width:100%; height:auto; display:block; touch-action:none;}
+  .instructions{font-size:12px; color:var(--dim); margin-top:10px; line-height:1.5;}
+  .waypoint-list{margin-top:14px; display:flex; flex-direction:column; gap:6px; max-height:150px; overflow:auto;}
+  .wp-row{
+    display:flex; align-items:center; justify-content:space-between; font-size:12.5px;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 10px;
+  }
+  .wp-row span.n{color:var(--accent2); font-weight:600; margin-right:8px;}
+  .wp-row button{
+    background:none; border:none; color:var(--dim); cursor:pointer; font-size:13px;
+  }
+  .wp-row button:hover{color:var(--bad);}
+
+  .controls{margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;}
+  button.primary{
+    background:linear-gradient(135deg, var(--accent), #22b98a); color:#06120d; border:none;
+    padding:11px 20px; border-radius:9px; font-weight:700; font-size:13.5px; cursor:pointer;
+    box-shadow:0 4px 18px rgba(55,224,176,.25);
+  }
+  button.primary:disabled{opacity:.35; cursor:not-allowed; box-shadow:none;}
+  button.ghost{
+    background:none; border:1px solid var(--line); color:var(--text); padding:11px 16px;
+    border-radius:9px; cursor:pointer; font-size:13.5px;
+  }
+  button.ghost:hover{border-color:var(--accent2); color:var(--accent2);}
+
+  /* EXECUTE */
+  .live-feed{display:flex; flex-direction:column; gap:8px; margin-top:6px; max-height:340px; overflow:auto;}
+  .log-line{
+    font-size:12.5px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    padding:8px 10px; border-radius:7px; border-left:3px solid var(--line); background:var(--panel);
+    display:flex; justify-content:space-between; gap:10px; animation:fade .35s ease;
+  }
+  .log-line.ok{border-color:var(--good);}
+  .log-line.warn{border-color:var(--warn); color:#ffd28a;}
+  .log-line.bad{border-color:var(--bad); color:#ffb3b3;}
+  .log-line .t{color:var(--dim); flex-shrink:0;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+
+  .progress-outer{height:8px; background:var(--panel); border:1px solid var(--line); border-radius:6px; overflow:hidden; margin:14px 0;}
+  .progress-inner{height:100%; width:0%; background:linear-gradient(90deg, var(--accent2), var(--accent)); transition:width .5s ease;}
+
+  /* REPORT */
+  .report-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px;
+  }
+  .report-head{display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px dashed var(--line); padding-bottom:12px; margin-bottom:12px;}
+  .report-head h3{margin:0 0 4px; font-size:14.5px;}
+  .report-head .meta{font-size:11.5px; color:var(--dim); line-height:1.6;}
+  .status-pill{
+    font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; letter-spacing:.4px;
+  }
+  .status-pill.pass{background:rgba(55,224,176,.12); color:var(--good); border:1px solid var(--good);}
+  .status-pill.review{background:rgba(255,182,72,.12); color:var(--warn); border:1px solid var(--warn);}
+
+  table.readings{width:100%; border-collapse:collapse; font-size:12px;}
+  table.readings th{text-align:left; color:var(--dim); font-weight:600; padding:6px 4px; border-bottom:1px solid var(--line);}
+  table.readings td{padding:7px 4px; border-bottom:1px solid #1a2531;}
+  .flagcell{font-weight:700;}
+  .flagcell.ok{color:var(--good);}
+  .flagcell.warn{color:var(--warn);}
+
+  .stat-row{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+  .stat{
+    flex:1; min-width:110px; background:var(--panel2); border:1px solid var(--line); border-radius:9px;
+    padding:10px 12px;
+  }
+  .stat .v{font-size:19px; font-weight:700; color:var(--accent2);}
+  .stat .l{font-size:10.5px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px;}
+
+  .empty-hint{
+    color:var(--dim); font-size:13px; padding:40px 10px; text-align:center; border:1px dashed var(--line);
+    border-radius:12px;
+  }
+
+  footer{
+    text-align:center; font-size:11.5px; color:var(--dim); padding:16px; border-top:1px solid var(--line);
+  }
+  footer a{color:var(--accent2);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <div>
+      <h1>Sentry Loop</h1>
+      <div class="tag">plan → execute → report, for a robot that isn't there yet</div>
+    </div>
+  </div>
+  <div class="stagebar">
+    <div class="stage active" id="tab-plan">1 · Plan</div>
+    <div class="stage" id="tab-exec">2 · Execute</div>
+    <div class="stage" id="tab-report">3 · Report</div>
+  </div>
+</header>
+
+<main>
+  <section class="stage-panel">
+
+    <!-- PLAN -->
+    <div id="panel-plan">
+      <h2>Lay out the inspection route</h2>
+      <p class="sub">Click on the floor plan to drop waypoints. Each one becomes an instrument stop — a place the unit pauses to take a reading.</p>
+      <div class="floorplan-wrap">
+        <svg id="floor" viewBox="0 0 600 360"></svg>
+        <div class="instructions">Synthetic facility layout · click empty floor to add a waypoint · click a waypoint to remove it</div>
+      </div>
+      <div class="waypoint-list" id="wpList"></div>
+      <div class="controls">
+        <button class="ghost" id="btnSample">Load sample route</button>
+        <button class="ghost" id="btnClear">Clear</button>
+        <button class="primary" id="btnRun" disabled>Run mission →</button>
+      </div>
+    </div>
+
+    <!-- EXECUTE -->
+    <div id="panel-exec" style="display:none;">
+      <h2>Mission in progress</h2>
+      <p class="sub">Simulated unit walking the planned route, reading instruments live.</p>
+      <div class="floorplan-wrap">
+        <svg id="floorExec" viewBox="0 0 600 360"></svg>
+      </div>
+      <div class="progress-outer"><div class="progress-inner" id="progBar"></div></div>
+      <div class="live-feed" id="liveFeed"></div>
+    </div>
+
+    <!-- REPORT -->
+    <div id="panel-report" style="display:none;">
+      <h2>Compliance report</h2>
+      <p class="sub">Auto-generated from the run. This is the artifact that leaves the building.</p>
+      <div id="reportBody"></div>
+    </div>
+
+  </section>
+
+  <section class="side-panel">
+    <h2>Why this matters</h2>
+    <p class="sub">The hard part usually isn't the walking — it's turning raw instrument data into something an auditor will accept without a human rewriting it.</p>
+    <div id="sideContent">
+      <div class="empty-hint">Sensor readings and anomaly flags will populate here once the mission starts.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Salem Robotics Inc (YC S26). Not affiliated with Salem Robotics Inc.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- state ----------
+  var waypoints = []; // {x,y,label,instrument}
+  var instruments = ["Rad Dosimeter","Thermal Probe","Gas Sniffer","Vibration Sensor","Pressure Gauge"];
+  var thresholds = {
+    "Rad Dosimeter":{unit:"mrem/h", base:2.0, spread:1.4, limit:6.0},
+    "Thermal Probe":{unit:"°C", base:38, spread:9, limit:65},
+    "Gas Sniffer":{unit:"ppm", base:4, spread:5, limit:20},
+    "Vibration Sensor":{unit:"mm/s", base:1.1, spread:0.8, limit:4.5},
+    "Pressure Gauge":{unit:"psi", base:30, spread:6, limit:55}
+  };
+  var missionResults = [];
+  var missionId = "SL-" + Math.floor(1000 + Math.random()*9000);
+
+  // ---------- tabs ----------
+  var tabs = {plan:document.getElementById('tab-plan'), exec:document.getElementById('tab-exec'), report:document.getElementById('tab-report')};
+  var panels = {plan:document.getElementById('panel-plan'), exec:document.getElementById('panel-exec'), report:document.getElementById('panel-report')};
+
+  function showStage(name){
+    Object.keys(panels).forEach(function(k){
+      panels[k].style.display = (k===name) ? '' : 'none';
+      tabs[k].classList.remove('active');
+    });
+    tabs[name].classList.add('active');
+    if(name==='exec') tabs.plan.classList.add('done');
+    if(name==='report'){ tabs.plan.classList.add('done'); tabs.exec.classList.add('done'); }
+  }
+
+  // ---------- floor plan drawing ----------
+  var NS = "http://www.w3.org/2000/svg";
+  function buildFloor(svg, interactive){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    // background room shapes (purely decorative, synthetic layout)
+    var rooms = [
+      [20,20,260,140],[300,20,280,90],[300,130,130,90],[450,130,130,90],
+      [20,180,180,160],[220,180,200,160],[440,180,140,160]
+    ];
+    rooms.forEach(function(r){
+      var rect = document.createElementNS(NS,'rect');
+      rect.setAttribute('x',r[0]); rect.setAttribute('y',r[1]);
+      rect.setAttribute('width',r[2]); rect.setAttribute('height',r[3]);
+      rect.setAttribute('fill','#101a23'); rect.setAttribute('stroke','#233140');
+      rect.setAttribute('rx','4');
+      svg.appendChild(rect);
+    });
+    // path connecting waypoints in order
+    if(waypoints.length>1){
+      var pts = waypoints.map(function(w){return w.x+','+w.y;}).join(' ');
+      var poly = document.createElementNS(NS,'polyline');
+      poly.setAttribute('points',pts);
+      poly.setAttribute('fill','none');
+      poly.setAttribute('stroke','#5db8ff');
+      poly.setAttribute('stroke-width','2');
+      poly.setAttribute('stroke-dasharray','6 5');
+      poly.setAttribute('opacity','0.7');
+      svg.appendChild(poly);
+    }
+    waypoints.forEach(function(w, i){
+      var g = document.createElementNS(NS,'g');
+      var c = document.createElementNS(NS,'circle');
+      c.setAttribute('cx',w.x); c.setAttribute('cy',w.y); c.setAttribute('r','11');
+      c.setAttribute('fill', w.status==='bad' ? '#3a1a1a' : w.status==='warn' ? '#3a2f14' : w.status==='ok' ? '#123328' : '#0e2530');
+      c.setAttribute('stroke', w.status==='bad' ? '#ff5d5d' : w.status==='warn' ? '#ffb648' : w.status==='ok' ? '#37e0b0' : '#5db8ff');
+      c.setAttribute('stroke-width','2');
+      c.style.cursor = interactive ? 'pointer' : 'default';
+      g.appendChild(c);
+      var t = document.createElementNS(NS,'text');
+      t.setAttribute('x',w.x); t.setAttribute('y',w.y+4);
+      t.setAttribute('text-anchor','middle');
+      t.setAttribute('font-size','10.5'); t.setAttribute('font-weight','700');
+      t.setAttribute('fill', '#dbe6ee');
+      t.textContent = i+1;
+      g.appendChild(t);
+      if(interactive){
+        g.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          waypoints.splice(i,1);
+          refreshPlan();
+        });
+      }
+      svg.appendChild(g);
+    });
+  }
+
+  var floor = document.getElementById('floor');
+  floor.addEventListener('click', function(ev){
+    var rect = floor.getBoundingClientRect();
+    var scaleX = 600/rect.width, scaleY = 360/rect.height;
+    var x = Math.round((ev.clientX-rect.left)*scaleX);
+    var y = Math.round((ev.clientY-rect.top)*scaleY);
+    if(waypoints.length>=8){ return; }
+    var instrument = instruments[waypoints.length % instruments.length];
+    waypoints.push({x:x,y:y,instrument:instrument,status:null});
+    refreshPlan();
+  });
+
+  function refreshPlan(){
+    buildFloor(floor, true);
+    var list = document.getElementById('wpList');
+    list.innerHTML = '';
+    waypoints.forEach(function(w,i){
+      var row = document.createElement('div');
+      row.className = 'wp-row';
+      row.innerHTML = '<span><span class="n">#'+(i+1)+'</span>'+w.instrument+'</span>';
+      var btn = document.createElement('button');
+      btn.textContent = '✕';
+      btn.addEventListener('click', function(){ waypoints.splice(i,1); refreshPlan(); });
+      row.appendChild(btn);
+      list.appendChild(row);
+    });
+    document.getElementById('btnRun').disabled = waypoints.length < 2;
+  }
+
+  document.getElementById('btnSample').addEventListener('click', function(){
+    waypoints = [
+      {x:80,y:70,instrument:"Rad Dosimeter",status:null},
+      {x:220,y:60,instrument:"Thermal Probe",status:null},
+      {x:360,y:70,instrument:"Gas Sniffer",status:null},
+      {x:500,y:170,instrument:"Vibration Sensor",status:null},
+      {x:330,y:250,instrument:"Pressure Gauge",status:null},
+      {x:120,y:260,instrument:"Rad Dosimeter",status:null}
+    ];
+    refreshPlan();
+  });
+  document.getElementById('btnClear').addEventListener('click', function(){
+    waypoints = [];
+    refreshPlan();
+  });
+
+  buildFloor(floor, true);
+
+  // ---------- execute stage ----------
+  var floorExec = document.getElementById('floorExec');
+  var liveFeed = document.getElementById('liveFeed');
+  var progBar = document.getElementById('progBar');
+  var sideContent = document.getElementById('sideContent');
+
+  function rand(min,max){ return min + Math.random()*(max-min); }
+
+  function gaussish(base, spread){
+    var r = (Math.random()+Math.random()+Math.random()-1.5)/1.5;
+    return base + r*spread;
+  }
+
+  document.getElementById('btnRun').addEventListener('click', function(){
+    missionResults = [];
+    liveFeed.innerHTML = '';
+    progBar.style.width = '0%';
+    sideContent.innerHTML = '<div class="empty-hint">Waiting for first reading…</div>';
+    showStage('exec');
+    waypoints.forEach(function(w){ w.status=null; });
+    buildFloor(floorExec, false);
+    runStep(0);
+  });
+
+  function pushLog(cls, text){
+    var el = document.createElement('div');
+    el.className = 'log-line ' + cls;
+    var t = document.createElement('span'); t.className='t';
+    var now = new Date();
+    t.textContent = now.toTimeString().slice(0,8);
+    var m = document.createElement('span');
+    m.textContent = text;
+    el.appendChild(m); el.appendChild(t);
+    liveFeed.appendChild(el);
+    liveFeed.scrollTop = liveFeed.scrollHeight;
+  }
+
+  function runStep(i){
+    if(i >= waypoints.length){
+      pushLog('ok', 'Mission complete — route cleared, returning to dock.');
+      progBar.style.width = '100%';
+      setTimeout(buildReport, 500);
+      return;
+    }
+    var w = waypoints[i];
+    pushLog('', 'Navigating to waypoint #' + (i+1) + ' (' + w.instrument + ')…');
+    progBar.style.width = Math.round((i/waypoints.length)*100) + '%';
+
+    setTimeout(function(){
+      pushLog('', 'Arrived. Sampling ' + w.instrument + '…');
+      setTimeout(function(){
+        var spec = thresholds[w.instrument];
+        var value = Math.max(0, gaussish(spec.base, spec.spread));
+        // occasionally inject a real anomaly for realism
+        if(Math.random() < 0.16){ value = spec.limit * rand(1.05, 1.35); }
+        var over = value > spec.limit;
+        var flagged = over || value > spec.limit*0.8;
+        w.status = over ? 'bad' : (flagged ? 'warn' : 'ok');
+        w.value = value.toFixed(2);
+        w.unit = spec.unit;
+        w.limit = spec.limit;
+        w.over = over;
+        missionResults.push(w);
+
+        var cls = over ? 'bad' : (flagged ? 'warn' : 'ok');
+        var msg = w.instrument + ': ' + value.toFixed(2) + ' ' + spec.unit +
+          (over ? '  ⚠ EXCEEDS LIMIT (' + spec.limit + ' ' + spec.unit + ')' : flagged ? '  ~ approaching limit' : '  ✓ nominal');
+        pushLog(cls, msg);
+
+        sideContent.innerHTML = missionResults.map(function(r, idx){
+          return '<div class="stat" style="margin-bottom:8px; display:block;">' +
+            '<div class="l">Stop #' + (idx+1) + ' · ' + r.instrument + '</div>' +
+            '<div class="v" style="color:' + (r.status==='bad' ? '#ff5d5d' : r.status==='warn' ? '#ffb648' : '#37e0b0') + '">' + r.value + ' ' + r.unit + '</div>' +
+          '</div>';
+        }).join('');
+
+        buildFloor(floorExec, false);
+        setTimeout(function(){ runStep(i+1); }, 450);
+      }, 500);
+    }, 550);
+  }
+
+  // ---------- report stage ----------
+  function buildReport(){
+    showStage('report');
+    var anomalies = missionResults.filter(function(r){ return r.over; });
+    var warnings = missionResults.filter(function(r){ return !r.over && r.status==='warn'; });
+    var passStatus = anomalies.length === 0;
+
+    var rows = missionResults.map(function(r, idx){
+      var flagText = r.over ? 'EXCEEDS LIMIT' : (r.status==='warn' ? 'near limit' : 'nominal');
+      var flagClass = r.over ? 'warn' : (r.status==='warn' ? 'warn' : 'ok');
+      return '<tr><td>#'+(idx+1)+'</td><td>'+r.instrument+'</td><td>'+r.value+' '+r.unit+'</td><td>'+r.limit+' '+r.unit+'</td><td class="flagcell '+flagClass+'">'+flagText+'</td></tr>';
+    }).join('');
+
+    var now = new Date();
+    var html =
+      '<div class="report-card">' +
+        '<div class="report-head">' +
+          '<div>' +
+            '<h3>Autonomous Inspection Report</h3>' +
+            '<div class="meta">Mission ' + missionId + ' · ' + now.toDateString() + ' ' + now.toTimeString().slice(0,8) + '<br>Facility zone: synthetic-demo-01 · Unit: SIM-04</div>' +
+          '</div>' +
+          '<div class="status-pill ' + (passStatus?'pass':'review') + '">' + (passStatus ? 'PASS' : 'NEEDS REVIEW') + '</div>' +
+        '</div>' +
+        '<table class="readings"><thead><tr><th>Stop</th><th>Instrument</th><th>Reading</th><th>Limit</th><th>Flag</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<div class="stat-row">' +
+          '<div class="stat"><div class="v">' + missionResults.length + '</div><div class="l">Stops completed</div></div>' +
+          '<div class="stat"><div class="v">' + anomalies.length + '</div><div class="l">Over limit</div></div>' +
+          '<div class="stat"><div class="v">' + warnings.length + '</div><div class="l">Near limit</div></div>' +
+          '<div class="stat"><div class="v">100%</div><div class="l">Route coverage</div></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="controls" style="margin-top:16px;">' +
+        '<button class="ghost" id="btnAgain">Plan another mission</button>' +
+      '</div>';
+
+    document.getElementById('reportBody').innerHTML = html;
+    document.getElementById('btnAgain').addEventListener('click', function(){
+      waypoints = [];
+      missionResults = [];
+      missionId = "SL-" + Math.floor(1000 + Math.random()*9000);
+      refreshPlan();
+      showStage('plan');
+      sideContent.innerHTML = '<div class="empty-hint">Sensor readings and anomaly flags will populate here once the mission starts.</div>';
+    });
+  }
+
+  refreshPlan();
+})();
+</script>
+
+</body>
+</html>
