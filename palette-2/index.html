@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loomcast — One Brief, Every Format</title>
+<style>
+  :root{
+    --bg:#0f1117;
+    --panel:#171a23;
+    --panel2:#1e2230;
+    --border:#2a2f3d;
+    --text:#e8eaf0;
+    --dim:#8b90a3;
+    --accent:#5fd0c4;
+    --accent2:#f2b555;
+    --accent3:#e07a9e;
+    --danger:#e05a5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(circle at 20% 0%, #1a1e2b 0%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:28px 40px 10px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  header h1{
+    font-size:22px;
+    margin:0;
+    letter-spacing:0.5px;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:2px 0 0;
+    color:var(--dim);
+    font-size:13px;
+    max-width:520px;
+  }
+  main{
+    max-width:1180px;
+    margin:0 auto;
+    padding:10px 40px 60px;
+    display:grid;
+    grid-template-columns:1fr;
+    gap:22px;
+  }
+  .brief-box{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px 22px;
+  }
+  .brief-box label{
+    display:block;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--dim);
+    margin-bottom:8px;
+  }
+  textarea{
+    width:100%;
+    min-height:64px;
+    resize:vertical;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    color:var(--text);
+    padding:12px 14px;
+    font-size:14px;
+    font-family:inherit;
+  }
+  .row{
+    display:flex;
+    gap:12px;
+    align-items:center;
+    margin-top:14px;
+    flex-wrap:wrap;
+  }
+  button{
+    cursor:pointer;
+    border:none;
+    border-radius:9px;
+    font-family:inherit;
+    font-weight:600;
+  }
+  .btn-primary{
+    background:linear-gradient(135deg,var(--accent),#3ea99b);
+    color:#08130f;
+    padding:11px 22px;
+    font-size:14px;
+  }
+  .btn-primary:hover{filter:brightness(1.08);}
+  .chip-toggle{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    padding:8px 14px;
+    border-radius:20px;
+    font-size:13px;
+    color:var(--dim);
+  }
+  .chip-toggle input{accent-color:var(--accent);}
+  .presets{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-left:auto;
+  }
+  .preset-btn{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--dim);
+    padding:7px 12px;
+    font-size:12px;
+    border-radius:8px;
+  }
+  .preset-btn:hover{color:var(--text);border-color:var(--accent);}
+
+  .layer-note{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--panel2);
+    border:1px dashed var(--border);
+    border-radius:10px;
+    padding:10px 14px;
+    font-size:12.5px;
+    color:var(--dim);
+  }
+  .layer-note b{color:var(--accent2);}
+
+  .timeline{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px 22px;
+  }
+  .timeline h2, .outputs h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--dim);
+    margin:0 0 14px;
+  }
+  .shots{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:12px;
+  }
+  .shot{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px 14px;
+    position:relative;
+    transition:border-color .15s;
+  }
+  .shot.active{border-color:var(--accent);}
+  .shot .tag{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    color:var(--accent2);
+    display:block;
+    margin-bottom:6px;
+  }
+  .shot .visual{
+    height:56px;
+    border-radius:6px;
+    margin-bottom:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:11px;
+    color:#0a0d12;
+    font-weight:700;
+  }
+  .shot textarea{
+    min-height:52px;
+    font-size:12.5px;
+    padding:8px 10px;
+  }
+  .shot .model-tag{
+    margin-top:8px;
+    font-size:10px;
+    color:var(--dim);
+    display:flex;
+    justify-content:space-between;
+  }
+
+  .outputs{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px 22px;
+  }
+  .tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:18px;
+    flex-wrap:wrap;
+  }
+  .tab-btn{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--dim);
+    padding:9px 16px;
+    font-size:13px;
+    border-radius:9px;
+  }
+  .tab-btn.active{
+    color:#08130f;
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+  .formats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    gap:20px;
+  }
+  .format-card{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:14px;
+  }
+  .format-card h3{
+    margin:0 0 10px;
+    font-size:12.5px;
+    color:var(--dim);
+    font-weight:600;
+    display:flex;
+    justify-content:space-between;
+  }
+  .frame{
+    background:#0a0c12;
+    border-radius:8px;
+    overflow:hidden;
+    border:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+  }
+  .frame .fshot{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:10px;
+    font-size:11.5px;
+    line-height:1.35;
+    color:#f4f5f8;
+    position:relative;
+  }
+  .frame .fshot .cap{
+    position:relative;
+    z-index:2;
+    text-shadow:0 1px 4px rgba(0,0,0,.6);
+  }
+  .badge{
+    display:inline-block;
+    font-size:9.5px;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    background:rgba(0,0,0,.35);
+    padding:2px 6px;
+    border-radius:5px;
+    position:absolute;
+    top:6px;
+    left:6px;
+    z-index:2;
+  }
+
+  .consistency-off .fshot{filter:saturate(1.4) hue-rotate(0deg);}
+
+  footer{
+    text-align:center;
+    padding:26px 20px 40px;
+    color:var(--dim);
+    font-size:12px;
+    border-top:1px solid var(--border);
+    margin-top:10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Loom<span>cast</span></h1>
+    <p>One creative brief becomes a synced storyboard, then reflows automatically into every output format your audience actually sees. Edit once, propagate everywhere.</p>
+  </div>
+</header>
+
+<main>
+
+  <section class="brief-box">
+    <label for="brief">Creative brief</label>
+    <textarea id="brief" placeholder="e.g. Launch teaser for a solar-powered backpack, energetic and outdoorsy">Launch teaser for a solar-powered backpack, energetic and outdoorsy</textarea>
+    <div class="row">
+      <button class="btn-primary" id="genBtn">Generate storyboard</button>
+      <label class="chip-toggle">
+        <input type="checkbox" id="consistencyToggle" checked>
+        Character &amp; style lock
+      </label>
+      <div class="presets">
+        <button class="preset-btn" data-brief="Product demo for a noise-cancelling desk fan, calm and minimal">Desk fan demo</button>
+        <button class="preset-btn" data-brief="Recruiting spot for a robotics fellowship, bold and futuristic">Recruiting spot</button>
+        <button class="preset-btn" data-brief="Holiday sale promo for a coffee subscription, warm and cozy">Holiday promo</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="layer-note">
+    <span>⟡</span>
+    <span><b>Single generation layer:</b> the storyboard below is the only place you edit. Click any shot's caption and every format downstream updates instantly — nothing gets rebuilt per channel.</span>
+  </div>
+
+  <section class="timeline">
+    <h2>Master storyboard</h2>
+    <div class="shots" id="shots"></div>
+  </section>
+
+  <section class="outputs">
+    <h2>Reflowed outputs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div class="formats" id="formats"></div>
+  </section>
+
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Palette (YC S26). Not affiliated with Palette.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var ROLES = ["Hook","Build","Payoff","CTA"];
+  var MODELS = ["visual-v3 (frame)","motion-v2 (pacing)","copy-v4 (caption)","voice-v1 (VO)"];
+
+  var VISUAL_BANK = {
+    outdoorsy: ["mountain ridge at sunrise","trail runner shot from below","gear unpacked on rock","sun flare through pines"],
+    minimal: ["single object on gradient","slow orbit close-up","negative space title card","soft studio light sweep"],
+    futuristic: ["grid horizon with glow","hologram assembly sequence","neon rim-lit product spin","data lines converging"],
+    cozy: ["steam rising from mug","warm window light","hands wrapped around cup","fireplace bokeh backdrop"]
+  };
+
+  var COLOR_SETS = {
+    outdoorsy: ["#3ea99b","#f2b555","#5fd0c4"],
+    minimal: ["#8b90a3","#5fd0c4","#c9cdd8"],
+    futuristic: ["#e07a9e","#5fd0c4","#8b6bd1"],
+    cozy: ["#f2b555","#e0855a","#e07a9e"]
+  };
+
+  function detectMood(text){
+    text = text.toLowerCase();
+    if(/robot|future|tech|neon|hologram/.test(text)) return "futuristic";
+    if(/calm|minimal|clean|quiet/.test(text)) return "minimal";
+    if(/cozy|warm|holiday|coffee|sale/.test(text)) return "cozy";
+    return "outdoorsy";
+  }
+
+  function subjectFromBrief(text){
+    var words = text.split(/\s+/).filter(function(w){ return w.length > 3; });
+    var stop = ["launch","teaser","product","demo","spot","promo","for","the","and","with"];
+    var picks = words.filter(function(w){ return stop.indexOf(w.toLowerCase()) === -1; });
+    return picks.slice(0,2).join(" ") || "the product";
+  }
+
+  var CAPTION_TEMPLATES = [
+    function(s){ return "Meet " + s + "."; },
+    function(s){ return "Built for the days that don't slow down."; },
+    function(s){ return "This is what " + s + " feels like."; },
+    function(s){ return "Get " + s + " — link in bio."; }
+  ];
+
+  var state = {
+    shots: [],
+    mood: "outdoorsy",
+    activeFormat: 0
+  };
+
+  var FORMATS = [
+    { name:"Landscape Ad", ratio:"16:9", w:100, h:56 },
+    { name:"Social Reel", ratio:"9:16", w:44, h:78 },
+    { name:"Square Post", ratio:"1:1", w:60, h:60 }
+  ];
+
+  function generateStoryboard(brief){
+    var mood = detectMood(brief);
+    var subject = subjectFromBrief(brief);
+    var visuals = VISUAL_BANK[mood];
+    state.mood = mood;
+    state.shots = ROLES.map(function(role, i){
+      return {
+        role: role,
+        visual: visuals[i % visuals.length],
+        caption: CAPTION_TEMPLATES[i](subject),
+        model: MODELS[i % MODELS.length]
+      };
+    });
+  }
+
+  function colorFor(index, locked){
+    var sets = COLOR_SETS[state.mood];
+    if(locked){
+      return sets[index % sets.length];
+    }
+    // when consistency is off, shuffle deterministically-but-oddly per shot
+    var allSets = Object.keys(COLOR_SETS).reduce(function(acc,k){ return acc.concat(COLOR_SETS[k]); },[]);
+    return allSets[(index * 7 + 3) % allSets.length];
+  }
+
+  function renderShots(){
+    var wrap = document.getElementById("shots");
+    wrap.innerHTML = "";
+    var locked = document.getElementById("consistencyToggle").checked;
+    state.shots.forEach(function(shot, i){
+      var el = document.createElement("div");
+      el.className = "shot";
+      el.innerHTML =
+        '<span class="tag">' + shot.role + '</span>' +
+        '<div class="visual" style="background:' + colorFor(i, locked) + '">' + shot.visual + '</div>' +
+        '<textarea data-idx="' + i + '">' + shot.caption + '</textarea>' +
+        '<div class="model-tag"><span>' + shot.model + '</span><span>#' + (i+1) + '</span></div>';
+      wrap.appendChild(el);
+    });
+
+    wrap.querySelectorAll("textarea").forEach(function(ta){
+      ta.addEventListener("input", function(){
+        var idx = parseInt(ta.getAttribute("data-idx"), 10);
+        state.shots[idx].caption = ta.value;
+        renderFormats();
+      });
+    });
+  }
+
+  function renderTabs(){
+    var tabs = document.getElementById("tabs");
+    tabs.innerHTML = "";
+    FORMATS.forEach(function(f, i){
+      var btn = document.createElement("button");
+      btn.className = "tab-btn" + (i === state.activeFormat ? " active" : "");
+      btn.textContent = f.name + " · " + f.ratio;
+      btn.addEventListener("click", function(){
+        state.activeFormat = i;
+        renderTabs();
+      });
+      tabs.appendChild(btn);
+    });
+  }
+
+  function renderFormats(){
+    var wrap = document.getElementById("formats");
+    wrap.innerHTML = "";
+    var locked = document.getElementById("consistencyToggle").checked;
+
+    FORMATS.forEach(function(f){
+      var card = document.createElement("div");
+      card.className = "format-card";
+
+      var frameHeight = f.name === "Social Reel" ? 300 : (f.name === "Square Post" ? 220 : 150);
+      var perShotHeight = Math.floor(frameHeight / state.shots.length);
+
+      var shotsHtml = state.shots.map(function(shot, i){
+        var bg = colorFor(i, locked);
+        return '<div class="fshot" style="height:' + perShotHeight + 'px;background:linear-gradient(135deg,' + bg + 'cc,' + bg + '55)">' +
+                 '<span class="badge">' + shot.role + '</span>' +
+                 '<span class="cap">' + escapeHtml(shot.caption) + '</span>' +
+               '</div>';
+      }).join("");
+
+      card.innerHTML =
+        '<h3>' + f.name + '<span>' + f.ratio + '</span></h3>' +
+        '<div class="frame" style="height:' + frameHeight + 'px">' + shotsHtml + '</div>';
+
+      wrap.appendChild(card);
+    });
+  }
+
+  function escapeHtml(str){
+    var div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function regenerateAll(){
+    var brief = document.getElementById("brief").value.trim() || "a new product";
+    generateStoryboard(brief);
+    renderShots();
+    renderTabs();
+    renderFormats();
+  }
+
+  document.getElementById("genBtn").addEventListener("click", regenerateAll);
+  document.getElementById("consistencyToggle").addEventListener("change", function(){
+    renderShots();
+    renderFormats();
+  });
+
+  document.querySelectorAll(".preset-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      document.getElementById("brief").value = btn.getAttribute("data-brief");
+      regenerateAll();
+    });
+  });
+
+  regenerateAll();
+})();
+</script>
+
+</body>
+</html>

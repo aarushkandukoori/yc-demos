@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Permit Copilot — a local-gov review agent demo</title>
+<style>
+  :root{
+    --bg:#0f1410;
+    --panel:#161d17;
+    --panel2:#1c241d;
+    --line:#2a352b;
+    --text:#e9efe8;
+    --muted:#8fa08f;
+    --accent:#5fbf7a;
+    --accent-dim:#2f5c3d;
+    --warn:#e0b354;
+    --bad:#e0714f;
+    --ok:#5fbf7a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 32px 18px;
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:-0.01em;
+  }
+  header h1 span{color:var(--accent);}
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:640px;
+    line-height:1.5;
+  }
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:380px 1fr;
+    gap:0;
+  }
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;}
+  }
+  .form-panel{
+    padding:24px;
+    border-right:1px solid var(--line);
+  }
+  .form-panel h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0 0 16px;
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:var(--muted);
+    margin:14px 0 5px;
+  }
+  select, input[type="text"], input[type="number"]{
+    width:100%;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 10px;
+    border-radius:6px;
+    font-size:14px;
+    font-family:inherit;
+  }
+  select:focus, input:focus{outline:1px solid var(--accent);}
+  .checkbox-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin:10px 0;
+  }
+  .checkbox-row input{width:auto;}
+  .checkbox-row label{margin:0;font-size:13px;color:var(--text);}
+  .sample-btns{
+    display:flex;
+    gap:8px;
+    margin-top:16px;
+    flex-wrap:wrap;
+  }
+  .sample-btns button{
+    flex:1;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--muted);
+    padding:7px 8px;
+    border-radius:6px;
+    font-size:11.5px;
+    cursor:pointer;
+  }
+  .sample-btns button:hover{border-color:var(--accent-dim);color:var(--text);}
+  .run-btn{
+    margin-top:22px;
+    width:100%;
+    background:var(--accent);
+    color:#0f1410;
+    border:none;
+    padding:13px;
+    border-radius:7px;
+    font-size:14.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .run-btn:hover{background:#6fd18c;}
+  .run-btn:disabled{background:var(--accent-dim);color:var(--muted);cursor:default;}
+
+  .result-panel{
+    padding:24px 32px;
+    overflow-y:auto;
+    max-height:calc(100vh - 120px);
+  }
+  .placeholder{
+    color:var(--muted);
+    font-size:14px;
+    margin-top:60px;
+    text-align:center;
+  }
+  .trace{
+    display:flex;
+    flex-direction:column;
+    gap:0;
+  }
+  .step{
+    display:flex;
+    gap:14px;
+    padding:14px 0;
+    border-bottom:1px solid var(--line);
+    opacity:0;
+    transform:translateY(6px);
+    animation:fadeUp 0.35s ease forwards;
+  }
+  @keyframes fadeUp{
+    to{opacity:1;transform:translateY(0);}
+  }
+  .step-icon{
+    flex-shrink:0;
+    width:26px;
+    height:26px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+    margin-top:2px;
+  }
+  .icon-ok{background:rgba(95,191,122,0.15);color:var(--ok);}
+  .icon-warn{background:rgba(224,179,84,0.15);color:var(--warn);}
+  .icon-bad{background:rgba(224,113,79,0.15);color:var(--bad);}
+  .icon-info{background:rgba(143,160,143,0.15);color:var(--muted);}
+  .step-body .step-title{
+    font-size:14px;
+    font-weight:600;
+    margin-bottom:3px;
+  }
+  .step-body .step-detail{
+    font-size:13px;
+    color:var(--muted);
+    line-height:1.5;
+  }
+  .step-body code{
+    background:var(--panel2);
+    padding:1px 5px;
+    border-radius:4px;
+    font-size:12px;
+    color:var(--text);
+  }
+  .verdict{
+    margin-top:20px;
+    padding:18px 20px;
+    border-radius:10px;
+    border:1px solid var(--line);
+  }
+  .verdict.approve{background:rgba(95,191,122,0.08);border-color:var(--accent-dim);}
+  .verdict.flag{background:rgba(224,179,84,0.08);border-color:#5c5230;}
+  .verdict.deny{background:rgba(224,113,79,0.08);border-color:#5c3a30;}
+  .verdict-title{font-size:15px;font-weight:700;margin-bottom:6px;}
+  .verdict-sub{font-size:13px;color:var(--muted);line-height:1.5;}
+  .confidence-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:12px;
+  }
+  .confidence-bar{
+    flex:1;
+    height:6px;
+    background:var(--panel2);
+    border-radius:3px;
+    overflow:hidden;
+  }
+  .confidence-fill{
+    height:100%;
+    border-radius:3px;
+    background:var(--accent);
+    width:0%;
+    transition:width 0.6s ease;
+  }
+  .confidence-label{
+    font-size:11px;
+    color:var(--muted);
+    white-space:nowrap;
+  }
+  .queue-note{
+    margin-top:14px;
+    font-size:12.5px;
+    color:var(--muted);
+    background:var(--panel2);
+    padding:10px 12px;
+    border-radius:6px;
+    border-left:2px solid var(--accent-dim);
+  }
+  footer{
+    padding:16px 32px;
+    border-top:1px solid var(--line);
+    font-size:12px;
+    color:var(--muted);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Permit Copilot <span>— reviewer-in-the-loop demo</span></h1>
+  <p>A toy version of the core mechanic behind AI-assisted permitting: an agent reads a submitted application against the relevant code sections, checks it for completeness and conflicts, and produces a recommendation with a confidence score — leaving the actual approval to a human reviewer. All applications and rules below are synthetic.</p>
+</header>
+
+<main>
+  <div class="form-panel">
+    <h2>Submit an application</h2>
+
+    <label for="permitType">Permit type</label>
+    <select id="permitType">
+      <option value="fence">Residential Fence</option>
+      <option value="deck">Deck Addition</option>
+      <option value="adu">Accessory Dwelling Unit (ADU)</option>
+      <option value="signage">Commercial Signage</option>
+    </select>
+
+    <label for="zone">Zoning district</label>
+    <select id="zone">
+      <option value="R1">R-1 — Single Family Residential</option>
+      <option value="R2">R-2 — Two Family Residential</option>
+      <option value="C1">C-1 — Neighborhood Commercial</option>
+    </select>
+
+    <label for="height">Proposed height (ft)</label>
+    <input type="number" id="height" value="6" min="0" max="40">
+
+    <label for="setback">Setback from property line (ft)</label>
+    <input type="number" id="setback" value="5" min="0" max="50">
+
+    <label for="lotCoverage">Lot coverage after project (%)</label>
+    <input type="number" id="lotCoverage" value="32" min="0" max="100">
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="hasSurvey" checked>
+      <label for="hasSurvey">Includes signed lot survey</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="hasNeighborNotice">
+      <label for="hasNeighborNotice">Adjacent neighbor notified</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="isHistoric">
+      <label for="isHistoric">Property in historic overlay</label>
+    </div>
+
+    <div class="sample-btns">
+      <button onclick="loadSample('clean')">Load: clean fence</button>
+      <button onclick="loadSample('adu')">Load: tricky ADU</button>
+      <button onclick="loadSample('sign')">Load: bad signage</button>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="runReview()">Run agent review</button>
+  </div>
+
+  <div class="result-panel" id="resultPanel">
+    <div class="placeholder">Submit an application on the left to watch the agent work through it step by step.</div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Verdant (YC S26). Not affiliated with Verdant.
+</footer>
+
+<script>
+// ---- Synthetic code rules, keyed by permit type + zone ----
+const RULES = {
+  fence: {
+    label: "Residential Fence",
+    sections: {
+      R1: {maxHeight:6, minSetback:0, code:"§14-102(a)"},
+      R2: {maxHeight:6, minSetback:0, code:"§14-102(a)"},
+      C1: {maxHeight:8, minSetback:2, code:"§14-108(c)"}
+    },
+    requiresSurvey:false
+  },
+  deck: {
+    label: "Deck Addition",
+    sections: {
+      R1: {maxHeight:12, minSetback:10, code:"§14-210(b)"},
+      R2: {maxHeight:12, minSetback:8, code:"§14-210(b)"},
+      C1: {maxHeight:14, minSetback:5, code:"§14-215(a)"}
+    },
+    requiresSurvey:true
+  },
+  adu: {
+    label: "Accessory Dwelling Unit",
+    sections: {
+      R1: {maxHeight:18, minSetback:5, code:"§14-330(a)", maxCoverage:40},
+      R2: {maxHeight:18, minSetback:5, code:"§14-330(a)", maxCoverage:45},
+      C1: {maxHeight:22, minSetback:5, code:"§14-335(b)", maxCoverage:50}
+    },
+    requiresSurvey:true,
+    requiresNotice:true
+  },
+  signage: {
+    label: "Commercial Signage",
+    sections: {
+      R1: {maxHeight:4, minSetback:5, code:"§14-450(a)"},
+      R2: {maxHeight:4, minSetback:5, code:"§14-450(a)"},
+      C1: {maxHeight:20, minSetback:0, code:"§14-455(c)"}
+    },
+    requiresSurvey:false
+  }
+};
+
+function loadSample(kind){
+  if(kind==='clean'){
+    setForm('fence','R1',6,6,32,true,false,false);
+  } else if(kind==='adu'){
+    setForm('adu','R1',17,4,38,true,false,false);
+  } else if(kind==='sign'){
+    setForm('signage','R1',12,2,20,false,false,false);
+  }
+}
+
+function setForm(type,zone,height,setback,coverage,survey,notice,historic){
+  document.getElementById('permitType').value=type;
+  document.getElementById('zone').value=zone;
+  document.getElementById('height').value=height;
+  document.getElementById('setback').value=setback;
+  document.getElementById('lotCoverage').value=coverage;
+  document.getElementById('hasSurvey').checked=survey;
+  document.getElementById('hasNeighborNotice').checked=notice;
+  document.getElementById('isHistoric').checked=historic;
+}
+
+function runReview(){
+  const btn=document.getElementById('runBtn');
+  btn.disabled=true;
+  btn.textContent="Reviewing…";
+
+  const type=document.getElementById('permitType').value;
+  const zone=document.getElementById('zone').value;
+  const height=parseFloat(document.getElementById('height').value)||0;
+  const setback=parseFloat(document.getElementById('setback').value)||0;
+  const coverage=parseFloat(document.getElementById('lotCoverage').value)||0;
+  const hasSurvey=document.getElementById('hasSurvey').checked;
+  const hasNotice=document.getElementById('hasNeighborNotice').checked;
+  const isHistoric=document.getElementById('isHistoric').checked;
+
+  const rule=RULES[type];
+  const section=rule.sections[zone];
+
+  const findings=[]; // {status: 'ok'|'warn'|'bad', title, detail}
+  let flagCount=0, badCount=0;
+
+  findings.push({
+    status:'info',
+    title:`Loaded ${rule.label} requirements for zone ${zone}`,
+    detail:`Cross-referencing against code section <code>${section.code}</code>: max height ${section.maxHeight} ft, min setback ${section.minSetback} ft${section.maxCoverage?`, max lot coverage ${section.maxCoverage}%`:''}.`
+  });
+
+  // Height check
+  if(height>section.maxHeight){
+    badCount++;
+    findings.push({
+      status:'bad',
+      title:'Height exceeds allowable maximum',
+      detail:`Proposed height of ${height} ft exceeds the ${section.maxHeight} ft limit under <code>${section.code}</code> for zone ${zone}. A variance request would be required to proceed.`
+    });
+  } else if(height>=section.maxHeight-1){
+    flagCount++;
+    findings.push({
+      status:'warn',
+      title:'Height is close to the code limit',
+      detail:`${height} ft is within 1 ft of the ${section.maxHeight} ft cap. Recommend a reviewer confirm the measurement method used on the submitted plans before approval.`
+    });
+  } else {
+    findings.push({status:'ok', title:'Height within allowed range', detail:`${height} ft is comfortably under the ${section.maxHeight} ft limit.`});
+  }
+
+  // Setback check
+  if(setback<section.minSetback){
+    badCount++;
+    findings.push({
+      status:'bad',
+      title:'Setback violates minimum distance',
+      detail:`${setback} ft from the property line is below the ${section.minSetback} ft minimum required by <code>${section.code}</code>.`
+    });
+  } else {
+    findings.push({status:'ok', title:'Setback satisfies minimum distance', detail:`${setback} ft meets the ${section.minSetback} ft requirement.`});
+  }
+
+  // Coverage check (only for types with maxCoverage)
+  if(section.maxCoverage){
+    if(coverage>section.maxCoverage){
+      badCount++;
+      findings.push({
+        status:'bad',
+        title:'Lot coverage exceeds cap',
+        detail:`Post-project coverage of ${coverage}% exceeds the ${section.maxCoverage}% cap for an ADU in zone ${zone}.`
+      });
+    } else if(coverage>=section.maxCoverage-5){
+      flagCount++;
+      findings.push({
+        status:'warn',
+        title:'Lot coverage nearing cap',
+        detail:`${coverage}% is within 5 points of the ${section.maxCoverage}% limit — worth a manual check of the survey's impervious-surface math.`
+      });
+    } else {
+      findings.push({status:'ok', title:'Lot coverage within cap', detail:`${coverage}% is under the ${section.maxCoverage}% limit.`});
+    }
+  }
+
+  // Survey requirement
+  if(rule.requiresSurvey && !hasSurvey){
+    flagCount++;
+    findings.push({
+      status:'warn',
+      title:'Missing required lot survey',
+      detail:`${rule.label} applications require a signed lot survey. None was attached — application is incomplete, not denied.`
+    });
+  } else if(rule.requiresSurvey){
+    findings.push({status:'ok', title:'Lot survey on file', detail:'Signed survey found in submission packet.'});
+  }
+
+  // Neighbor notice requirement (ADU only)
+  if(rule.requiresNotice && !hasNotice){
+    flagCount++;
+    findings.push({
+      status:'warn',
+      title:'Adjacent neighbor notice not confirmed',
+      detail:'ADU applications in this jurisdiction require documented notice to adjacent property owners before final sign-off.'
+    });
+  }
+
+  // Historic overlay — always routes to human, agent can't clear it
+  if(isHistoric){
+    flagCount++;
+    findings.push({
+      status:'warn',
+      title:'Historic overlay district detected',
+      detail:'Properties in the historic overlay require design review board sign-off regardless of code compliance. Routing to a human reviewer rather than auto-recommending.'
+    });
+  }
+
+  renderTrace(findings, badCount, flagCount, rule.label, zone);
+
+  setTimeout(()=>{
+    btn.disabled=false;
+    btn.textContent="Run agent review";
+  }, 900);
+}
+
+function iconFor(status){
+  if(status==='ok') return {cls:'icon-ok', glyph:'✓'};
+  if(status==='warn') return {cls:'icon-warn', glyph:'!'};
+  if(status==='bad') return {cls:'icon-bad', glyph:'✕'};
+  return {cls:'icon-info', glyph:'i'};
+}
+
+function renderTrace(findings, badCount, flagCount, label, zone){
+  const panel=document.getElementById('resultPanel');
+  panel.innerHTML='';
+
+  const trace=document.createElement('div');
+  trace.className='trace';
+  panel.appendChild(trace);
+
+  findings.forEach((f,i)=>{
+    const icon=iconFor(f.status);
+    const step=document.createElement('div');
+    step.className='step';
+    step.style.animationDelay=(i*0.09)+'s';
+    step.innerHTML=`
+      <div class="step-icon ${icon.cls}">${icon.glyph}</div>
+      <div class="step-body">
+        <div class="step-title">${f.title}</div>
+        <div class="step-detail">${f.detail}</div>
+      </div>`;
+    trace.appendChild(step);
+  });
+
+  // Verdict logic
+  let verdictClass, verdictTitle, verdictSub, confidence;
+  if(badCount>0){
+    verdictClass='deny';
+    verdictTitle='Recommendation: does not meet code as submitted';
+    verdictSub=`${badCount} hard violation${badCount>1?'s':''} found against ${label} rules in zone ${zone}. The agent drafts the applicant-facing explanation; a staff reviewer makes the final call.`;
+    confidence=88;
+  } else if(flagCount>0){
+    verdictClass='flag';
+    verdictTitle='Recommendation: needs human review';
+    verdictSub=`No outright violations, but ${flagCount} item${flagCount>1?'s':''} fall outside the agent's confidence threshold for auto-clearing. Queued for a staff reviewer with the specific open questions attached.`;
+    confidence=61;
+  } else {
+    verdictClass='approve';
+    verdictTitle='Recommendation: clears automated checks';
+    verdictSub=`All applicable code sections for ${label} in zone ${zone} are satisfied. Still routed to a staff reviewer for final sign-off — the agent recommends, it doesn't decide.`;
+    confidence=94;
+  }
+
+  const verdict=document.createElement('div');
+  verdict.className='verdict '+verdictClass;
+  verdict.style.opacity=0;
+  verdict.style.animation='fadeUp 0.4s ease forwards';
+  verdict.style.animationDelay=(findings.length*0.09+0.15)+'s';
+  verdict.innerHTML=`
+    <div class="verdict-title">${verdictTitle}</div>
+    <div class="verdict-sub">${verdictSub}</div>
+    <div class="confidence-row">
+      <div class="confidence-bar"><div class="confidence-fill" id="confFill"></div></div>
+      <div class="confidence-label">${confidence}% confidence</div>
+    </div>
+    <div class="queue-note">This case would post to the reviewer queue with the full trace above attached, so a human never has to re-derive why the agent flagged what it flagged.</div>
+  `;
+  panel.appendChild(verdict);
+
+  setTimeout(()=>{
+    const fill=document.getElementById('confFill');
+    if(fill) fill.style.width=confidence+'%';
+  }, 100);
+}
+</script>
+
+</body>
+</html>

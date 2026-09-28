@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal to Verified Fix — Building Ops Loop Demo</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1c2430;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #4fd1a5;
+    --accent-2: #f0b429;
+    --danger: #f76e6e;
+    --blue: #6fb3f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(180deg, #0a0e14, #0d1117 30%);
+    color: var(--text);
+    padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  h1 {
+    font-size: 1.7rem;
+    margin: 0 0 6px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    color: var(--muted);
+    margin: 0;
+    font-size: 0.95rem;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 2px 10px;
+    margin-bottom: 12px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 800px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .panel h2 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  .site-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .site-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: border-color .15s, transform .1s;
+  }
+  .site-btn:hover { border-color: var(--accent); }
+  .site-btn.active { border-color: var(--accent); background: #16241f; }
+  .site-btn .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    display: inline-block; margin-right: 8px;
+  }
+  .dot.ok { background: var(--accent); }
+  .dot.warn { background: var(--accent-2); }
+  .dot.alert { background: var(--danger); }
+  .site-btn .meta { color: var(--muted); font-size: 0.78rem; }
+
+  canvas { width: 100%; height: 160px; display: block; }
+
+  .stat-row {
+    display: flex; gap: 14px; margin-top: 10px; flex-wrap: wrap;
+  }
+  .stat {
+    flex: 1; min-width: 120px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .stat .label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .value { font-size: 1.25rem; font-weight: 600; margin-top: 2px; }
+  .stat .value.bad { color: var(--danger); }
+  .stat .value.good { color: var(--accent); }
+
+  .loop {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .step {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    opacity: 0.35;
+    transition: opacity .3s, border-color .3s;
+  }
+  .step.active { opacity: 1; border-color: var(--accent); }
+  .step.done { opacity: 0.85; }
+  .step .num {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: #263241;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700; color: var(--muted);
+  }
+  .step.active .num { background: var(--accent); color: #06241a; }
+  .step.done .num { background: var(--blue); color: #06241a; }
+  .step .body h3 { margin: 0 0 4px; font-size: 0.92rem; }
+  .step .body p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
+  .step .body .detail { color: var(--text); font-size: 0.82rem; margin-top: 6px; }
+
+  button.run {
+    background: var(--accent);
+    color: #06241a;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    margin-top: 14px;
+    width: 100%;
+  }
+  button.run:disabled { background: #33403a; color: #6c7a72; cursor: not-allowed; }
+  button.run:hover:not(:disabled) { filter: brightness(1.08); }
+
+  .approve-row { display: flex; gap: 8px; margin-top: 8px; }
+  .approve-row button {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #1c2430;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.82rem;
+  }
+  .approve-row button.yes { border-color: var(--accent); color: var(--accent); }
+  .approve-row button.no { border-color: var(--danger); color: var(--danger); }
+  .approve-row button:hover { filter: brightness(1.2); }
+
+  .verify-box {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #101c14;
+    border: 1px solid #234030;
+    font-size: 0.82rem;
+    color: var(--accent);
+    display: none;
+  }
+  .verify-box.show { display: block; }
+
+  footer {
+    max-width: 980px;
+    margin: 48px auto 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.78rem;
+    border-top: 1px solid var(--border);
+    padding-top: 18px;
+  }
+
+  .hint { font-size: 0.75rem; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge">toy simulation · synthetic data</div>
+    <h1>Signal → Diagnosis → Fix → Verify</h1>
+    <p>
+      A minimal sandbox for the core loop behind autonomous facilities operations:
+      stream in meter/equipment data, catch a drifting signal before it becomes a wasted bill,
+      let the system propose a fix, approve it, and watch the fix get checked against real
+      follow-up data instead of just being marked "done."
+    </p>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Live sites</h2>
+      <div class="site-list" id="siteList"></div>
+
+      <h2 style="margin-top:18px;">Meter trace (kWh, last 24h)</h2>
+      <canvas id="chart" width="600" height="160"></canvas>
+
+      <div class="stat-row">
+        <div class="stat">
+          <div class="label">Baseline draw</div>
+          <div class="value" id="statBaseline">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Current draw</div>
+          <div class="value" id="statCurrent">—</div>
+        </div>
+        <div class="stat">
+          <div class="label">Est. waste / mo</div>
+          <div class="value bad" id="statWaste">—</div>
+        </div>
+      </div>
+      <div class="hint">Trace is synthetic — regenerated per site to illustrate a plausible RTU short-cycling / setpoint-drift pattern, not real telemetry.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Operating loop</h2>
+      <div class="loop" id="loop">
+        <div class="step" data-step="1">
+          <div class="num">1</div>
+          <div class="body">
+            <h3>Detect</h3>
+            <p>Scan meter + equipment signal for deviation from learned baseline.</p>
+            <div class="detail" id="d1"></div>
+          </div>
+        </div>
+        <div class="step" data-step="2">
+          <div class="num">2</div>
+          <div class="body">
+            <h3>Diagnose</h3>
+            <p>Rank likely root causes against the site's equipment model.</p>
+            <div class="detail" id="d2"></div>
+          </div>
+        </div>
+        <div class="step" data-step="3">
+          <div class="num">3</div>
+          <div class="body">
+            <h3>Propose work order</h3>
+            <p>Draft the fix, cost, and expected savings for human sign-off.</p>
+            <div class="detail" id="d3"></div>
+            <div class="approve-row" id="approveRow" style="display:none;">
+              <button class="yes" id="btnApprove">Approve &amp; dispatch</button>
+              <button class="no" id="btnReject">Reject</button>
+            </div>
+          </div>
+        </div>
+        <div class="step" data-step="4">
+          <div class="num">4</div>
+          <div class="body">
+            <h3>Verify</h3>
+            <p>Re-pull meter data after the fix and confirm the savings actually landed.</p>
+            <div class="detail" id="d4"></div>
+            <div class="verify-box" id="verifyBox"></div>
+          </div>
+        </div>
+      </div>
+      <button class="run" id="runBtn">Run detection on selected site</button>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Edviro (YC S26). Not affiliated with Edviro.
+  </footer>
+</div>
+
+<script>
+(function(){
+  const SITES = [
+    { id: 'sch-14', name: 'Site 14 — Middle School', status: 'alert',
+      baseline: 42, driftType: 'RTU short-cycling', equip: 'RTU-3 (rooftop unit, zone B)',
+      cause: 'Compressor short-cycling from a failed economizer damper stuck 40% open, pulling in unconditioned air',
+      fixCost: 640, monthlySave: 1180 },
+    { id: 'chr-02', name: 'Church Rd — Office Campus', status: 'warn',
+      baseline: 31, driftType: 'setpoint drift', equip: 'AHU-1 (main air handler)',
+      cause: 'Heating setpoint drifted 6°F above schedule after a BMS override was left active overnight',
+      fixCost: 0, monthlySave: 410 },
+    { id: 'nrc-09', name: 'North Campus — Gym Annex', status: 'ok',
+      baseline: 25, driftType: 'nominal', equip: 'RTU-1',
+      cause: 'No deviation — draw tracking within 3% of learned baseline',
+      fixCost: 0, monthlySave: 0 },
+  ];
+
+  let current = SITES[0];
+  let trace = [];
+  let runState = 0; // 0 idle, 1..4 steps, 5 verified
+  let postFixTrace = null;
+
+  const siteList = document.getElementById('siteList');
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  const runBtn = document.getElementById('runBtn');
+
+  function seededRandom(seed){
+    let s = seed;
+    return function(){
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  }
+
+  function genTrace(site, fixed){
+    const rand = seededRandom(site.id.charCodeAt(0)*97 + site.id.charCodeAt(2)*13 + (fixed?777:1));
+    const pts = [];
+    for (let h = 0; h < 24; h++){
+      let v = site.baseline + Math.sin(h/24*Math.PI*2)*4 + (rand()-0.5)*3;
+      if (!fixed && site.status !== 'ok'){
+        if (site.driftType === 'RTU short-cycling' && h > 10){
+          v += 10 + Math.sin(h*1.7)*6 + rand()*6;
+        }
+        if (site.driftType === 'setpoint drift' && h > 6){
+          v += 7 + rand()*3;
+        }
+      }
+      pts.push(Math.max(4, v));
+    }
+    return pts;
+  }
+
+  function renderSiteList(){
+    siteList.innerHTML = '';
+    SITES.forEach(site => {
+      const btn = document.createElement('div');
+      btn.className = 'site-btn' + (site.id === current.id ? ' active' : '');
+      btn.innerHTML = `<span><span class="dot ${site.status}"></span>${site.name}</span><span class="meta">${site.equip}</span>`;
+      btn.onclick = () => { selectSite(site); };
+      siteList.appendChild(btn);
+    });
+  }
+
+  function selectSite(site){
+    current = site;
+    trace = genTrace(site, false);
+    postFixTrace = null;
+    runState = 0;
+    renderSiteList();
+    drawChart(trace);
+    updateStats(trace);
+    resetLoop();
+  }
+
+  function drawChart(data){
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+    const max = Math.max(...data, 40) * 1.15;
+    const min = 0;
+    ctx.strokeStyle = '#2a3441';
+    ctx.lineWidth = 1;
+    for (let i=0;i<=3;i++){
+      const y = h - (h/3)*i;
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.strokeStyle = data === postFixTrace ? '#4fd1a5' : (current.status === 'alert' ? '#f76e6e' : current.status === 'warn' ? '#f0b429' : '#4fd1a5');
+    ctx.lineWidth = 2.5;
+    data.forEach((v,i) => {
+      const x = (w/(data.length-1))*i;
+      const y = h - ((v-min)/(max-min))*h;
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    // baseline dashed
+    const baseY = h - ((current.baseline-min)/(max-min))*h;
+    ctx.setLineDash([4,4]);
+    ctx.strokeStyle = '#6fb3f2';
+    ctx.beginPath(); ctx.moveTo(0,baseY); ctx.lineTo(w,baseY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function updateStats(data){
+    const cur = data[data.length-1];
+    document.getElementById('statBaseline').textContent = current.baseline.toFixed(1) + ' kWh';
+    document.getElementById('statCurrent').textContent = cur.toFixed(1) + ' kWh';
+    const wasteEl = document.getElementById('statWaste');
+    if (data === postFixTrace) {
+      wasteEl.textContent = '$0 (resolved)';
+      wasteEl.className = 'value good';
+    } else {
+      wasteEl.textContent = current.monthlySave > 0 ? ('$' + current.monthlySave + '/mo') : '$0';
+      wasteEl.className = current.monthlySave > 0 ? 'value bad' : 'value good';
+    }
+  }
+
+  function resetLoop(){
+    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active','done'); });
+    ['d1','d2','d3','d4'].forEach(id => document.getElementById(id).textContent = '');
+    document.getElementById('approveRow').style.display = 'none';
+    document.getElementById('verifyBox').classList.remove('show');
+    runBtn.disabled = false;
+    runBtn.textContent = 'Run detection on selected site';
+  }
+
+  function setStep(n, text){
+    const step = document.querySelector(`.step[data-step="${n}"]`);
+    step.classList.add('active');
+    document.getElementById('d'+n).textContent = text;
+  }
+  function finishStep(n){
+    const step = document.querySelector(`.step[data-step="${n}"]`);
+    step.classList.remove('active');
+    step.classList.add('done');
+  }
+
+  function runDetection(){
+    resetLoop();
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running...';
+
+    setTimeout(() => {
+      if (current.status === 'ok'){
+        setStep(1, 'No anomaly found. Draw is within 3% of the learned baseline — loop stops here.');
+        finishStep(1);
+        runBtn.disabled = false;
+        runBtn.textContent = 'Run detection on selected site';
+        return;
+      }
+
+      setStep(1, `Flagged ${current.equip}: draw is ${((trace[trace.length-1]/current.baseline-1)*100).toFixed(0)}% above baseline (${current.driftType}).`);
+      finishStep(1);
+
+      setTimeout(() => {
+        setStep(2, `Top hypothesis: ${current.cause}`);
+        finishStep(2);
+
+        setTimeout(() => {
+          setStep(3, `Draft work order — repair cost $${current.fixCost}, projected savings $${current.monthlySave}/mo. Awaiting approval.`);
+          document.getElementById('approveRow').style.display = 'flex';
+        }, 550);
+      }, 550);
+    }, 500);
+  }
+
+  document.getElementById('btnApprove').onclick = () => {
+    document.getElementById('approveRow').style.display = 'none';
+    finishStep(3);
+    setStep(4, 'Dispatched. Re-sampling meter for the 24h window after the fix...');
+    setTimeout(() => {
+      postFixTrace = genTrace(current, true);
+      drawChart(postFixTrace);
+      updateStats(postFixTrace);
+      const actualSave = current.monthlySave - Math.round(current.monthlySave * (0.05 + Math.random()*0.1));
+      finishStep(4);
+      const box = document.getElementById('verifyBox');
+      box.classList.add('show');
+      box.textContent = `Verified against follow-up meter data: draw back to baseline. Measured savings ≈ $${actualSave}/mo (work order closed, not just marked complete).`;
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run detection on selected site';
+    }, 900);
+  };
+
+  document.getElementById('btnReject').onclick = () => {
+    document.getElementById('approveRow').style.display = 'none';
+    document.getElementById('d3').textContent += ' — Rejected by reviewer. No dispatch.';
+    finishStep(3);
+    document.getElementById('d4').textContent = 'Loop halted: nothing to verify without an approved fix.';
+    runBtn.disabled = false;
+    runBtn.textContent = 'Run detection on selected site';
+  };
+
+  runBtn.onclick = runDetection;
+
+  selectSite(SITES[0]);
+})();
+</script>
+</body>
+</html>

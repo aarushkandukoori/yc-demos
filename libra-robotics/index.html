@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crew Sim — Multi-Robot Build Choreography</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #131a22;
+    --panel-2: #1a232d;
+    --line: #263140;
+    --text: #e7edf3;
+    --dim: #8ea0b2;
+    --accent: #4fd1a5;
+    --accent-2: #5bb8ff;
+    --warn: #f5a25d;
+    --bad: #f16565;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 800px at 20% -10%, #16202b 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 32px 10px;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.3px;
+  }
+  header p {
+    margin: 0;
+    color: var(--dim);
+    font-size: 14px;
+    max-width: 720px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+    padding: 20px 32px;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--dim);
+  }
+  #yard {
+    width: 100%;
+    height: 420px;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px) 0 0 / 40px 40px,
+      var(--panel-2);
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+  .row-slot {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 46px;
+    border-left: 1px dashed rgba(255,255,255,0.06);
+  }
+  .panel-slot {
+    position: absolute;
+    width: 38px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.03);
+    transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+  }
+  .panel-slot.placed {
+    background: linear-gradient(135deg, #1c3b52, #123047);
+    border-color: var(--accent-2);
+    box-shadow: 0 0 0 1px rgba(91,184,255,0.15);
+  }
+  .panel-slot.fastened {
+    background: linear-gradient(135deg, #14392e, #0f2b24);
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(79,209,165,0.25);
+  }
+  .bot {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #06121a;
+    transition: left 0.5s cubic-bezier(.4,0,.2,1), top 0.5s cubic-bezier(.4,0,.2,1);
+    z-index: 3;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  }
+  .bot.a { background: var(--accent); }
+  .bot.b { background: var(--warn); }
+  .bot.c { background: var(--accent-2); }
+  .bot.busy { animation: pulse 0.9s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.18); }
+  }
+  #controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--accent);
+    color: #06251c;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 7px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+  }
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  button.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+  #log {
+    height: 260px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.65;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  #log .entry { margin-bottom: 2px; }
+  #log .tag { color: var(--dim); }
+  #log .a-tag { color: var(--accent); }
+  #log .b-tag { color: var(--warn); }
+  #log .c-tag { color: var(--accent-2); }
+  #log .sys { color: #6f8299; font-style: italic; }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .label { color: var(--dim); }
+  .stat-row .value { font-weight: 700; font-variant-numeric: tabular-nums; }
+  #skill-list {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .skill-chip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+  }
+  .skill-chip .name { color: var(--text); }
+  .skill-chip .meter {
+    width: 90px;
+    height: 6px;
+    background: #0d141b;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .skill-chip .meter-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.4s ease;
+  }
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--dim);
+  }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  footer {
+    text-align: center;
+    padding: 18px;
+    color: var(--dim);
+    font-size: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .fault-btn {
+    background: var(--bad);
+    color: #2a0808;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Crew Sim — three robots, one build, zero human choreography</h1>
+  <p>
+    A toy simulation of a coordinated robotic build crew. Three independent units —
+    a <strong style="color:var(--accent)">placer</strong>, a <strong style="color:var(--warn)">feeder</strong>,
+    and a <strong style="color:var(--accent-2)">fastener</strong> — negotiate a shared worksite in real
+    time over a synthetic radio channel. No central script tells them what to do step by step; each
+    bot reacts to what the others broadcast. Learned skills (alignment, fastening, handoff) get a
+    little faster and more reliable each time the crew repeats them, and you can inject a fault
+    mid-run to see the crew renegotiate around it.
+  </p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Worksite — top-down view</h2>
+    <div id="yard"></div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--accent)"></i>Placer (002A)</span>
+      <span><i class="dot" style="background:var(--warn)"></i>Feeder (002B)</span>
+      <span><i class="dot" style="background:var(--accent-2)"></i>Fastener (002C)</span>
+      <span><i class="dot" style="background:var(--bad)"></i>Fault injected</span>
+    </div>
+    <div id="controls">
+      <button id="startBtn">Start build row</button>
+      <button id="pauseBtn" class="secondary" disabled>Pause</button>
+      <button id="resetBtn" class="secondary">Reset</button>
+      <button id="faultBtn" class="fault-btn" disabled>Inject fault (misaligned panel)</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Crew radio channel</h2>
+    <div id="log"></div>
+
+    <h2 style="margin-top:18px;">Run stats</h2>
+    <div class="stat-row"><span class="label">Panels placed</span><span class="value" id="statPlaced">0 / 12</span></div>
+    <div class="stat-row"><span class="label">Panels fastened</span><span class="value" id="statFastened">0 / 12</span></div>
+    <div class="stat-row"><span class="label">Avg cycle time</span><span class="value" id="statCycle">—</span></div>
+    <div class="stat-row"><span class="label">Faults recovered</span><span class="value" id="statFaults">0</span></div>
+
+    <div id="skill-list">
+      <div class="skill-chip">
+        <span class="name">Alignment skill</span>
+        <div class="meter"><div class="meter-fill" id="meterAlign" style="width:40%"></div></div>
+      </div>
+      <div class="skill-chip">
+        <span class="name">Fastening skill</span>
+        <div class="meter"><div class="meter-fill" id="meterFasten" style="width:40%"></div></div>
+      </div>
+      <div class="skill-chip">
+        <span class="name">Handoff skill</span>
+        <div class="meter"><div class="meter-fill" id="meterHandoff" style="width:40%"></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Libra Robotics (YC S26). Not affiliated with Libra Robotics.
+</footer>
+
+<script>
+(function () {
+  const TOTAL_PANELS = 12;
+  const yard = document.getElementById('yard');
+  const logEl = document.getElementById('log');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const faultBtn = document.getElementById('faultBtn');
+
+  const statPlaced = document.getElementById('statPlaced');
+  const statFastened = document.getElementById('statFastened');
+  const statCycle = document.getElementById('statCycle');
+  const statFaults = document.getElementById('statFaults');
+
+  const meterAlign = document.getElementById('meterAlign');
+  const meterFasten = document.getElementById('meterFasten');
+  const meterHandoff = document.getElementById('meterHandoff');
+
+  const YARD_W = yard.clientWidth || 600;
+  const SLOT_COUNT = TOTAL_PANELS;
+  const SLOT_GAP = 44;
+  const SLOT_Y = 190;
+  const START_X = 20;
+
+  let slots = [];
+  let bots = { a: null, b: null, c: null };
+  let state = null;
+  let running = false;
+  let paused = false;
+  let timer = null;
+  let skills = { align: 40, fasten: 40, handoff: 40 };
+  let cycleTimes = [];
+  let faultsRecovered = 0;
+  let faultPending = false;
+
+  function buildYard() {
+    yard.innerHTML = '';
+    slots = [];
+    for (let i = 0; i < SLOT_COUNT; i++) {
+      const el = document.createElement('div');
+      el.className = 'panel-slot';
+      const x = START_X + i * SLOT_GAP;
+      el.style.left = x + 'px';
+      el.style.top = SLOT_Y + 'px';
+      yard.appendChild(el);
+      slots.push({ el, placed: false, fastened: false, x, y: SLOT_Y });
+    }
+    bots.a = makeBot('a', 'A', START_X, SLOT_Y - 60);
+    bots.b = makeBot('b', 'B', START_X, SLOT_Y + 70);
+    bots.c = makeBot('c', 'C', START_X + 30, SLOT_Y - 60);
+  }
+
+  function makeBot(cls, label, x, y) {
+    const el = document.createElement('div');
+    el.className = 'bot ' + cls;
+    el.textContent = label;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    yard.appendChild(el);
+    return { el, x, y };
+  }
+
+  function moveBot(bot, x, y, busy) {
+    bot.el.style.left = x + 'px';
+    bot.el.style.top = y + 'px';
+    bot.el.classList.toggle('busy', !!busy);
+  }
+
+  function log(tagClass, tag, msg) {
+    const line = document.createElement('div');
+    line.className = 'entry';
+    if (tagClass === 'sys') {
+      line.innerHTML = '<span class="sys">' + msg + '</span>';
+    } else {
+      line.innerHTML = '<span class="' + tagClass + '">' + tag + ':</span> ' + msg;
+    }
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function updateStats() {
+    const placedCount = slots.filter(s => s.placed).length;
+    const fastenedCount = slots.filter(s => s.fastened).length;
+    statPlaced.textContent = placedCount + ' / ' + TOTAL_PANELS;
+    statFastened.textContent = fastenedCount + ' / ' + TOTAL_PANELS;
+    statFaults.textContent = faultsRecovered;
+    if (cycleTimes.length) {
+      const avg = cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length;
+      statCycle.textContent = avg.toFixed(1) + 's';
+    }
+    meterAlign.style.width = Math.min(skills.align, 100) + '%';
+    meterFasten.style.width = Math.min(skills.fasten, 100) + '%';
+    meterHandoff.style.width = Math.min(skills.handoff, 100) + '%';
+  }
+
+  function bumpSkill(key, amt) {
+    skills[key] = Math.min(100, skills[key] + amt);
+  }
+
+  function skillDelay(base, key) {
+    const factor = 1 - (skills[key] / 100) * 0.55;
+    return Math.max(base * factor, base * 0.4);
+  }
+
+  async function wait(ms) {
+    return new Promise(resolve => { timer = setTimeout(resolve, ms); });
+  }
+
+  async function runCrew() {
+    for (let i = 0; i < TOTAL_PANELS; i++) {
+      if (!running) return;
+      while (paused) { await wait(200); if (!running) return; }
+
+      const slot = slots[i];
+      const startTime = performance.now();
+
+      log('b-tag', '002B', 'next pallet inbound for slot ' + (i + 1) + '.');
+      moveBot(bots.b, slot.x - 6, SLOT_Y + 70, true);
+      await wait(skillDelay(650, 'handoff'));
+      if (!running) return;
+
+      moveBot(bots.a, slot.x, SLOT_Y - 60, true);
+      log('a-tag', '002A', 'approaching slot ' + (i + 1) + ', receiving panel.');
+      await wait(skillDelay(500, 'handoff'));
+      if (!running) return;
+      moveBot(bots.b, slot.x - 6, SLOT_Y + 70, false);
+      bumpSkill('handoff', 3);
+
+      const misaligned = faultPending;
+      if (misaligned) {
+        faultPending = false;
+        faultBtn.disabled = true;
+        log('sys', '', '⚠ fault injected: panel ' + (i + 1) + ' is off by 5.3mm.');
+        log('a-tag', '002A', 'edge sensor mismatch, re-running alignment pass.');
+        await wait(skillDelay(700, 'align'));
+        if (!running) return;
+        log('a-tag', '002A', 'corrected, ' + (i + 1) + ' now within tolerance.');
+        faultsRecovered++;
+      }
+
+      log('a-tag', '002A', 'aligning panel ' + (i + 1) + '.');
+      await wait(skillDelay(600, 'align'));
+      if (!running) return;
+      slot.placed = true;
+      slot.el.classList.add('placed');
+      bumpSkill('align', 4);
+      log('a-tag', '002A', 'panel ' + (i + 1) + ' placed. Clear to fasten.');
+      updateStats();
+
+      moveBot(bots.c, slot.x, SLOT_Y - 60, true);
+      log('c-tag', '002C', 'fastening panel ' + (i + 1) + '.');
+      await wait(skillDelay(750, 'fasten'));
+      if (!running) return;
+      slot.fastened = true;
+      slot.el.classList.add('fastened');
+      bumpSkill('fasten', 4);
+      log('c-tag', '002C', 'torque confirmed on ' + (i + 1) + '. Moving to next.');
+
+      const elapsed = (performance.now() - startTime) / 1000;
+      cycleTimes.push(elapsed);
+      updateStats();
+    }
+
+    if (running) {
+      log('sys', '', 'Row complete. ' + TOTAL_PANELS + ' panels placed and fastened.');
+      finishRun();
+    }
+  }
+
+  function finishRun() {
+    running = false;
+    startBtn.disabled = false;
+    startBtn.textContent = 'Start build row';
+    pauseBtn.disabled = true;
+    faultBtn.disabled = true;
+  }
+
+  function startRun() {
+    running = true;
+    paused = false;
+    startBtn.disabled = true;
+    startBtn.textContent = 'Running…';
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = 'Pause';
+    faultBtn.disabled = false;
+    log('sys', '', 'Crew powered up. Beginning row of ' + TOTAL_PANELS + ' panels.');
+    runCrew();
+  }
+
+  function resetAll() {
+    running = false;
+    paused = false;
+    faultPending = false;
+    clearTimeout(timer);
+    skills = { align: 40, fasten: 40, handoff: 40 };
+    cycleTimes = [];
+    faultsRecovered = 0;
+    logEl.innerHTML = '';
+    buildYard();
+    updateStats();
+    startBtn.disabled = false;
+    startBtn.textContent = 'Start build row';
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = 'Pause';
+    faultBtn.disabled = true;
+    log('sys', '', 'Worksite reset. Ready to build.');
+  }
+
+  startBtn.addEventListener('click', startRun);
+
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    log('sys', '', paused ? 'Crew paused.' : 'Crew resumed.');
+  });
+
+  resetBtn.addEventListener('click', resetAll);
+
+  faultBtn.addEventListener('click', () => {
+    faultPending = true;
+    faultBtn.disabled = true;
+    log('sys', '', 'Fault queued — next panel will arrive misaligned.');
+  });
+
+  buildYard();
+  updateStats();
+  log('sys', '', 'Worksite ready. Press "Start build row" to watch the crew self-coordinate.');
+})();
+</script>
+
+</body>
+</html>

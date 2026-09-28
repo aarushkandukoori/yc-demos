@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledgerline — Autonomous Portfolio Research (Demo)</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel-2: #161e2a;
+    --border: #232d3b;
+    --text: #e8edf4;
+    --text-dim: #8a96a8;
+    --accent: #5ee6c9;
+    --accent-dim: #2b6e63;
+    --up: #5ee6a0;
+    --down: #f07575;
+    --warn: #f0c05a;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at 20% 0%, #131a24 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 36px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.2px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 14px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 24px 60px;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.1fr 1.4fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 18px 8px;
+  }
+  .card h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  .account-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .account-row:last-child { border-bottom: none; }
+  .account-row .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; margin-right: 8px;
+    background: var(--accent);
+  }
+  .account-row .name { color: var(--text); }
+  .account-row .broker { color: var(--text-dim); font-size: 11px; }
+  .total-box {
+    margin-top: 12px;
+    padding: 14px;
+    background: var(--panel-2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .total-box .label { color: var(--text-dim); font-size: 12px; }
+  .total-box .value { font-size: 26px; font-weight: 600; margin-top: 4px; }
+  .total-box .delta { font-size: 12px; margin-top: 4px; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+
+  .holding {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: var(--panel-2);
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.1s ease;
+  }
+  .holding:hover { border-color: var(--accent-dim); }
+  .holding.active { border-color: var(--accent); }
+  .holding-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .holding-top .ticker { font-weight: 700; font-size: 15px; }
+  .holding-top .weight { color: var(--text-dim); font-size: 11px; margin-left: 6px; }
+  .holding-top .price { font-size: 14px; }
+  .holding-sub {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .agent-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .agent-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.4s infinite ease-in-out;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.15); }
+  }
+  .trace {
+    background: #0d1219;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    min-height: 220px;
+    color: var(--text-dim);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  .trace .step { color: var(--text); opacity: 0; animation: fadeIn 0.35s forwards; }
+  .trace .step .tag {
+    color: var(--accent);
+    margin-right: 6px;
+  }
+  .trace .cite {
+    color: #7fa8c9;
+  }
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  .verdict {
+    border-radius: 8px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+  .verdict .call {
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .verdict .call .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 100px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .badge.buy { background: rgba(94,230,160,0.15); color: var(--up); }
+  .badge.trim { background: rgba(240,192,90,0.15); color: var(--warn); }
+  .badge.hold { background: rgba(138,150,168,0.15); color: var(--text-dim); }
+  .verdict .rationale {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+  .verdict .confidence {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .confidence-bar {
+    height: 5px;
+    border-radius: 4px;
+    background: var(--border);
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .confidence-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 30px 10px;
+  }
+
+  .disclaimer {
+    margin-top: 10px;
+    font-size: 10.5px;
+    color: #566073;
+    line-height: 1.5;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+
+  footer {
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    padding: 28px 20px 40px;
+  }
+  footer strong { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ledger<span>line</span></h1>
+  <p>A toy demo of one idea: pull every brokerage account into one view, then run an autonomous research pass over each position — citing the evidence it used, not just a number. Click any holding on the right.</p>
+</header>
+
+<main>
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>Connected Accounts</h2>
+        <div class="account-row"><div><span class="dot"></span><span class="name">Individual Brokerage</span><div class="broker" style="margin-left:16px;">Fidelity · read-only</div></div><span>$142,880</span></div>
+        <div class="account-row"><div><span class="dot"></span><span class="name">Roth IRA</span><div class="broker" style="margin-left:16px;">Schwab · read-only</div></div><span>$61,204</span></div>
+        <div class="account-row"><div><span class="dot"></span><span class="name">Options Sandbox</span><div class="broker" style="margin-left:16px;">Robinhood · read-only</div></div><span>$18,930</span></div>
+        <div class="total-box">
+          <div class="label">Total across 3 accounts</div>
+          <div class="value">$223,014</div>
+          <div class="delta up">▲ $1,842 (0.83%) today — synthetic data</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 18px;">
+        <h2>Holdings — click to research</h2>
+        <div id="holdings"></div>
+      </div>
+    </div>
+
+    <div class="card agent-panel">
+      <h2>Autonomous Research Agent</h2>
+      <div id="agentBody">
+        <div class="hint">Select a position on the left. The agent will pull synthetic filings, ratings, and news, then reason toward a call — you'll see every step it takes.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by <strong>Aarush Kandukoori</strong>, inspired by Ekpa (YC S26). Not affiliated with Ekpa.
+  </footer>
+</main>
+
+<script>
+(function () {
+  var holdingsData = [
+    {
+      ticker: "NVDA", name: "NVIDIA Corp", weight: "18.2%", price: "$187.42", chg: "+2.1%", up: true,
+      evidence: [
+        { tag: "FILING", text: "10-Q flags data-center revenue up 94% YoY, gross margin holding above 74%.", cite: "SEC EDGAR · 10-Q, filed synthetic" },
+        { tag: "RATING", text: "6 of 8 tracked analysts raised price targets in the last 30 days.", cite: "consensus feed (synthetic)" },
+        { tag: "NEWS", text: "Reports of extended lead times on next-gen accelerator orders.", cite: "wire scrape (synthetic)" },
+        { tag: "MACRO", text: "Capex guidance from 3 major hyperscalers still trending up this quarter.", cite: "earnings calls (synthetic)" }
+      ],
+      call: "buy", callLabel: "ADD", confidence: 78,
+      rationale: "Demand signal from hyperscaler capex and lead times outweighs valuation concerns raised in the filing. Position is 18.2% of the portfolio — sizing, not conviction, is the constraint here."
+    },
+    {
+      ticker: "TSLA", name: "Tesla Inc", weight: "9.6%", price: "$241.10", chg: "-1.4%", up: false,
+      evidence: [
+        { tag: "FILING", text: "Delivery numbers came in below the low end of guidance range.", cite: "SEC EDGAR · 8-K, filed synthetic" },
+        { tag: "RATING", text: "2 downgrades to hold in the past 2 weeks, citing margin compression.", cite: "consensus feed (synthetic)" },
+        { tag: "NEWS", text: "New price cuts announced in two regional markets.", cite: "wire scrape (synthetic)" }
+      ],
+      call: "trim", callLabel: "TRIM", confidence: 61,
+      rationale: "Two independent signals — delivery miss and margin-driven downgrades — point the same direction. Not a full exit signal, but the evidence no longer supports the current weight."
+    },
+    {
+      ticker: "JPM", name: "JPMorgan Chase", weight: "12.4%", price: "$212.55", chg: "+0.4%", up: true,
+      evidence: [
+        { tag: "FILING", text: "Net interest income guidance reaffirmed for the fiscal year.", cite: "SEC EDGAR · 10-K excerpt, synthetic" },
+        { tag: "RATING", text: "Analyst coverage stable — no rating changes in 45 days.", cite: "consensus feed (synthetic)" },
+        { tag: "MACRO", text: "Rate path from the last policy statement is roughly in line with prior quarter.", cite: "macro feed (synthetic)" }
+      ],
+      call: "hold", callLabel: "HOLD", confidence: 54,
+      rationale: "No new evidence strong enough to move the position either way. Guidance reaffirmed, no rating drift, macro unchanged — this is a case for doing nothing, and the agent says so plainly."
+    },
+    {
+      ticker: "SMCI", name: "Super Micro Computer", weight: "4.1%", price: "$38.90", chg: "-5.7%", up: false,
+      evidence: [
+        { tag: "FILING", text: "Delayed annual report filing for the second consecutive cycle.", cite: "SEC EDGAR · NT 10-K, synthetic" },
+        { tag: "NEWS", text: "Auditor transition reported without further detail.", cite: "wire scrape (synthetic)" },
+        { tag: "RATING", text: "3 of 5 tracked analysts suspended coverage pending filings.", cite: "consensus feed (synthetic)" }
+      ],
+      call: "trim", callLabel: "TRIM", confidence: 82,
+      rationale: "Filing delays plus suspended coverage is a governance signal, not a valuation one — the kind of thing a headline price move alone wouldn't tell you. Confidence is high because the signals corroborate each other."
+    }
+  ];
+
+  var holdingsEl = document.getElementById("holdings");
+  var agentBody = document.getElementById("agentBody");
+  var activeCard = null;
+  var runToken = 0;
+
+  holdingsData.forEach(function (h, idx) {
+    var el = document.createElement("div");
+    el.className = "holding";
+    el.innerHTML =
+      '<div class="holding-top">' +
+        '<div><span class="ticker">' + h.ticker + '</span><span class="weight">' + h.weight + ' of portfolio</span></div>' +
+        '<div class="price">' + h.price + '</div>' +
+      '</div>' +
+      '<div class="holding-sub"><span>' + h.name + '</span><span class="' + (h.up ? "up" : "down") + '">' + h.chg + ' today</span></div>';
+    el.addEventListener("click", function () {
+      if (activeCard) activeCard.classList.remove("active");
+      el.classList.add("active");
+      activeCard = el;
+      runAgent(h);
+    });
+    holdingsEl.appendChild(el);
+  });
+
+  function runAgent(h) {
+    runToken++;
+    var myToken = runToken;
+
+    agentBody.innerHTML =
+      '<div class="agent-status"><span class="pulse"></span><span>Researching ' + h.ticker + '…</span></div>' +
+      '<div class="trace" id="trace"></div>';
+
+    var trace = document.getElementById("trace");
+    var lines = [];
+    h.evidence.forEach(function (e) {
+      lines.push({ tag: e.tag, text: e.text, cite: e.cite });
+    });
+
+    var i = 0;
+    function step() {
+      if (myToken !== runToken) return;
+      if (i >= lines.length) {
+        renderVerdict(h);
+        return;
+      }
+      var l = lines[i];
+      var div = document.createElement("div");
+      div.className = "step";
+      div.innerHTML = '<span class="tag">[' + l.tag + ']</span>' + l.text + ' <span class="cite">— ' + l.cite + '</span>';
+      trace.appendChild(div);
+      i++;
+      setTimeout(step, 420);
+    }
+    step();
+  }
+
+  function renderVerdict(h) {
+    if (runToken !== runToken) return;
+    var statusEl = document.querySelector(".agent-status span:last-child");
+    if (statusEl) statusEl.textContent = "Synthesis complete for " + h.ticker;
+    var pulseEl = document.querySelector(".pulse");
+    if (pulseEl) pulseEl.style.animation = "none";
+
+    var verdictDiv = document.createElement("div");
+    verdictDiv.className = "verdict";
+    verdictDiv.style.marginTop = "12px";
+    verdictDiv.innerHTML =
+      '<div class="call">' + h.ticker + ' <span class="badge ' + h.call + '">' + h.callLabel + '</span></div>' +
+      '<div class="rationale">' + h.rationale + '</div>' +
+      '<div class="confidence">Confidence, based on cross-source agreement: ' + h.confidence + '%</div>' +
+      '<div class="confidence-bar"><div class="confidence-fill" style="width:' + h.confidence + '%"></div></div>' +
+      '<div class="disclaimer">Synthetic demo data only. This agent never places trades or touches account balances — it only reads and reasons, same as a read-only research layer bolted onto brokerage data would.</div>';
+    agentBody.appendChild(verdictDiv);
+  }
+})();
+</script>
+
+</body>
+</html>

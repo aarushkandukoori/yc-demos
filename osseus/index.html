@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clinical RL Sandbox — toy data-platform demo</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #131c2e;
+    --panel-2: #0f1830;
+    --border: #23324d;
+    --text: #e6ecf5;
+    --muted: #8fa1bd;
+    --accent: #4fd1c5;
+    --accent-2: #7c9cff;
+    --warn: #f6ad55;
+    --bad: #f56565;
+    --good: #68d391;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #16233d 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 36px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 780px;
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 22px;
+    padding: 24px 36px;
+  }
+  @media (max-width: 920px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .case-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 12px 0 16px;
+  }
+  .case-card .name { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
+  .case-card .meta { color: var(--muted); font-size: 13px; }
+  .vitals-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .vital {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .vital .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .vital .value { font-size: 20px; font-weight: 700; margin-top: 2px; font-family: var(--mono); }
+  .vital.ok .value { color: var(--good); }
+  .vital.warn .value { color: var(--warn); }
+  .vital.bad .value { color: var(--bad); }
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  button.action-btn {
+    background: linear-gradient(180deg, #1a2740, #14203a);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 10px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s, transform .1s;
+  }
+  button.action-btn:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+  button.action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.action-btn small { display: block; color: var(--muted); font-weight: 400; margin-top: 3px; }
+  .controls-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+  }
+  .reward-badge {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    min-width: 80px;
+    text-align: center;
+  }
+  button.primary {
+    background: var(--accent);
+    color: #04211d;
+    border: none;
+    font-weight: 700;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  .log {
+    font-family: var(--mono);
+    font-size: 12px;
+    max-height: 150px;
+    overflow-y: auto;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .stat-box {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .stat-box .n { font-size: 20px; font-weight: 700; font-family: var(--mono); }
+  .stat-box .l { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tab {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .tab.active { background: var(--accent-2); color: #0b1220; border-color: var(--accent-2); font-weight: 700; }
+  .dataset-view {
+    background: #090f1c;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    height: 360px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #b7d3ff;
+  }
+  .dataset-view table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .dataset-view th, .dataset-view td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #1a2740; white-space: nowrap; }
+  .dataset-view th { color: var(--muted); position: sticky; top: 0; background: #090f1c; }
+  .record { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #1a2740; }
+  .record .rk { color: var(--accent); }
+  .record .rr { color: var(--warn); }
+  .empty-hint { color: var(--muted); font-style: italic; }
+  .episode-banner {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    border: 1px solid var(--border);
+    display: none;
+  }
+  .episode-banner.show { display: block; }
+  .episode-banner.win { background: rgba(104,211,145,0.1); border-color: var(--good); color: var(--good); }
+  .episode-banner.loss { background: rgba(245,101,101,0.1); border-color: var(--bad); color: var(--bad); }
+  footer {
+    text-align: center;
+    padding: 18px;
+    color: var(--muted);
+    font-size: 12.5px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>Clinical RL Sandbox</span> — a toy medical data-platform demo</h1>
+  <p>This is a miniature illustration of one idea: turn bedside decisions into structured (state, action, reward, next-state)
+     records that a model could actually train on. Play the clinician, act on a synthetic patient, and watch the transition
+     dataset build itself on the right in real time. All patients and physiology here are fabricated for demonstration only.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Episode &middot; you are the policy</h2>
+    <div class="case-card">
+      <div class="name" id="caseName">—</div>
+      <div class="meta" id="caseMeta">Loading synthetic case…</div>
+    </div>
+
+    <div class="vitals-grid" id="vitalsGrid"></div>
+
+    <h2>Choose an action</h2>
+    <div class="actions" id="actionButtons"></div>
+
+    <div class="controls-row">
+      <div>
+        <span class="reward-badge" id="lastReward">reward: —</span>
+      </div>
+      <button class="primary" id="resetBtn">New synthetic patient</button>
+    </div>
+
+    <div class="episode-banner" id="episodeBanner"></div>
+
+    <h2 style="margin-top:18px;">Turn log</h2>
+    <div class="log" id="turnLog"><span class="empty-hint">No actions taken yet.</span></div>
+  </section>
+
+  <section class="panel">
+    <h2>Generated training dataset</h2>
+    <div class="stat-row">
+      <div class="stat-box"><div class="n" id="statEpisodes">0</div><div class="l">Episodes</div></div>
+      <div class="stat-box"><div class="n" id="statTransitions">0</div><div class="l">Transitions</div></div>
+      <div class="stat-box"><div class="n" id="statAvgReward">0.00</div><div class="l">Avg reward / turn</div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-view="feed">Record feed</button>
+      <button class="tab" data-view="table">Table view</button>
+    </div>
+    <div class="dataset-view" id="datasetView">
+      <span class="empty-hint">No transitions recorded yet — take an action on the left to generate the first record.</span>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Osseus (YC S26). Not affiliated with Osseus.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Synthetic case templates (fabricated, illustrative only) ----
+  var CASE_TEMPLATES = [
+    {
+      name: "Patient A · 68F, post-op day 2",
+      tag: "possible early sepsis",
+      vitals: { hr: 108, sbp: 92, spo2: 94, temp: 38.6, lactate: 3.1 },
+      severity: 0.55
+    },
+    {
+      name: "Patient B · 54M, ED admission",
+      tag: "suspected hypovolemia",
+      vitals: { hr: 122, sbp: 84, spo2: 96, temp: 37.1, lactate: 2.4 },
+      severity: 0.45
+    },
+    {
+      name: "Patient C · 77F, ICU day 1",
+      tag: "septic shock risk",
+      vitals: { hr: 131, sbp: 78, spo2: 91, temp: 39.2, lactate: 4.6 },
+      severity: 0.8
+    },
+    {
+      name: "Patient D · 41M, floor transfer",
+      tag: "stable but febrile",
+      vitals: { hr: 98, sbp: 108, spo2: 97, temp: 38.1, lactate: 1.6 },
+      severity: 0.25
+    }
+  ];
+
+  var ACTIONS = [
+    {
+      id: "fluids",
+      label: "Administer IV fluids",
+      hint: "raises BP, may raise HR",
+      effect: function (v) { return { hr: +3, sbp: +9, spo2: 0, temp: 0, lactate: -0.15 }; }
+    },
+    {
+      id: "antibiotics",
+      label: "Start broad-spectrum antibiotics",
+      hint: "treats infection source, slow acting",
+      effect: function (v) { return { hr: -2, sbp: +2, spo2: 0, temp: -0.3, lactate: -0.25 }; }
+    },
+    {
+      id: "oxygen",
+      label: "Titrate supplemental O2",
+      hint: "raises SpO2",
+      effect: function (v) { return { hr: -1, sbp: 0, spo2: +3, temp: 0, lactate: -0.05 }; }
+    },
+    {
+      id: "labs",
+      label: "Order repeat labs",
+      hint: "no direct effect, improves next observation only",
+      effect: function (v) { return { hr: 0, sbp: 0, spo2: 0, temp: 0, lactate: 0 }; }
+    },
+    {
+      id: "vasopressor",
+      label: "Start low-dose vasopressor",
+      hint: "raises BP fast, risks tachycardia",
+      effect: function (v) { return { hr: +6, sbp: +14, spo2: 0, temp: 0, lactate: -0.1 }; }
+    },
+    {
+      id: "watch",
+      label: "Continue monitoring",
+      hint: "no intervention this turn",
+      effect: function (v) { return { hr: 0, sbp: 0, spo2: 0, temp: 0, lactate: +0.05 }; }
+    }
+  ];
+
+  var NORMAL = { hr: [60, 100], sbp: [100, 130], spo2: [95, 100], temp: [36.5, 37.6], lactate: [0.5, 2.0] };
+
+  var state = {
+    episode: null,
+    turn: 0,
+    maxTurns: 6,
+    episodesCount: 0,
+    transitionsCount: 0,
+    rewardSum: 0,
+    dataset: [],
+    activeView: "feed"
+  };
+
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function round1(v) { return Math.round(v * 10) / 10; }
+
+  function pickCase() {
+    var tpl = CASE_TEMPLATES[Math.floor(Math.random() * CASE_TEMPLATES.length)];
+    var v = tpl.vitals;
+    return {
+      name: tpl.name,
+      tag: tpl.tag,
+      severity: tpl.severity,
+      vitals: {
+        hr: round1(v.hr + rand(-3, 3)),
+        sbp: round1(v.sbp + rand(-4, 4)),
+        spo2: round1(clamp(v.spo2 + rand(-1, 1), 80, 100)),
+        temp: round1(v.temp + rand(-0.2, 0.2)),
+        lactate: round1(Math.max(0.3, v.lactate + rand(-0.2, 0.2)))
+      }
+    };
+  }
+
+  function vitalStatus(key, value) {
+    var range = NORMAL[key];
+    if (value >= range[0] && value <= range[1]) return "ok";
+    var span = range[1] - range[0];
+    var dist = value < range[0] ? range[0] - value : value - range[1];
+    return dist > span * 0.6 ? "bad" : "warn";
+  }
+
+  function startEpisode() {
+    state.episode = pickCase();
+    state.turn = 0;
+    document.getElementById("episodeBanner").className = "episode-banner";
+    document.getElementById("turnLog").innerHTML = '<span class="empty-hint">No actions taken yet.</span>';
+    document.getElementById("lastReward").textContent = "reward: —";
+    renderCase();
+    renderVitals();
+    renderActions();
+  }
+
+  function renderCase() {
+    document.getElementById("caseName").textContent = state.episode.name;
+    document.getElementById("caseMeta").textContent =
+      "Working impression: " + state.episode.tag + "  ·  turn " + state.turn + " / " + state.maxTurns;
+  }
+
+  function renderVitals() {
+    var v = state.episode.vitals;
+    var labels = { hr: "HR (bpm)", sbp: "SBP (mmHg)", spo2: "SpO₂ (%)", temp: "Temp (°C)", lactate: "Lactate (mmol/L)" };
+    var order = ["hr", "sbp", "spo2", "temp", "lactate"];
+    var grid = document.getElementById("vitalsGrid");
+    grid.innerHTML = "";
+    order.forEach(function (key) {
+      var status = vitalStatus(key, v[key]);
+      var el = document.createElement("div");
+      el.className = "vital " + status;
+      el.innerHTML = '<div class="label">' + labels[key] + '</div><div class="value">' + v[key] + "</div>";
+      grid.appendChild(el);
+    });
+  }
+
+  function renderActions() {
+    var wrap = document.getElementById("actionButtons");
+    wrap.innerHTML = "";
+    var over = state.turn >= state.maxTurns;
+    ACTIONS.forEach(function (a) {
+      var btn = document.createElement("button");
+      btn.className = "action-btn";
+      btn.disabled = over;
+      btn.innerHTML = a.label + "<small>" + a.hint + "</small>";
+      btn.addEventListener("click", function () { takeAction(a); });
+      wrap.appendChild(btn);
+    });
+  }
+
+  // A tiny reward function: reward moving vitals toward normal, penalize drift away.
+  function computeReward(before, after) {
+    var keys = ["hr", "sbp", "spo2", "temp", "lactate"];
+    var r = 0;
+    keys.forEach(function (k) {
+      var range = NORMAL[k];
+      var mid = (range[0] + range[1]) / 2;
+      var distBefore = Math.abs(before[k] - mid);
+      var distAfter = Math.abs(after[k] - mid);
+      r += (distBefore - distAfter) * (k === "lactate" ? 4 : k === "spo2" ? 0.6 : 0.12);
+    });
+    return round1(r);
+  }
+
+  function takeAction(action) {
+    var before = Object.assign({}, state.episode.vitals);
+    var delta = action.effect(before);
+    var noise = function () { return rand(-0.6, 0.6); };
+    var after = {
+      hr: round1(clamp(before.hr + delta.hr + noise(), 40, 180)),
+      sbp: round1(clamp(before.sbp + delta.sbp + noise(), 50, 160)),
+      spo2: round1(clamp(before.spo2 + delta.spo2 + noise() * 0.3, 75, 100)),
+      temp: round1(clamp(before.temp + delta.temp + noise() * 0.1, 35, 41)),
+      lactate: round1(Math.max(0.3, before.lactate + delta.lactate + noise() * 0.1))
+    };
+
+    var reward = computeReward(before, after);
+    state.episode.vitals = after;
+    state.turn += 1;
+
+    var record = {
+      episode: state.episodesCount + 1,
+      turn: state.turn,
+      state: before,
+      action: action.id,
+      reward: reward,
+      next_state: after
+    };
+    state.dataset.push(record);
+    state.transitionsCount += 1;
+    state.rewardSum += reward;
+
+    logTurn(action, reward);
+    renderCase();
+    renderVitals();
+    updateStats();
+    renderDataset();
+
+    var badge = document.getElementById("lastReward");
+    badge.textContent = "reward: " + (reward >= 0 ? "+" : "") + reward;
+    badge.style.color = reward > 0 ? "var(--good)" : reward < 0 ? "var(--bad)" : "var(--muted)";
+
+    var crashed = after.sbp < 65 || after.spo2 < 82 || after.lactate > 6;
+    if (crashed || state.turn >= state.maxTurns) {
+      endEpisode(crashed);
+    } else {
+      renderActions();
+    }
+  }
+
+  function logTurn(action, reward) {
+    var log = document.getElementById("turnLog");
+    if (log.querySelector(".empty-hint")) log.innerHTML = "";
+    var line = document.createElement("div");
+    line.textContent = "turn " + state.turn + ": " + action.label + " -> reward " + (reward >= 0 ? "+" : "") + reward;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function endEpisode(crashed) {
+    state.episodesCount += 1;
+    renderActions();
+    var banner = document.getElementById("episodeBanner");
+    banner.className = "episode-banner show " + (crashed ? "loss" : "win");
+    banner.textContent = crashed
+      ? "Episode ended: patient destabilized. This trajectory is still recorded — failed episodes teach a policy as much as successful ones."
+      : "Episode complete: vitals held within a safer range. Trajectory recorded to the dataset on the right.";
+    updateStats();
+  }
+
+  function updateStats() {
+    document.getElementById("statEpisodes").textContent = state.episodesCount;
+    document.getElementById("statTransitions").textContent = state.transitionsCount;
+    var avg = state.transitionsCount ? state.rewardSum / state.transitionsCount : 0;
+    document.getElementById("statAvgReward").textContent = avg.toFixed(2);
+  }
+
+  function renderDataset() {
+    var view = document.getElementById("datasetView");
+    if (!state.dataset.length) {
+      view.innerHTML = '<span class="empty-hint">No transitions recorded yet.</span>';
+      return;
+    }
+    if (state.activeView === "feed") {
+      var html = state.dataset.slice().reverse().slice(0, 40).map(function (r) {
+        return '<div class="record">' +
+          '{ <span class="rk">"episode"</span>: ' + r.episode +
+          ', <span class="rk">"turn"</span>: ' + r.turn +
+          ', <span class="rk">"action"</span>: "' + r.action + '"' +
+          ', <span class="rk">"reward"</span>: <span class="rr">' + r.reward + '</span>' +
+          ', <span class="rk">"state.lactate"</span>: ' + r.state.lactate +
+          ', <span class="rk">"next_state.lactate"</span>: ' + r.next_state.lactate + ' }' +
+          '</div>';
+      }).join("");
+      view.innerHTML = html;
+    } else {
+      var rows = state.dataset.slice().reverse().slice(0, 60).map(function (r) {
+        return "<tr><td>" + r.episode + "</td><td>" + r.turn + "</td><td>" + r.action +
+          "</td><td>" + r.reward + "</td><td>" + r.state.sbp + "&rarr;" + r.next_state.sbp +
+          "</td><td>" + r.state.lactate + "&rarr;" + r.next_state.lactate + "</td></tr>";
+      }).join("");
+      view.innerHTML =
+        "<table><thead><tr><th>ep</th><th>turn</th><th>action</th><th>reward</th><th>sbp</th><th>lactate</th></tr></thead>" +
+        "<tbody>" + rows + "</tbody></table>";
+    }
+  }
+
+  document.querySelectorAll(".tab").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (t) { t.classList.remove("active"); });
+      tab.classList.add("active");
+      state.activeView = tab.getAttribute("data-view");
+      renderDataset();
+    });
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", startEpisode);
+
+  startEpisode();
+})();
+</script>
+
+</body>
+</html>

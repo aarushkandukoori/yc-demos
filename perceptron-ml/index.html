@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Groundwork — Fact-Verified Legal Drafting (Demo)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ink:#1b2430;
+    --paper:#f6f4ee;
+    --panel:#ffffff;
+    --line:#dcd7c9;
+    --accent:#2c5f4f;
+    --accent-dark:#1f4a3d;
+    --warn:#a4442b;
+    --warn-bg:#fbeae4;
+    --ok-bg:#e8f3ec;
+    --muted:#6b7178;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.5;
+  }
+  header{
+    padding:36px 24px 20px;
+    text-align:center;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#fff,#f6f4ee);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:28px;
+    letter-spacing:0.5px;
+  }
+  header .tag{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:var(--muted);
+    font-size:14px;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+  }
+  main{
+    max-width:920px;
+    margin:0 auto;
+    padding:32px 20px 60px;
+  }
+  .intro{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:var(--muted);
+    font-size:15px;
+    max-width:680px;
+    margin:0 auto 28px;
+    text-align:center;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:22px;
+    margin-bottom:24px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+  }
+  .panel h2{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.8px;
+    color:var(--muted);
+    margin:0 0 14px;
+  }
+  select, button{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:14.5px;
+  }
+  select{
+    width:100%;
+    padding:10px 12px;
+    border-radius:7px;
+    border:1px solid var(--line);
+    background:#fdfcf9;
+    color:var(--ink);
+  }
+  button{
+    margin-top:14px;
+    padding:11px 20px;
+    border:none;
+    border-radius:7px;
+    background:var(--accent);
+    color:#fff;
+    cursor:pointer;
+    font-weight:600;
+    transition:background 0.15s;
+  }
+  button:hover{background:var(--accent-dark);}
+  button:disabled{background:#b7b9bc;cursor:not-allowed;}
+  button.secondary{
+    background:transparent;
+    color:var(--accent);
+    border:1px solid var(--accent);
+  }
+  button.secondary:hover{background:var(--ok-bg);}
+
+  .draft{
+    font-size:16.5px;
+    line-height:1.8;
+    white-space:pre-wrap;
+  }
+  .cite{
+    position:relative;
+    border-bottom:2px dotted #b8b2a0;
+    cursor:default;
+    padding:0 1px;
+    transition:background 0.2s, border-color 0.2s;
+  }
+  .cite.checking{
+    animation:pulse 0.9s infinite;
+  }
+  .cite.verified{
+    border-bottom:2px solid var(--accent);
+    background:var(--ok-bg);
+  }
+  .cite.flagged{
+    border-bottom:2px solid var(--warn);
+    background:var(--warn-bg);
+    text-decoration:none;
+  }
+  @keyframes pulse{
+    0%,100%{background:#f2f0e8;}
+    50%{background:#e6e2d4;}
+  }
+  .badge{
+    display:inline-block;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:10.5px;
+    font-weight:700;
+    vertical-align:super;
+    margin-left:1px;
+  }
+  .badge.v{color:var(--accent);}
+  .badge.f{color:var(--warn);}
+
+  .ledger{
+    margin-top:8px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  .ledger-row{
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+    padding:12px 0;
+    border-top:1px solid var(--line);
+    font-size:13.5px;
+  }
+  .ledger-row:first-child{border-top:none;}
+  .status-dot{
+    flex:none;
+    width:10px;height:10px;
+    border-radius:50%;
+    margin-top:4px;
+  }
+  .status-dot.v{background:var(--accent);}
+  .status-dot.f{background:var(--warn);}
+  .status-dot.pending{background:#c9c4b4;}
+  .ledger-body b{display:block;color:var(--ink);margin-bottom:2px;}
+  .ledger-body .src{color:var(--muted);font-size:12.5px;}
+  .ledger-body .why{color:var(--warn);font-size:12.5px;margin-top:3px;}
+
+  .summary-bar{
+    display:flex;
+    gap:20px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:13.5px;
+    margin-top:16px;
+    padding-top:16px;
+    border-top:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .summary-bar div{display:flex;align-items:center;gap:6px;}
+  .summary-bar .dot{width:9px;height:9px;border-radius:50%;}
+
+  .hint{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:12.5px;
+    color:var(--muted);
+    margin-top:14px;
+  }
+
+  footer{
+    text-align:center;
+    padding:28px 20px 40px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:12.5px;
+    color:var(--muted);
+    border-top:1px solid var(--line);
+  }
+  footer a{color:var(--accent);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Groundwork</h1>
+  <div class="tag">a toy grounding engine for legal drafting</div>
+</header>
+
+<main>
+  <p class="intro">
+    Pick a matter question below. An in-browser "drafting model" writes a memo with citations —
+    then a separate verification pass checks each citation against a small mock source library
+    before it's allowed to stay in the document. Nothing leaves your browser; all sources and
+    facts here are synthetic.
+  </p>
+
+  <div class="panel">
+    <h2>1 &nbsp;·&nbsp; Choose a research question</h2>
+    <select id="questionSelect">
+      <option value="0">Can our client terminate the supply agreement for late delivery?</option>
+      <option value="1">Is the non-compete clause enforceable against a departing associate?</option>
+      <option value="2">Does the indemnification clause cover third-party IP claims?</option>
+    </select>
+    <button id="draftBtn">Generate draft memo</button>
+  </div>
+
+  <div class="panel" id="draftPanel" style="display:none;">
+    <h2>2 &nbsp;·&nbsp; Drafted memo (unverified)</h2>
+    <div class="draft" id="draftText"></div>
+    <button id="verifyBtn" style="display:none;">Run grounding check on every citation</button>
+    <div class="hint" id="verifyHint" style="display:none;">
+      Each underlined citation is checked against the source library in real time — no citation is trusted until it's matched to a primary source.
+    </div>
+  </div>
+
+  <div class="panel" id="ledgerPanel" style="display:none;">
+    <h2>3 &nbsp;·&nbsp; Verification ledger</h2>
+    <div class="ledger" id="ledger"></div>
+    <div class="summary-bar" id="summaryBar"></div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Perceptron ML (YC S26). Not affiliated with Perceptron ML.
+</footer>
+
+<script>
+(function(){
+  // ---- Synthetic source library ----------------------------------------
+  // Each source has an id, a short title, and a "truth" snippet the model
+  // is allowed to cite. Some drafted citations below will not match any
+  // source, or will match a source that says something different than
+  // claimed — that's what the grounding pass is meant to catch.
+  var SOURCES = {
+    "MSA-2021 §14.2":  "Termination for cause requires written notice and a 30-day cure period following any material breach, including delivery delays exceeding 15 business days.",
+    "MSA-2021 §9.1":   "Delivery delays are measured from the confirmed shipment date stated in the applicable purchase order, not the order date.",
+    "Del. C. tit.6 §2707": "A restrictive covenant ancillary to employment is enforceable if reasonable in time, geography, and scope, and supported by legitimate business interests.",
+    "Firm Handbook §4.3":"Associates sign a standard confidentiality agreement upon hire; it does not itself impose post-employment competitive restrictions.",
+    "Master IP Rider §3": "Indemnifying party covers third-party claims of IP infringement arising from the licensed product as delivered, excluding claims from client-directed modifications.",
+    "Master IP Rider §7": "Indemnification obligations survive termination of the agreement for a period of two years."
+  };
+
+  // ---- Drafted memos ------------------------------------------------------
+  // Each citation token is {text, cite, claim} where "claim" is what the
+  // draft asserts the source says. The verifier compares claim vs. the
+  // actual source text (or absence of the source) to decide verified/flagged.
+  var MEMOS = [
+    {
+      title: "Termination for late delivery",
+      parts: [
+        {t:"Under the supply agreement, a material breach for late delivery triggers a right to terminate only after written notice and a 30-day cure period."},
+        {cite:"MSA-2021 §14.2", claim:"cure", t:" "},
+        {t:" Delay is measured from the purchase order's confirmed shipment date, not the date the order was placed."},
+        {cite:"MSA-2021 §9.1", claim:"shipdate", t:" "},
+        {t:" Because the vendor's shipment was 42 business days late, the delay comfortably exceeds the contractual threshold, and termination is available once notice and cure have run."},
+        {cite:"MSA-2021 §14.1", claim:"threshold", t:" "},
+        {t:" No arbitration clause bars direct termination in this scenario."},
+        {cite:"MSA-2021 §22.4", claim:"arbitration", t:" "}
+      ]
+    },
+    {
+      title: "Enforceability of the non-compete",
+      parts: [
+        {t:"Delaware law permits post-employment restrictive covenants where the restriction is reasonable in time, geography, and scope and protects a legitimate business interest."},
+        {cite:"Del. C. tit.6 §2707", claim:"reasonable", t:" "},
+        {t:" The firm's standard hire-on agreement, referenced in the handbook, independently imposes a two-year competitive bar on departing associates."},
+        {cite:"Firm Handbook §4.3", claim:"twoyearbar", t:" "},
+        {t:" Because the associate's new role is in the same practice area and metro region, the geographic and scope elements are likely satisfied."},
+        {cite:"Del. C. tit.6 §2707", claim:"scope", t:" "}
+      ]
+    },
+    {
+      title: "Indemnification for third-party IP claims",
+      parts: [
+        {t:"The master agreement's IP rider obligates the vendor to indemnify the client against third-party infringement claims arising from the product as delivered."},
+        {cite:"Master IP Rider §3", claim:"asdelivered", t:" "},
+        {t:" That duty extends to claims arising from modifications the client itself made to the product after delivery."},
+        {cite:"Master IP Rider §3", claim:"clientmods", t:" "},
+        {t:" The obligation is perpetual and survives termination of the agreement indefinitely."},
+        {cite:"Master IP Rider §7", claim:"perpetual", t:" "}
+      ]
+    }
+  ];
+
+  // ---- Verification logic --------------------------------------------
+  // Maps each (source, claim) pair to a verdict + explanation. This stands
+  // in for the real fact-matching model; the point being demonstrated is
+  // the workflow, not NLP quality.
+  var VERDICTS = {
+    "MSA-2021 §14.2|cure":      {ok:true,  why:""},
+    "MSA-2021 §9.1|shipdate":   {ok:true,  why:""},
+    "MSA-2021 §14.1|threshold": {ok:false, why:"Section 14.1 does not exist in this agreement — the cited clause is fabricated. §14.2 sets a 15-business-day threshold, not stated here."},
+    "MSA-2021 §22.4|arbitration":{ok:false, why:"No source titled 'MSA-2021 §22.4' is in the library — this citation could not be matched to any primary source."},
+    "Del. C. tit.6 §2707|reasonable": {ok:true, why:""},
+    "Firm Handbook §4.3|twoyearbar":  {ok:false, why:"The handbook source says the confidentiality agreement does NOT impose post-employment competitive restrictions — this directly contradicts the claim."},
+    "Del. C. tit.6 §2707|scope": {ok:false, why:"The statute states the standard for enforceability; it does not independently confirm that THIS covenant's geography and scope are satisfied. Flagged as an unsupported inference dressed as a citation."},
+    "Master IP Rider §3|asdelivered": {ok:true, why:""},
+    "Master IP Rider §3|clientmods":  {ok:false, why:"Source §3 explicitly EXCLUDES claims from client-directed modifications — the claim says the opposite of what the source states."},
+    "Master IP Rider §7|perpetual":   {ok:false, why:"Source §7 caps survival at two years after termination — 'perpetual' is not supported."}
+  };
+
+  var draftBtn = document.getElementById('draftBtn');
+  var verifyBtn = document.getElementById('verifyBtn');
+  var draftPanel = document.getElementById('draftPanel');
+  var draftText = document.getElementById('draftText');
+  var verifyHint = document.getElementById('verifyHint');
+  var ledgerPanel = document.getElementById('ledgerPanel');
+  var ledger = document.getElementById('ledger');
+  var summaryBar = document.getElementById('summaryBar');
+  var select = document.getElementById('questionSelect');
+
+  var citeCounter = 0;
+  var currentCites = [];
+
+  function renderDraft(memo){
+    draftText.innerHTML = '';
+    currentCites = [];
+    citeCounter = 0;
+    memo.parts.forEach(function(part){
+      if(part.cite){
+        citeCounter++;
+        var id = 'cite'+citeCounter;
+        var span = document.createElement('span');
+        span.className = 'cite';
+        span.id = id;
+        span.textContent = '[' + part.cite + ']';
+        draftText.appendChild(span);
+        currentCites.push({id:id, source:part.cite, claim:part.claim});
+      } else {
+        draftText.appendChild(document.createTextNode(part.t));
+      }
+    });
+  }
+
+  draftBtn.addEventListener('click', function(){
+    var memo = MEMOS[parseInt(select.value,10)];
+    renderDraft(memo);
+    draftPanel.style.display = 'block';
+    verifyBtn.style.display = 'inline-block';
+    verifyHint.style.display = 'block';
+    ledgerPanel.style.display = 'none';
+    ledger.innerHTML = '';
+    summaryBar.innerHTML = '';
+    verifyBtn.disabled = false;
+    verifyBtn.textContent = 'Run grounding check on every citation';
+    select.disabled = false;
+  });
+
+  verifyBtn.addEventListener('click', function(){
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = 'Verifying against source library…';
+    ledgerPanel.style.display = 'block';
+    ledger.innerHTML = '';
+    summaryBar.innerHTML = '';
+
+    currentCites.forEach(function(c){
+      var span = document.getElementById(c.id);
+      span.classList.add('checking');
+      var row = document.createElement('div');
+      row.className = 'ledger-row';
+      row.id = 'row-'+c.id;
+      var key = c.source + '|' + c.claim;
+      var verdict = VERDICTS[key] || {ok:false, why:"No matching entry in the source library."};
+      var sourceText = SOURCES[c.source] || null;
+
+      row.innerHTML =
+        '<div class="status-dot pending"></div>' +
+        '<div class="ledger-body"><b>' + c.source + '</b><span class="src">checking against source library…</span></div>';
+      ledger.appendChild(row);
+
+      (function(c, span, row, verdict, sourceText){
+        setTimeout(function(){
+          span.classList.remove('checking');
+          var dot = row.querySelector('.status-dot');
+          var body = row.querySelector('.ledger-body');
+          if(verdict.ok){
+            span.classList.add('verified');
+            span.innerHTML += '<span class="badge v"> ✓</span>';
+            dot.className = 'status-dot v';
+            body.innerHTML = '<b>' + c.source + ' — verified</b>' +
+              '<span class="src">Source: "' + sourceText + '"</span>';
+          } else {
+            span.classList.add('flagged');
+            span.innerHTML += '<span class="badge f"> ⚠</span>';
+            dot.className = 'status-dot f';
+            body.innerHTML = '<b>' + c.source + ' — flagged, not grounded</b>' +
+              '<span class="src">' + (sourceText ? 'Source: "'+sourceText+'"' : 'No matching source found in library.') + '</span>' +
+              '<span class="why">' + verdict.why + '</span>';
+          }
+          checkComplete();
+        }, 500 + Math.random()*1400);
+      })(c, span, row, verdict, sourceText);
+    });
+
+    var doneCount = 0;
+    function checkComplete(){
+      doneCount++;
+      if(doneCount === currentCites.length){
+        verifyBtn.textContent = 'Verification complete';
+        var verified = 0, flagged = 0;
+        currentCites.forEach(function(c){
+          var key = c.source + '|' + c.claim;
+          var v = VERDICTS[key] || {ok:false};
+          if(v.ok) verified++; else flagged++;
+        });
+        summaryBar.innerHTML =
+          '<div><span class="dot" style="background:#2c5f4f;"></span>' + verified + ' citation' + (verified===1?'':'s') + ' verified against a primary source</div>' +
+          '<div><span class="dot" style="background:#a4442b;"></span>' + flagged + ' citation' + (flagged===1?'':'s') + ' flagged — would be blocked before reaching a filing or client memo</div>';
+      }
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>

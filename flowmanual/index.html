@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bid Stack — Takeoff-to-Quote Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0f1310;
+    --panel:#171d18;
+    --panel2:#1e251f;
+    --line:#2b342c;
+    --text:#e7ede8;
+    --muted:#8fa091;
+    --accent:#e8a33d;
+    --accent2:#5fb488;
+    --danger:#d3654a;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 600px at 20% -10%, #1a2a1f 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 40px 10px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .brand{
+    font-weight:700;
+    font-size:22px;
+    letter-spacing:-0.02em;
+  }
+  .brand span{color:var(--accent);}
+  .tagline{color:var(--muted); font-size:13px; max-width:420px;}
+  main{
+    flex:1;
+    padding:10px 40px 40px;
+    display:grid;
+    grid-template-columns:1.1fr 1fr;
+    gap:22px;
+  }
+  @media (max-width: 980px){ main{grid-template-columns:1fr;} }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:20px;
+  }
+  .card h2{
+    margin:0 0 4px;
+    font-size:15px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+  }
+  .card h3{margin:0 0 14px; font-size:19px;}
+  .step-list{
+    display:flex;
+    gap:8px;
+    margin:0 0 18px;
+    flex-wrap:wrap;
+  }
+  .step{
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    color:var(--muted);
+  }
+  .step.active{border-color:var(--accent); color:var(--accent); background:rgba(232,163,61,0.08);}
+  .step.done{border-color:var(--accent2); color:var(--accent2);}
+
+  .dropzone{
+    border:2px dashed var(--line);
+    border-radius:12px;
+    padding:26px;
+    text-align:center;
+    color:var(--muted);
+    cursor:pointer;
+    transition:.15s;
+    background:var(--panel2);
+  }
+  .dropzone:hover{border-color:var(--accent); color:var(--text);}
+  .dropzone small{display:block; margin-top:6px; font-size:11px;}
+
+  .sample-picker{
+    display:flex;
+    gap:8px;
+    margin-top:14px;
+    flex-wrap:wrap;
+  }
+  .sample-btn{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:8px 12px;
+    border-radius:8px;
+    font-size:12.5px;
+    cursor:pointer;
+  }
+  .sample-btn:hover{border-color:var(--accent);}
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+    margin-top:6px;
+  }
+  th{
+    text-align:left;
+    color:var(--muted);
+    font-weight:600;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    padding:6px 8px;
+    border-bottom:1px solid var(--line);
+  }
+  td{
+    padding:8px;
+    border-bottom:1px solid rgba(43,52,44,0.6);
+    vertical-align:top;
+  }
+  tr:last-child td{border-bottom:none;}
+  .qty-input{
+    width:64px;
+    background:var(--bg);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:6px;
+    padding:4px 6px;
+    font-family:var(--mono);
+  }
+  .conf{
+    display:inline-block;
+    padding:2px 7px;
+    border-radius:999px;
+    font-size:10.5px;
+    font-family:var(--mono);
+  }
+  .conf.high{background:rgba(95,180,136,.15); color:var(--accent2);}
+  .conf.mid{background:rgba(232,163,61,.15); color:var(--accent);}
+  .conf.low{background:rgba(211,101,74,.15); color:var(--danger);}
+
+  .vendor-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 0;
+    border-bottom:1px solid rgba(43,52,44,0.6);
+    font-size:13px;
+  }
+  .vendor-row:last-child{border-bottom:none;}
+  .vendor-name{font-weight:600;}
+  .vendor-meta{color:var(--muted); font-size:11.5px; margin-top:2px;}
+  .price{font-family:var(--mono); font-size:15px;}
+  .price.best{color:var(--accent2);}
+  .tag-best{
+    font-size:10px;
+    color:var(--accent2);
+    border:1px solid rgba(95,180,136,.4);
+    padding:1px 6px;
+    border-radius:999px;
+    margin-left:6px;
+  }
+
+  .summary{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:16px;
+  }
+  .stat{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+  }
+  .stat .label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
+  .stat .value{font-family:var(--mono); font-size:20px; margin-top:4px;}
+  .stat .value.win{color:var(--accent2);}
+
+  button.primary{
+    background:var(--accent);
+    color:#1a1400;
+    border:none;
+    font-weight:700;
+    padding:11px 18px;
+    border-radius:9px;
+    cursor:pointer;
+    font-size:14px;
+    margin-top:16px;
+  }
+  button.primary:disabled{opacity:.4; cursor:not-allowed;}
+  button.ghost{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--muted);
+    padding:11px 16px;
+    border-radius:9px;
+    cursor:pointer;
+    font-size:13px;
+    margin-top:16px;
+    margin-left:8px;
+  }
+
+  .empty-hint{color:var(--muted); font-size:13px; padding:20px 0; text-align:center;}
+
+  footer{
+    text-align:center;
+    padding:18px 20px 26px;
+    color:var(--muted);
+    font-size:12px;
+    border-top:1px solid var(--line);
+  }
+  .flash{
+    animation:flashin .5s ease;
+  }
+  @keyframes flashin{
+    from{ background:rgba(232,163,61,0.18); }
+    to{ background:transparent; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">Bid<span>Stack</span></div>
+    <div class="tagline">Turn a plan page into a priced, vendor-matched buyout list — before your competitor finishes measuring.</div>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Step 1 — Takeoff</h2>
+    <h3>Drop in a plan sheet</h3>
+
+    <div class="step-list" id="stepList">
+      <div class="step active" id="s1">1. Extract</div>
+      <div class="step" id="s2">2. Adjust quantities</div>
+      <div class="step" id="s3">3. Match vendors</div>
+      <div class="step" id="s4">4. Buyout</div>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      📐 Drop a plan / spec PDF here, or click to simulate an upload
+      <small>Demo note: this parses a synthetic sample sheet — no files are actually uploaded anywhere.</small>
+    </div>
+
+    <div class="sample-picker">
+      <button class="sample-btn" data-sample="restroom">Sample: Restroom core (plumbing)</button>
+      <button class="sample-btn" data-sample="office">Sample: Office buildout (electrical)</button>
+      <button class="sample-btn" data-sample="mech">Sample: Rooftop RTU swap (mechanical)</button>
+    </div>
+
+    <div id="takeoffArea" style="margin-top:18px;"></div>
+  </section>
+
+  <section class="card">
+    <h2>Step 2 — Buyout</h2>
+    <h3>Vendor matching &amp; live quote comparison</h3>
+    <div id="vendorArea">
+      <div class="empty-hint">Run a takeoff on the left to see matched vendors and pricing here.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by FlowManual (YC S26). Not affiliated with FlowManual.
+</footer>
+
+<script>
+(function(){
+
+  // ---- synthetic "plan sheet" data sets ----------------------------------
+  const SAMPLES = {
+    restroom: {
+      label: "Restroom Core — Plumbing Rough-In",
+      items: [
+        { name: '2" PVC waste pipe', qty: 84, unit: 'LF', conf: 'high', category: 'plumbing' },
+        { name: '1/2" copper supply line', qty: 140, unit: 'LF', conf: 'high', category: 'plumbing' },
+        { name: 'Wall-mount lavatory, ADA', qty: 6, unit: 'EA', conf: 'high', category: 'fixtures' },
+        { name: 'Floor-mount water closet', qty: 8, unit: 'EA', conf: 'mid', category: 'fixtures' },
+        { name: 'P-trap assembly, 1.5"', qty: 6, unit: 'EA', conf: 'mid', category: 'plumbing' },
+        { name: 'Cleanout, floor-set', qty: 3, unit: 'EA', conf: 'low', category: 'plumbing' },
+      ]
+    },
+    office: {
+      label: "Office Buildout — Electrical",
+      items: [
+        { name: '20A duplex receptacle', qty: 46, unit: 'EA', conf: 'high', category: 'electrical' },
+        { name: '4" LED recessed can', qty: 62, unit: 'EA', conf: 'high', category: 'lighting' },
+        { name: '12/2 MC cable', qty: 1200, unit: 'LF', conf: 'high', category: 'electrical' },
+        { name: '20A single-pole breaker', qty: 18, unit: 'EA', conf: 'mid', category: 'panel' },
+        { name: 'Occupancy sensor switch', qty: 14, unit: 'EA', conf: 'mid', category: 'lighting' },
+        { name: 'Panelboard, 42-circuit', qty: 1, unit: 'EA', conf: 'low', category: 'panel' },
+      ]
+    },
+    mech: {
+      label: "Rooftop RTU Swap — Mechanical",
+      items: [
+        { name: '7.5-ton packaged RTU', qty: 2, unit: 'EA', conf: 'high', category: 'equipment' },
+        { name: 'Curb adapter, universal', qty: 2, unit: 'EA', conf: 'mid', category: 'equipment' },
+        { name: 'Flex duct, insulated 14"', qty: 60, unit: 'LF', conf: 'high', category: 'ductwork' },
+        { name: 'Disconnect switch, 60A', qty: 2, unit: 'EA', conf: 'high', category: 'electrical' },
+        { name: 'Condensate pump', qty: 2, unit: 'EA', conf: 'mid', category: 'equipment' },
+        { name: 'Refrigerant line set', qty: 2, unit: 'EA', conf: 'low', category: 'equipment' },
+      ]
+    }
+  };
+
+  // ---- synthetic vendor catalog, keyed loosely by item name keyword ----
+  const VENDOR_DB = [
+    { match: /pvc|waste pipe|duct|flex/i,  name: 'Ferro Supply Co.',      lead: '2-day', reliability: 0.97, base: [2.1, 4.5] },
+    { match: /copper|mc cable|receptacle|breaker|disconnect|panelboard/i, name: 'Circuit & Line Distributors', lead: '1-day', reliability: 0.94, base: [3.0, 9.0] },
+    { match: /lavatory|water closet|fixtures|led|sensor/i, name: 'Meridian Fixture Group', lead: '4-day', reliability: 0.91, base: [45, 260] },
+    { match: /rtu|curb|condensate|refrigerant/i, name: 'Alpine Mechanical Supply', lead: '7-day', reliability: 0.88, base: [900, 4200] },
+    { match: /cleanout|trap/i, name: 'Basin Trade Supply', lead: '3-day', reliability: 0.9, base: [18, 60] },
+  ];
+
+  function vendorsFor(itemName){
+    const hit = VENDOR_DB.find(v => v.match.test(itemName)) || VENDOR_DB[0];
+    // deterministic-ish pseudo pricing from item name so re-renders are stable
+    function seedNum(str, salt){
+      let h = salt;
+      for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) >>> 0; }
+      return h;
+    }
+    const [lo,hi] = hit.base;
+    const names = [hit.name, ...VENDOR_DB.filter(v=>v!==hit).slice(0,2).map(v=>v.name)];
+    return names.map((n, idx) => {
+      const seed = seedNum(itemName + n, idx + 7);
+      const spread = lo + (seed % 1000)/1000 * (hi - lo);
+      const price = +(spread * (1 + idx*0.09)).toFixed(2);
+      const lead = idx === 0 ? hit.lead : (idx === 1 ? '5-day' : '9-day');
+      return { name: n, price, lead, reliability: (hit.reliability - idx*0.03).toFixed(2) };
+    }).sort((a,b)=>a.price-b.price);
+  }
+
+  let currentItems = [];
+
+  const dropzone = document.getElementById('dropzone');
+  const takeoffArea = document.getElementById('takeoffArea');
+  const vendorArea = document.getElementById('vendorArea');
+  const steps = { s1: document.getElementById('s1'), s2: document.getElementById('s2'), s3: document.getElementById('s3'), s4: document.getElementById('s4') };
+
+  function setStep(n){
+    const order = ['s1','s2','s3','s4'];
+    order.forEach((id, i) => {
+      steps[id].classList.remove('active','done');
+      if(i < n) steps[id].classList.add('done');
+      if(i === n) steps[id].classList.add('active');
+    });
+  }
+
+  dropzone.addEventListener('click', () => runTakeoff('restroom'));
+  document.querySelectorAll('.sample-btn').forEach(btn=>{
+    btn.addEventListener('click', () => runTakeoff(btn.dataset.sample));
+  });
+
+  function runTakeoff(key){
+    setStep(0);
+    takeoffArea.innerHTML = `<div class="empty-hint">Scanning sheet — extracting call-outs and quantities…</div>`;
+    vendorArea.innerHTML = `<div class="empty-hint">Waiting on takeoff…</div>`;
+
+    setTimeout(() => {
+      const sample = SAMPLES[key];
+      currentItems = sample.items.map((it, i) => ({...it, id: key + '-' + i}));
+      renderTakeoff(sample.label);
+      setStep(1);
+    }, 550);
+  }
+
+  function renderTakeoff(label){
+    let rows = currentItems.map(it => `
+      <tr data-id="${it.id}">
+        <td>${it.name}</td>
+        <td><input class="qty-input" type="number" min="0" value="${it.qty}" data-id="${it.id}"></td>
+        <td>${it.unit}</td>
+        <td><span class="conf ${it.conf}">${it.conf === 'high' ? '● high' : it.conf === 'mid' ? '● review' : '● verify'}</span></td>
+      </tr>
+    `).join('');
+
+    takeoffArea.innerHTML = `
+      <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">Extracted from: <strong style="color:var(--text)">${label}</strong> — quantities are editable before pricing.</div>
+      <table>
+        <thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Confidence</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <button class="primary" id="matchBtn">Match vendors &amp; price buyout →</button>
+    `;
+
+    takeoffArea.querySelectorAll('.qty-input').forEach(inp => {
+      inp.addEventListener('input', e => {
+        const id = e.target.dataset.id;
+        const item = currentItems.find(i => i.id === id);
+        item.qty = Number(e.target.value) || 0;
+      });
+    });
+
+    document.getElementById('matchBtn').addEventListener('click', () => {
+      setStep(2);
+      vendorArea.innerHTML = `<div class="empty-hint">Matching each line item against the vendor catalog…</div>`;
+      setTimeout(renderVendors, 500);
+    });
+  }
+
+  function renderVendors(){
+    setStep(3);
+    let totalBest = 0;
+    let totalWorst = 0;
+
+    let sections = currentItems.filter(it => it.qty > 0).map(it => {
+      const options = vendorsFor(it.name);
+      const bestUnit = options[0];
+      const lineBest = bestUnit.price * it.qty;
+      const lineWorst = options[options.length-1].price * it.qty;
+      totalBest += lineBest;
+      totalWorst += lineWorst;
+
+      const rows = options.map((o, idx) => `
+        <div class="vendor-row">
+          <div>
+            <div class="vendor-name">${o.name} ${idx===0 ? '<span class="tag-best">best price</span>' : ''}</div>
+            <div class="vendor-meta">Lead time ${o.lead} · ${(o.reliability*100).toFixed(0)}% on-time history</div>
+          </div>
+          <div class="price ${idx===0 ? 'best' : ''}">$${o.price.toFixed(2)}/${it.unit}</div>
+        </div>
+      `).join('');
+
+      return `
+        <div class="card" style="background:var(--panel2); margin-bottom:12px; padding:14px 16px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;">
+            <strong>${it.name}</strong>
+            <span style="color:var(--muted)">${it.qty} ${it.unit} needed</span>
+          </div>
+          ${rows}
+          <div style="text-align:right; margin-top:8px; font-size:12.5px; color:var(--muted);">
+            Line total at best price: <strong style="color:var(--text)">$${lineBest.toLocaleString(undefined,{maximumFractionDigits:0})}</strong>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const savingsPct = totalWorst > 0 ? (((totalWorst - totalBest) / totalWorst) * 100).toFixed(1) : 0;
+
+    vendorArea.innerHTML = `
+      <div class="summary flash">
+        <div class="stat">
+          <div class="label">Optimized buyout total</div>
+          <div class="value win">$${totalBest.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+        </div>
+        <div class="stat">
+          <div class="label">Savings vs. slowest vendor mix</div>
+          <div class="value">${savingsPct}%</div>
+        </div>
+      </div>
+      <div style="max-height:420px; overflow-y:auto; margin-top:16px; padding-right:4px;">
+        ${sections}
+      </div>
+      <button class="primary" id="poBtn">Generate purchase orders</button>
+      <button class="ghost" id="resetBtn">Start over</button>
+      <div id="poResult"></div>
+    `;
+
+    document.getElementById('poBtn').addEventListener('click', () => {
+      setStep(3);
+      document.getElementById('poResult').innerHTML = `
+        <div class="card flash" style="background:var(--panel2); margin-top:14px; padding:14px 16px; font-size:13px;">
+          ✅ ${sections === '' ? 0 : currentItems.filter(i=>i.qty>0).length} purchase orders drafted and routed to their lowest-cost, in-stock vendor — ready for review before send.
+        </div>
+      `;
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      currentItems = [];
+      takeoffArea.innerHTML = '';
+      vendorArea.innerHTML = `<div class="empty-hint">Run a takeoff on the left to see matched vendors and pricing here.</div>`;
+      setStep(0);
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>

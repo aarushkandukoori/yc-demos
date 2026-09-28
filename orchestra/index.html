@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distillery — watch a cheap model learn to replace an expensive one</title>
+<style>
+  :root{
+    --bg:#0b0e14;
+    --panel:#121722;
+    --panel2:#161c29;
+    --line:#232b3d;
+    --text:#e8edf7;
+    --muted:#8b96ac;
+    --big:#ff8a5c;
+    --small:#5cc8ff;
+    --good:#4ade80;
+    --accent:#c9a8ff;
+    --mono: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 800px at 80% -10%, #1a2135 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding:32px 20px 60px;
+  }
+  .wrap{max-width:980px;margin:0 auto;}
+  header{margin-bottom:28px;}
+  h1{font-size:1.7rem;margin:0 0 6px;letter-spacing:-0.02em;}
+  .sub{color:var(--muted);font-size:0.98rem;line-height:1.5;max-width:640px;}
+  .tag{display:inline-block;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--accent);
+       border:1px solid #3a2f56;background:#1b1530;padding:3px 8px;border-radius:20px;margin-bottom:10px;}
+
+  .grid{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;margin-top:20px;}
+  @media (max-width:760px){.grid{grid-template-columns:1fr;}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;}
+  .panel h2{font-size:0.95rem;margin:0 0 14px;color:var(--text);display:flex;align-items:center;gap:8px;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .dot.big{background:var(--big);}
+  .dot.small{background:var(--small);}
+
+  .task-preview{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:0.85rem;
+    color:var(--muted);margin-bottom:14px;min-height:64px;}
+  .task-preview b{color:var(--text);font-weight:600;}
+
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  button{
+    background:linear-gradient(180deg,#7c5cff,#6a45ff);
+    color:white;border:none;border-radius:9px;padding:10px 16px;font-size:0.88rem;font-weight:600;
+    cursor:pointer;transition:transform .08s ease, filter .15s ease;
+  }
+  button:hover{filter:brightness(1.1);}
+  button:active{transform:scale(0.97);}
+  button.secondary{background:var(--panel2);border:1px solid var(--line);color:var(--text);}
+  button:disabled{opacity:0.45;cursor:not-allowed;}
+
+  .stat-row{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+  .stat{flex:1;min-width:130px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .stat .label{font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px;}
+  .stat .value{font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .stat .value.big{color:var(--big);}
+  .stat .value.small{color:var(--small);}
+  .stat .value.good{color:var(--good);}
+
+  .chart{position:relative;height:160px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px 24px;margin-bottom:6px;}
+  .chart svg{width:100%;height:100%;overflow:visible;}
+  .legend{display:flex;gap:16px;font-size:0.75rem;color:var(--muted);margin-top:6px;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .swatch{width:10px;height:3px;border-radius:2px;display:inline-block;}
+
+  .routing-banner{border-radius:10px;padding:12px 14px;font-size:0.85rem;margin-bottom:14px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--muted);transition:all .3s ease;}
+  .routing-banner.switched{border-color:#1f5c3d;background:#0e1f16;color:var(--good);}
+
+  .log{font-family:var(--mono);font-size:0.76rem;line-height:1.65;max-height:220px;overflow-y:auto;
+    background:#0a0d14;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--muted);}
+  .log .entry{white-space:pre-wrap;}
+  .log .route-big{color:var(--big);}
+  .log .route-small{color:var(--small);}
+  .log .switch-line{color:var(--good);font-weight:600;}
+
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:0.78rem;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="tag">toy simulation · synthetic data only</div>
+    <h1>Distillery — a self-optimizing inference queue</h1>
+    <p class="sub">
+      This is a homage demo, not a real product. It simulates a repetitive workflow
+      (classifying contract clauses) being run against an expensive "frontier" model.
+      Every production run is captured as a training example for a small model.
+      Once the small model's held-out accuracy matches the big one, the router
+      switches traffic over — automatically, mid-stream.
+    </p>
+  </header>
+
+  <div class="panel" style="margin-bottom:18px;">
+    <h2>Current task</h2>
+    <div class="task-preview" id="taskPreview">
+      Click <b>Run production batch</b> to start streaming synthetic legal clauses through the router.
+    </div>
+    <div class="controls">
+      <button id="runBtn">▶ Run production batch (25 tasks)</button>
+      <button class="secondary" id="resetBtn">↺ Reset simulation</button>
+    </div>
+    <div class="routing-banner" id="routingBanner">
+      Routing: 100% of traffic → <span class="dot big" style="margin-left:2px;"></span> expensive model (small model not yet trained)
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2><span class="dot small"></span>Small model learning curve</h2>
+      <div class="chart"><svg id="chartSvg" viewBox="0 0 400 140" preserveAspectRatio="none"></svg></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--big);"></span>expensive model (held-out acc.)</span>
+        <span><span class="swatch" style="background:var(--small);"></span>small model (held-out acc.)</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Live economics</h2>
+      <div class="stat-row">
+        <div class="stat"><div class="label">Tasks processed</div><div class="value" id="statTasks">0</div></div>
+        <div class="stat"><div class="label">Training examples captured</div><div class="value" id="statExamples">0</div></div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><div class="label">Cost so far</div><div class="value big" id="statCost">$0.00</div></div>
+        <div class="stat"><div class="label">Cost if always-big</div><div class="value" id="statCostBig">$0.00</div></div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><div class="label">Saved vs. always-big</div><div class="value good" id="statSaved">$0.00 (0%)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:18px;">
+    <h2>Routing log</h2>
+    <div class="log" id="log"></div>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Orchestra (YC S26). Not affiliated with Orchestra.</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- synthetic task bank: fake contract clauses to "classify" ----
+  const CLAUSE_TYPES = ["indemnification","limitation of liability","termination for convenience",
+    "assignment restriction","governing law","confidentiality carve-out","force majeure","auto-renewal"];
+  const SNIPPETS = [
+    "Either party may terminate this Agreement upon thirty (30) days written notice...",
+    "In no event shall either party's aggregate liability exceed the fees paid...",
+    "This Agreement shall automatically renew for successive one-year terms unless...",
+    "Neither party shall assign its rights hereunder without prior written consent...",
+    "Each party shall indemnify and hold harmless the other from claims arising out of...",
+    "This Agreement shall be governed by the laws of the State of Delaware...",
+    "Neither party shall be liable for delays caused by events beyond reasonable control...",
+    "Recipient may disclose Confidential Information to the extent required by law..."
+  ];
+
+  function randomTask(){
+    const i = Math.floor(Math.random()*SNIPPETS.length);
+    return {snippet: SNIPPETS[i], label: CLAUSE_TYPES[i]};
+  }
+
+  // ---- model behavior ----
+  const BIG_ACCURACY = 0.95;      // frontier model: stable, expensive
+  const BIG_COST_PER_TASK = 0.42; // dollars, synthetic
+  const SMALL_COST_PER_TASK = 0.003;
+
+  let tasksProcessed = 0;
+  let examplesCaptured = 0;
+  let costTotal = 0;
+  let switched = false;
+  let history = []; // {examples, smallAcc}
+
+  // small model accuracy grows with a logistic curve as a function of
+  // captured training examples — purely illustrative, not a real model.
+  function smallAccuracyForExamples(n){
+    const k = 0.045;      // learning rate
+    const midpoint = 55;  // examples at which it's ~halfway
+    const floor = 0.30;
+    const ceiling = 0.985;
+    const logistic = 1 / (1 + Math.exp(-k*(n - midpoint)));
+    return floor + (ceiling - floor) * logistic;
+  }
+
+  const els = {
+    taskPreview: document.getElementById('taskPreview'),
+    runBtn: document.getElementById('runBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    banner: document.getElementById('routingBanner'),
+    statTasks: document.getElementById('statTasks'),
+    statExamples: document.getElementById('statExamples'),
+    statCost: document.getElementById('statCost'),
+    statCostBig: document.getElementById('statCostBig'),
+    statSaved: document.getElementById('statSaved'),
+    log: document.getElementById('log'),
+    svg: document.getElementById('chartSvg'),
+  };
+
+  function fmt(n){ return '$' + n.toFixed(2); }
+
+  function logLine(text, cls){
+    const div = document.createElement('div');
+    div.className = 'entry ' + (cls||'');
+    div.textContent = text;
+    els.log.appendChild(div);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+
+  function updateStats(){
+    els.statTasks.textContent = tasksProcessed;
+    els.statExamples.textContent = examplesCaptured;
+    els.statCost.textContent = fmt(costTotal);
+    const costBig = tasksProcessed * BIG_COST_PER_TASK;
+    els.statCostBig.textContent = fmt(costBig);
+    const saved = costBig - costTotal;
+    const pct = costBig > 0 ? Math.round((saved/costBig)*100) : 0;
+    els.statSaved.textContent = fmt(Math.max(saved,0)) + ' (' + Math.max(pct,0) + '%)';
+  }
+
+  function updateBanner(){
+    if(switched){
+      els.banner.className = 'routing-banner switched';
+      els.banner.innerHTML = 'Routing: production traffic now served by the <b>small model</b> — it matched the expensive model on held-out eval. Falling back to big model only on low-confidence cases.';
+    } else {
+      const acc = history.length ? history[history.length-1].smallAcc : 0.30;
+      els.banner.className = 'routing-banner';
+      els.banner.innerHTML = 'Routing: 100% of traffic → <span class="dot big" style="margin-left:2px;"></span> expensive model &nbsp;·&nbsp; small model held-out accuracy: ' + Math.round(acc*100) + '% (needs ' + Math.round(BIG_ACCURACY*100) + '%)';
+    }
+  }
+
+  function drawChart(){
+    const W = 400, H = 140, pad = 8;
+    const maxN = Math.max(120, examplesCaptured + 10);
+    const pts = history.map(h => {
+      const x = pad + (h.examples / maxN) * (W - pad*2);
+      const y = H - pad - (h.smallAcc * (H - pad*2));
+      return [x,y];
+    });
+    let smallPath = '';
+    pts.forEach((p,i)=>{ smallPath += (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1) + ' '; });
+
+    const bigY = H - pad - (BIG_ACCURACY * (H - pad*2));
+
+    let svg = '';
+    // gridlines
+    for(let g=0; g<=4; g++){
+      const y = pad + g*(H-pad*2)/4;
+      svg += `<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#232b3d" stroke-width="1"/>`;
+    }
+    // big model line (dashed, constant)
+    svg += `<line x1="${pad}" y1="${bigY}" x2="${W-pad}" y2="${bigY}" stroke="var(--big)" stroke-width="2" stroke-dasharray="5,4"/>`;
+    // small model curve
+    if(pts.length > 1){
+      svg += `<path d="${smallPath}" fill="none" stroke="var(--small)" stroke-width="2.5"/>`;
+    }
+    if(pts.length){
+      const last = pts[pts.length-1];
+      svg += `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="var(--small)"/>`;
+    }
+    els.svg.innerHTML = svg;
+  }
+
+  function pickModelAndRoute(currentSmallAcc){
+    if(switched) return 'small';
+    return 'big';
+  }
+
+  function processOneTask(){
+    const task = randomTask();
+    tasksProcessed++;
+    examplesCaptured++;
+
+    const smallAcc = smallAccuracyForExamples(examplesCaptured);
+    history.push({examples: examplesCaptured, smallAcc});
+
+    // check for switch condition
+    if(!switched && smallAcc >= BIG_ACCURACY){
+      switched = true;
+      logLine('── small model reached ' + Math.round(smallAcc*100) + '% held-out accuracy, matching the expensive model. Switching production traffic. ──', 'switch-line');
+    }
+
+    const route = pickModelAndRoute(smallAcc);
+    if(route === 'big'){
+      costTotal += BIG_COST_PER_TASK;
+      els.taskPreview.innerHTML = 'Routed to <b style="color:var(--big)">expensive model</b> · clause: <b>"' + task.snippet.slice(0,58) + '..."</b> → labeled <b>' + task.label + '</b> (captured as training example)';
+      logLine('#' + tasksProcessed + '  [big]   ' + task.label.padEnd(28) + ' cost $' + BIG_COST_PER_TASK.toFixed(3), 'route-big');
+    } else {
+      costTotal += SMALL_COST_PER_TASK;
+      els.taskPreview.innerHTML = 'Routed to <b style="color:var(--small)">small distilled model</b> · clause: <b>"' + task.snippet.slice(0,58) + '..."</b> → labeled <b>' + task.label + '</b>';
+      logLine('#' + tasksProcessed + '  [small] ' + task.label.padEnd(28) + ' cost $' + SMALL_COST_PER_TASK.toFixed(3), 'route-small');
+    }
+
+    updateStats();
+    updateBanner();
+    drawChart();
+  }
+
+  let running = false;
+  function runBatch(){
+    if(running) return;
+    running = true;
+    els.runBtn.disabled = true;
+    let count = 0;
+    const total = 25;
+    const interval = setInterval(()=>{
+      processOneTask();
+      count++;
+      if(count >= total){
+        clearInterval(interval);
+        running = false;
+        els.runBtn.disabled = false;
+      }
+    }, 90);
+  }
+
+  function reset(){
+    tasksProcessed = 0;
+    examplesCaptured = 0;
+    costTotal = 0;
+    switched = false;
+    history = [];
+    els.log.innerHTML = '';
+    els.taskPreview.innerHTML = 'Click <b>Run production batch</b> to start streaming synthetic legal clauses through the router.';
+    updateStats();
+    updateBanner();
+    drawChart();
+    logLine('simulation reset. no training examples captured yet.');
+  }
+
+  els.runBtn.addEventListener('click', runBatch);
+  els.resetBtn.addEventListener('click', reset);
+
+  reset();
+})();
+</script>
+</body>
+</html>

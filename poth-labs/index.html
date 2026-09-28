@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evidence Loop — customer behavior investigator (toy demo)</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#171a21;
+    --panel-2:#1e222b;
+    --border:#2a2f3a;
+    --text:#e8eaf0;
+    --muted:#8b91a3;
+    --accent:#5fb0ff;
+    --accent-2:#7fe3b4;
+    --warn:#f2b84b;
+    --bad:#f26d6d;
+    --good:#4fd68c;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    line-height:1.45;
+  }
+  header{
+    padding:28px 32px 18px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:720px;
+  }
+  .layout{
+    display:grid;
+    grid-template-columns:300px 1fr;
+    gap:20px;
+    padding:24px 32px;
+    align-items:start;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px;
+  }
+  .panel h2{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    margin:0 0 12px;
+  }
+  .customer-card{
+    display:block;
+    width:100%;
+    text-align:left;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:8px;
+    padding:12px;
+    margin-bottom:10px;
+    cursor:pointer;
+    font-size:14px;
+    transition:border-color .15s, transform .1s;
+  }
+  .customer-card:hover{border-color:var(--accent);}
+  .customer-card.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
+  .customer-card .name{font-weight:600;}
+  .customer-card .meta{color:var(--muted); font-size:12px; margin-top:3px;}
+  .timeline{
+    margin-top:6px;
+    max-height:340px;
+    overflow-y:auto;
+    padding-right:4px;
+  }
+  .event{
+    border-left:2px solid var(--border);
+    padding:8px 0 8px 12px;
+    margin-bottom:2px;
+    font-size:13px;
+  }
+  .event .tag{
+    display:inline-block;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--accent);
+    background:rgba(95,176,255,0.12);
+    border-radius:4px;
+    padding:1px 6px;
+    margin-bottom:4px;
+  }
+  .event .body{color:var(--text);}
+  .event .src{color:var(--muted); font-size:11px; margin-top:2px;}
+
+  .workspace-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .workspace-header h2{margin:0; font-size:16px; font-weight:600;}
+  button.primary{
+    background:var(--accent);
+    color:#0b0d12;
+    border:none;
+    font-weight:600;
+    font-size:13px;
+    padding:9px 16px;
+    border-radius:7px;
+    cursor:pointer;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:disabled{opacity:.45; cursor:default;}
+  button.ghost{
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text);
+    font-size:12px;
+    padding:7px 12px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  button.ghost:hover{border-color:var(--accent);}
+  button.ghost:disabled{opacity:.4; cursor:default;}
+
+  .hyp-card{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:9px;
+    padding:14px 16px;
+    margin-bottom:14px;
+  }
+  .hyp-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+  }
+  .hyp-title{font-size:14.5px; font-weight:600;}
+  .status-pill{
+    font-size:11px;
+    padding:2px 9px;
+    border-radius:99px;
+    white-space:nowrap;
+    font-weight:600;
+    letter-spacing:.02em;
+  }
+  .status-gap{background:rgba(242,184,75,.15); color:var(--warn);}
+  .status-validated{background:rgba(79,214,140,.15); color:var(--good);}
+  .status-refuted{background:rgba(242,109,109,.15); color:var(--bad);}
+  .status-forming{background:rgba(139,145,163,.15); color:var(--muted);}
+
+  .conf-bar{
+    height:6px;
+    border-radius:99px;
+    background:#0b0d12;
+    margin:10px 0 8px;
+    overflow:hidden;
+  }
+  .conf-fill{
+    height:100%;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    width:0%;
+    transition:width .5s ease;
+  }
+  .conf-label{font-size:11px; color:var(--muted);}
+
+  .evidence-list{margin:10px 0 0; padding:0; list-style:none;}
+  .evidence-list li{
+    font-size:12.5px;
+    color:var(--text);
+    padding:6px 0;
+    border-top:1px solid var(--border);
+  }
+  .evidence-list li .src{color:var(--muted); font-size:11px;}
+
+  .gap-box{
+    margin-top:12px;
+    background:rgba(242,184,75,.06);
+    border:1px dashed rgba(242,184,75,.4);
+    border-radius:8px;
+    padding:10px 12px;
+  }
+  .gap-box .label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--warn); margin-bottom:6px; font-weight:700;}
+  .gap-box .question{font-size:13px; font-style:italic; margin-bottom:10px;}
+  .response-box{
+    margin-top:10px;
+    background:rgba(79,214,140,.06);
+    border:1px solid rgba(79,214,140,.3);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:12.5px;
+    display:none;
+  }
+  .response-box.show{display:block;}
+  .response-box .label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--good); margin-bottom:6px; font-weight:700;}
+
+  .empty-state{
+    color:var(--muted);
+    font-size:13.5px;
+    padding:30px 10px;
+    text-align:center;
+  }
+  .spinner{
+    display:inline-block;
+    width:12px; height:12px;
+    border:2px solid rgba(255,255,255,.25);
+    border-top-color:var(--accent);
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+    vertical-align:-2px;
+    margin-right:6px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  footer{
+    padding:22px 32px 40px;
+    color:var(--muted);
+    font-size:12px;
+    border-top:1px solid var(--border);
+    margin-top:10px;
+  }
+
+  @media (max-width:820px){
+    .layout{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Evidence Loop</h1>
+  <p>A toy investigator that scans a customer's activity for signals, forms hypotheses about their behavior,
+  and — when the existing data can't settle a hypothesis — drafts a targeted question to close the gap and
+  files the answer back as cited evidence. Pick a customer to begin.</p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <h2>Customers</h2>
+    <div id="customerList"></div>
+  </div>
+
+  <div>
+    <div class="panel" style="margin-bottom:20px;">
+      <h2>Activity timeline</h2>
+      <div class="timeline" id="timeline"><div class="empty-state">Select a customer to load their evidence trail.</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="workspace-header">
+        <h2>Hypothesis workspace</h2>
+        <button class="primary" id="analyzeBtn" disabled>Run analysis</button>
+      </div>
+      <div id="hypotheses"><div class="empty-state">No hypotheses yet. Select a customer, then run analysis.</div></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Poth Labs (YC S26). Not affiliated with Poth Labs.
+</footer>
+
+<script>
+(function(){
+
+  // ---- synthetic data ----------------------------------------------------
+  const customers = [
+    {
+      id:'meridian',
+      name:'Meridian Robotics',
+      meta:'Growth plan · 14 seats',
+      events:[
+        {tag:'ticket', src:'Zendesk #4821', body:'Import from our warehouse system failed twice this week, no error message shown.'},
+        {tag:'usage', src:'Product analytics', body:'Weekly active seats dropped from 11 to 4 over the last three weeks.'},
+        {tag:'call', src:'Fireflies transcript', body:'"...after the import broke we just went back to spreadsheets for now, honestly."'},
+        {tag:'note', src:'CRM note (AE)', body:'Champion (VP Ops) mentioned budget review coming up next quarter.'},
+        {tag:'ticket', src:'Zendesk #4903', body:'Asked how to re-trigger a failed sync, support pointed them to a doc.'}
+      ]
+    },
+    {
+      id:'harborline',
+      name:'Harborline Freight',
+      meta:'Scale plan · 40 seats',
+      events:[
+        {tag:'call', src:'Fireflies transcript', body:'"Our old point of contact, Priya, left last month — I\'m new to this tool."'},
+        {tag:'usage', src:'Product analytics', body:'Logins from new admin steady at 3-4/week, no drop in overall usage.'},
+        {tag:'ticket', src:'Zendesk #5110', body:'New admin asked where the dashboard their predecessor built went.'},
+        {tag:'note', src:'CRM note (CSM)', body:'Renewal is in 45 days, no pricing objections raised so far.'}
+      ]
+    },
+    {
+      id:'noveltide',
+      name:'Noveltide Retail',
+      meta:'Starter plan · 6 seats',
+      events:[
+        {tag:'ticket', src:'Zendesk #3387', body:'Asked "how do I filter this report by region" three times in one thread.'},
+        {tag:'call', src:'Fireflies transcript', body:'"I\'m still not totally sure what the segmentation view is for, honestly."'},
+        {tag:'usage', src:'Product analytics', body:'Only the reports tab is ever opened; segmentation feature never used.'},
+        {tag:'note', src:'CRM note (AE)', body:'Team asked about cheaper tier during last check-in call.'},
+        {tag:'ticket', src:'Zendesk #3402', body:'Requested a walkthrough of "the expensive add-on" before renewing.'}
+      ]
+    }
+  ];
+
+  // Hypothesis templates: keyword rules scored against a customer's events.
+  const templates = [
+    {
+      id:'onboarding_break',
+      title:'A broken workflow (not disengagement) is driving the usage drop',
+      keywords:['import','sync','fail','error','spreadsheet','broke'],
+      threshold:3,
+      question:'When the import stopped working, what did your team do next — did you find a workaround, or pause using the workflow entirely?',
+      resolutions:[
+        {match:['workaround','spreadsheet','manual'], verdict:'validated', reply:'"We just moved the whole workflow back to spreadsheets until it\'s fixed — nobody\'s opened the tool since."'},
+        {match:['fixed','resolved','fine'], verdict:'refuted', reply:'"Oh that got sorted out last week, we\'re back to normal now."'}
+      ],
+      defaultResolution:0
+    },
+    {
+      id:'champion_loss',
+      title:'Loss of the internal champion is creating adoption risk',
+      keywords:['left','new to','point of contact','predecessor','new admin'],
+      threshold:2,
+      question:'It looks like the primary contact changed recently — has the new team lead had a proper handoff on how the account is set up?',
+      resolutions:[
+        {match:['no handoff','never got','confused'], verdict:'validated', reply:'"Honestly no — I inherited this account with zero documentation from the last person."'},
+        {match:['handoff','fine','ramped'], verdict:'refuted', reply:'"Yeah, we did a full handoff call, I\'m mostly ramped up now."'}
+      ],
+      defaultResolution:0
+    },
+    {
+      id:'feature_confusion',
+      title:'A core feature is underused because customers don\'t understand it',
+      keywords:['how do i','not sure','confused','never used','still not'],
+      threshold:2,
+      question:'We noticed the segmentation view has never been opened — was it unclear what that feature is for, or does it just not fit your workflow?',
+      resolutions:[
+        {match:['unclear','never explained','didn\'t know'], verdict:'validated', reply:'"Unclear, honestly — nobody ever showed us what it\'s for or how it\'d help."'},
+        {match:['not needed','don\'t need'], verdict:'refuted', reply:'"We just don\'t need it, our reports view covers everything we care about."'}
+      ],
+      defaultResolution:0
+    },
+    {
+      id:'pricing_pressure',
+      title:'Renewal is at risk over price, not product fit',
+      keywords:['budget','expensive','cheaper','pricing','renewal','add-on'],
+      threshold:2,
+      question:'Ahead of renewal, is the current plan\'s pricing the main blocker, or is it more about which features you\'re actually using?',
+      resolutions:[
+        {match:['too expensive','budget cut','price'], verdict:'validated', reply:'"It\'s mostly price — leadership wants everything trimmed this quarter."'},
+        {match:['fine with price','not about price'], verdict:'refuted', reply:'"Price is fine, we were just curious what the add-on included."'}
+      ],
+      defaultResolution:0
+    }
+  ];
+
+  let activeCustomer = null;
+  let hypState = {}; // id -> {status, confidence, evidence[]}
+
+  // ---- rendering: customer list ------------------------------------------
+  const listEl = document.getElementById('customerList');
+  customers.forEach(c=>{
+    const btn = document.createElement('button');
+    btn.className = 'customer-card';
+    btn.dataset.id = c.id;
+    btn.innerHTML = `<div class="name">${c.name}</div><div class="meta">${c.meta}</div>`;
+    btn.addEventListener('click', ()=>selectCustomer(c.id));
+    listEl.appendChild(btn);
+  });
+
+  function selectCustomer(id){
+    activeCustomer = customers.find(c=>c.id===id);
+    document.querySelectorAll('.customer-card').forEach(el=>{
+      el.classList.toggle('active', el.dataset.id===id);
+    });
+    renderTimeline();
+    document.getElementById('analyzeBtn').disabled = false;
+    hypState = {};
+    document.getElementById('hypotheses').innerHTML =
+      '<div class="empty-state">Ready. Click "Run analysis" to scan this customer\'s evidence trail for hypotheses.</div>';
+  }
+
+  function renderTimeline(){
+    const el = document.getElementById('timeline');
+    el.innerHTML = '';
+    activeCustomer.events.forEach(ev=>{
+      const div = document.createElement('div');
+      div.className = 'event';
+      div.innerHTML = `<span class="tag">${ev.tag}</span><div class="body">${ev.body}</div><div class="src">${ev.src}</div>`;
+      el.appendChild(div);
+    });
+  }
+
+  // ---- analysis ------------------------------------------------------------
+  document.getElementById('analyzeBtn').addEventListener('click', runAnalysis);
+
+  function scoreHypothesis(tmpl, events){
+    const matched = [];
+    events.forEach(ev=>{
+      const text = ev.body.toLowerCase();
+      const hit = tmpl.keywords.some(k=>text.includes(k));
+      if(hit) matched.push(ev);
+    });
+    return matched;
+  }
+
+  function runAnalysis(){
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>scanning evidence…';
+    const hypEl = document.getElementById('hypotheses');
+    hypEl.innerHTML = '';
+
+    setTimeout(()=>{
+      const results = templates.map(t=>{
+        const evidence = scoreHypothesis(t, activeCustomer.events);
+        return {tmpl:t, evidence};
+      }).filter(r=>r.evidence.length>0)
+        .sort((a,b)=>b.evidence.length-a.evidence.length);
+
+      if(results.length===0){
+        hypEl.innerHTML = '<div class="empty-state">No hypothesis templates matched this customer\'s evidence trail.</div>';
+      } else {
+        results.forEach(r=>{
+          const conf = Math.min(0.95, (r.evidence.length / r.tmpl.threshold) * 0.55);
+          hypState[r.tmpl.id] = {
+            status: r.evidence.length >= r.tmpl.threshold ? 'validated' : 'gap',
+            confidence: conf,
+            evidence: r.evidence.slice()
+          };
+          hypEl.appendChild(renderHypCard(r.tmpl, hypState[r.tmpl.id]));
+        });
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Re-run analysis';
+    }, 650);
+  }
+
+  function statusLabel(status){
+    return {gap:'Evidence gap', validated:'Validated', refuted:'Refuted', forming:'Forming'}[status];
+  }
+  function statusClass(status){
+    return {gap:'status-gap', validated:'status-validated', refuted:'status-refuted', forming:'status-forming'}[status];
+  }
+
+  function renderHypCard(tmpl, state){
+    const card = document.createElement('div');
+    card.className = 'hyp-card';
+    card.id = 'hyp-'+tmpl.id;
+
+    const confPct = Math.round(state.confidence*100);
+    const evidenceHtml = state.evidence.map(ev=>
+      `<li>${ev.body}<div class="src">${ev.src}</div></li>`
+    ).join('');
+
+    let gapHtml = '';
+    if(state.status==='gap'){
+      gapHtml = `
+        <div class="gap-box" id="gapbox-${tmpl.id}">
+          <div class="label">Existing data can't confirm this — drafted question</div>
+          <div class="question">"${tmpl.question}"</div>
+          <button class="ghost" data-ask="${tmpl.id}">Send adaptive question to customer</button>
+          <div class="response-box" id="resp-${tmpl.id}"></div>
+        </div>`;
+    }
+
+    card.innerHTML = `
+      <div class="hyp-top">
+        <div class="hyp-title">${tmpl.title}</div>
+        <div class="status-pill ${statusClass(state.status)}" id="pill-${tmpl.id}">${statusLabel(state.status)}</div>
+      </div>
+      <div class="conf-bar"><div class="conf-fill" id="fill-${tmpl.id}" style="width:${confPct}%"></div></div>
+      <div class="conf-label" id="conflabel-${tmpl.id}">Confidence: ${confPct}% · from ${state.evidence.length} existing record${state.evidence.length===1?'':'s'}</div>
+      <ul class="evidence-list" id="evlist-${tmpl.id}">${evidenceHtml}</ul>
+      ${gapHtml}
+    `;
+
+    const askBtn = card.querySelector('[data-ask]');
+    if(askBtn){
+      askBtn.addEventListener('click', ()=>askQuestion(tmpl));
+    }
+    return card;
+  }
+
+  function askQuestion(tmpl){
+    const btn = document.querySelector(`[data-ask="${tmpl.id}"]`);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>waiting on customer reply…';
+
+    setTimeout(()=>{
+      const res = tmpl.resolutions[tmpl.defaultResolution];
+      const state = hypState[tmpl.id];
+      state.status = res.verdict;
+      state.confidence = res.verdict==='validated' ? 0.93 : 0.15;
+      state.evidence.push({body: res.reply, src:'Adaptive survey response'});
+
+      const respBox = document.getElementById('resp-'+tmpl.id);
+      respBox.classList.add('show');
+      respBox.innerHTML = `<div class="label">Customer reply — filed as evidence</div>${res.reply}`;
+
+      document.getElementById('pill-'+tmpl.id).className = 'status-pill ' + statusClass(state.status);
+      document.getElementById('pill-'+tmpl.id).textContent = statusLabel(state.status);
+      document.getElementById('fill-'+tmpl.id).style.width = Math.round(state.confidence*100)+'%';
+      document.getElementById('conflabel-'+tmpl.id).textContent =
+        `Confidence: ${Math.round(state.confidence*100)}% · from ${state.evidence.length} records (including 1 survey reply)`;
+
+      const evlist = document.getElementById('evlist-'+tmpl.id);
+      const li = document.createElement('li');
+      li.innerHTML = `${res.reply}<div class="src">Adaptive survey response</div>`;
+      evlist.appendChild(li);
+
+      btn.textContent = 'Question answered';
+    }, 900);
+  }
+
+})();
+</script>
+
+</body>
+</html>

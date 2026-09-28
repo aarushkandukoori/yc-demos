@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Describe It, Deploy It — Internal Tool Builder Demo</title>
+<style>
+  :root {
+    --bg: #0f1410;
+    --panel: #161c17;
+    --panel-2: #1c231d;
+    --border: #2a332b;
+    --text: #e7ede8;
+    --muted: #8fa192;
+    --accent: #5fb984;
+    --accent-2: #3d8a63;
+    --warn: #d9a441;
+    --danger: #d9634a;
+    --mono: 'SF Mono', 'Fira Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: linear-gradient(180deg, #0c100d, #0f1410 40%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 36px; }
+  header h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  header p { color: var(--muted); margin: 0; font-size: 15px; }
+  .badge {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+    letter-spacing: 0.02em;
+  }
+
+  .step {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .step h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step h2 .num {
+    background: var(--accent-2);
+    color: #06120a;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    padding: 14px;
+    resize: vertical;
+    min-height: 70px;
+    font-family: inherit;
+  }
+  textarea:focus { outline: 1px solid var(--accent); }
+
+  .examples { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .examples button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .examples button:hover { color: var(--text); border-color: var(--accent); }
+
+  .build-btn {
+    margin-top: 16px;
+    background: var(--accent);
+    color: #06120a;
+    border: none;
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  .build-btn:hover { background: #6fca93; }
+  .build-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .hidden { display: none; }
+
+  .console {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.8;
+    white-space: pre-wrap;
+  }
+  .console .ok { color: var(--accent); }
+  .console .ph { color: var(--warn); }
+
+  .tool-frame {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 16px;
+  }
+  .tool-topbar {
+    background: var(--panel-2);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .tool-topbar .name { font-weight: 600; font-size: 14px; }
+  .tool-topbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; margin-right: 6px; }
+
+  .role-switch { display: flex; gap: 6px; }
+  .role-switch button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .role-switch button.active {
+    background: var(--accent);
+    color: #06120a;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .tool-body { padding: 18px; background: #10150f; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  td input[type="text"], td select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 100%;
+  }
+  td input:disabled, td select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: transparent;
+    border-color: transparent;
+  }
+  .field-locked { color: var(--muted); font-size: 13px; }
+
+  .perm-note {
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .perm-note b { color: var(--text); }
+
+  .save-row { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+  .save-btn {
+    background: var(--accent-2);
+    color: #eafaf0;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .save-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .save-status { font-size: 12.5px; color: var(--muted); }
+
+  .audit {
+    margin-top: 22px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    background: #0b0f0b;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+  .audit div { padding: 2px 0; }
+  .audit .write { color: var(--accent); }
+  .audit .deny { color: var(--danger); }
+
+  footer {
+    text-align: center;
+    margin-top: 48px;
+    color: var(--muted);
+    font-size: 12.5px;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge">TOY DEMO — SYNTHETIC DATA ONLY</div>
+    <h1>Describe the tool. Deploy the tool.</h1>
+    <p>Type what you need in plain English. Get a working internal tool with permissions already baked in — no engineer required.</p>
+  </header>
+
+  <div class="step">
+    <h2><span class="num">1</span> Describe the internal tool you need</h2>
+    <textarea id="promptInput" placeholder="e.g. A tool for front desk to check patient copay balances and add notes, but not edit insurance info"></textarea>
+    <div class="examples">
+      <button onclick="fillExample('front-desk')">Front desk copay lookup</button>
+      <button onclick="fillExample('nurse')">Nurse medication log</button>
+      <button onclick="fillExample('billing')">Billing write-offs tracker</button>
+    </div>
+    <button class="build-btn" id="buildBtn" onclick="build()">Generate &amp; Deploy</button>
+  </div>
+
+  <div class="step hidden" id="buildingStep">
+    <h2><span class="num">2</span> Building</h2>
+    <div class="console" id="consoleLog"></div>
+  </div>
+
+  <div class="step hidden" id="resultStep">
+    <h2><span class="num">3</span> Your tool is live — try switching roles</h2>
+    <div class="tool-frame">
+      <div class="tool-topbar">
+        <div class="name"><span class="dot"></span><span id="toolName">Tool</span></div>
+        <div class="role-switch" id="roleSwitch"></div>
+      </div>
+      <div class="tool-body">
+        <table id="dataTable"></table>
+        <div class="perm-note" id="permNote"></div>
+        <div class="save-row">
+          <button class="save-btn" id="saveBtn" onclick="saveChanges()">Save changes</button>
+          <span class="save-status" id="saveStatus"></span>
+        </div>
+      </div>
+    </div>
+    <div class="audit" id="auditLog"></div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Floracene (YC S26). Not affiliated with Floracene.
+  </footer>
+</div>
+
+<script>
+// ---- Synthetic "production data" per scenario ----
+const SCENARIOS = {
+  'front-desk': {
+    toolName: 'Copay & Notes Lookup',
+    prompt: 'A tool for front desk to check patient copay balances and add notes, but not edit insurance info',
+    columns: [
+      { key: 'patient', label: 'Patient', editable: {} },
+      { key: 'copay', label: 'Copay Due', editable: {} },
+      { key: 'insurance', label: 'Insurance ID', editable: {}, sensitive: true },
+      { key: 'notes', label: 'Front Desk Notes', editable: { 'Front Desk': true, 'Practice Manager': true } }
+    ],
+    rows: [
+      { patient: 'J. Alvarez', copay: '$25.00', insurance: 'INS-88213', notes: '' },
+      { patient: 'M. Chen', copay: '$40.00', insurance: 'INS-77004', notes: 'Prefers afternoon calls' },
+      { patient: 'R. Okafor', copay: '$15.00', insurance: 'INS-91455', notes: '' }
+    ],
+    roles: ['Front Desk', 'Practice Manager'],
+    readOnlyRoles: ['Front Desk'],
+    fullEditRoles: ['Practice Manager']
+  },
+  'nurse': {
+    toolName: 'Medication Administration Log',
+    prompt: 'A tool for nurses to log medications given, visible to physicians, locked after 24 hours',
+    columns: [
+      { key: 'patient', label: 'Patient', editable: {} },
+      { key: 'med', label: 'Medication', editable: { 'Nurse': true, 'Physician': true } },
+      { key: 'dose', label: 'Dose', editable: { 'Nurse': true, 'Physician': true } },
+      { key: 'given', label: 'Given At', editable: {} }
+    ],
+    rows: [
+      { patient: 'S. Novak', med: 'Amoxicillin 500mg', dose: '1 tab', given: '08:14' },
+      { patient: 'T. Brooks', med: 'Metformin 500mg', dose: '1 tab', given: '09:02' },
+      { patient: 'A. Petrov', med: 'Lisinopril 10mg', dose: '1 tab', given: '09:40' }
+    ],
+    roles: ['Nurse', 'Physician'],
+    readOnlyRoles: ['Physician'],
+    fullEditRoles: ['Nurse']
+  },
+  'billing': {
+    toolName: 'Billing Write-Offs Tracker',
+    prompt: 'A tool for billing staff to log write-offs, requires manager approval to edit amounts over $500',
+    columns: [
+      { key: 'patient', label: 'Patient', editable: {} },
+      { key: 'amount', label: 'Write-off Amount', editable: { 'Billing Manager': true } },
+      { key: 'reason', label: 'Reason', editable: { 'Billing Staff': true, 'Billing Manager': true } },
+      { key: 'status', label: 'Status', editable: {} }
+    ],
+    rows: [
+      { patient: 'K. Ibrahim', amount: '$120.00', reason: 'Duplicate charge', status: 'Approved' },
+      { patient: 'D. Ferreira', amount: '$650.00', reason: 'Insurance denial appeal failed', status: 'Pending' },
+      { patient: 'L. Wu', amount: '$80.00', reason: 'Coding correction', status: 'Approved' }
+    ],
+    roles: ['Billing Staff', 'Billing Manager'],
+    readOnlyRoles: ['Billing Staff'],
+    fullEditRoles: ['Billing Manager']
+  }
+};
+
+let currentScenario = null;
+let currentRole = null;
+let workingRows = [];
+
+function fillExample(key) {
+  document.getElementById('promptInput').value = SCENARIOS[key].prompt;
+}
+
+function pickScenarioFromPrompt(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('med') || lower.includes('nurse') || lower.includes('dose')) return 'nurse';
+  if (lower.includes('bill') || lower.includes('write-off') || lower.includes('writeoff') || lower.includes('charge')) return 'billing';
+  return 'front-desk';
+}
+
+function build() {
+  const promptEl = document.getElementById('promptInput');
+  const text = promptEl.value.trim();
+  if (!text) {
+    promptEl.placeholder = 'Type something first — e.g. "A tool for front desk to check copay balances"';
+    promptEl.focus();
+    return;
+  }
+  document.getElementById('buildBtn').disabled = true;
+  document.getElementById('buildingStep').classList.remove('hidden');
+  document.getElementById('resultStep').classList.add('hidden');
+
+  const key = pickScenarioFromPrompt(text);
+  currentScenario = JSON.parse(JSON.stringify(SCENARIOS[key]));
+  currentScenario.prompt = text;
+
+  const logEl = document.getElementById('consoleLog');
+  logEl.innerHTML = '';
+  const lines = [
+    { t: 'parsing request...', cls: '' },
+    { t: '> detected entities: patient, ' + currentScenario.columns.slice(1).map(c => c.label.toLowerCase()).join(', '), cls: 'ph' },
+    { t: '> inferring roles mentioned: ' + currentScenario.roles.join(', '), cls: 'ph' },
+    { t: '> scoping field-level read/write per role...', cls: '' },
+    { t: '> connecting to production dataset (synthetic sandbox)', cls: '' },
+    { t: '✓ tool generated and deployed', cls: 'ok' }
+  ];
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= lines.length) {
+      clearInterval(interval);
+      renderTool();
+      document.getElementById('buildBtn').disabled = false;
+      return;
+    }
+    const div = document.createElement('div');
+    div.textContent = lines[i].t;
+    if (lines[i].cls) div.className = lines[i].cls;
+    logEl.appendChild(div);
+    i++;
+  }, 260);
+}
+
+function renderTool() {
+  document.getElementById('resultStep').classList.remove('hidden');
+  document.getElementById('toolName').textContent = currentScenario.toolName;
+  workingRows = JSON.parse(JSON.stringify(currentScenario.rows));
+
+  const switchEl = document.getElementById('roleSwitch');
+  switchEl.innerHTML = '';
+  currentScenario.roles.forEach(role => {
+    const btn = document.createElement('button');
+    btn.textContent = role;
+    btn.onclick = () => setRole(role);
+    switchEl.appendChild(btn);
+  });
+  document.getElementById('auditLog').innerHTML = '';
+  setRole(currentScenario.roles[0]);
+}
+
+function setRole(role) {
+  currentRole = role;
+  document.querySelectorAll('.role-switch button').forEach(b => {
+    b.classList.toggle('active', b.textContent === role);
+  });
+  drawTable();
+  updatePermNote();
+  document.getElementById('saveStatus').textContent = '';
+}
+
+function drawTable() {
+  const table = document.getElementById('dataTable');
+  table.innerHTML = '';
+  const thead = document.createElement('tr');
+  currentScenario.columns.forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col.label + (col.sensitive ? ' 🔒' : '');
+    thead.appendChild(th);
+  });
+  table.appendChild(thead);
+
+  workingRows.forEach((row, rIdx) => {
+    const tr = document.createElement('tr');
+    currentScenario.columns.forEach(col => {
+      const td = document.createElement('td');
+      const isSensitive = col.sensitive && currentScenario.readOnlyRoles.includes(currentRole);
+      const canEdit = !!(col.editable && col.editable[currentRole]);
+
+      if (isSensitive) {
+        const span = document.createElement('span');
+        span.className = 'field-locked';
+        span.textContent = '•••• hidden';
+        td.appendChild(span);
+      } else if (canEdit) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = row[col.key];
+        input.oninput = (e) => { workingRows[rIdx][col.key] = e.target.value; };
+        td.appendChild(input);
+      } else {
+        td.textContent = row[col.key];
+      }
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+}
+
+function updatePermNote() {
+  const note = document.getElementById('permNote');
+  const editableCols = currentScenario.columns.filter(c => c.editable && c.editable[currentRole]).map(c => c.label);
+  const hiddenCols = currentScenario.columns.filter(c => c.sensitive && currentScenario.readOnlyRoles.includes(currentRole)).map(c => c.label);
+  let msg = '<b>' + currentRole + '</b> can edit: ' + (editableCols.length ? editableCols.join(', ') : 'nothing (read-only)') + '.';
+  if (hiddenCols.length) msg += ' Hidden fields: ' + hiddenCols.join(', ') + '.';
+  note.innerHTML = msg;
+}
+
+function saveChanges() {
+  const audit = document.getElementById('auditLog');
+  const editableCols = currentScenario.columns.filter(c => c.editable && c.editable[currentRole]);
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  if (editableCols.length === 0) {
+    entry.className = 'deny';
+    entry.textContent = '[' + time + '] WRITE DENIED — ' + currentRole + ' has no write-scoped fields on this table';
+  } else {
+    entry.className = 'write';
+    entry.textContent = '[' + time + '] ' + currentRole + ' wrote to: ' + editableCols.map(c => c.label).join(', ');
+  }
+  audit.prepend(entry);
+  document.getElementById('saveStatus').textContent = editableCols.length ? 'Saved.' : 'Nothing to save for this role.';
+}
+</script>
+</body>
+</html>

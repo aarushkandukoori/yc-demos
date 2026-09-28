@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lattice Bench — Diamond Growth Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #14171c;
+    --panel-2: #1a1e24;
+    --line: #262b33;
+    --text: #e8ecf1;
+    --dim: #8b93a1;
+    --accent: #6fe6c8;
+    --accent-2: #3fb5e0;
+    --warn: #e0a13f;
+    --bad: #e05f5f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 36px 24px 20px;
+  }
+  header h1 {
+    font-size: 26px;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+  }
+  header p.sub {
+    color: var(--dim);
+    margin: 0 0 28px;
+    font-size: 14.5px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 300px 1fr 300px;
+    gap: 18px;
+  }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .panel h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    margin: 0 0 16px;
+  }
+  .field { margin-bottom: 18px; }
+  .field label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .field label .val {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .field input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .field .range-hint {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+    color: var(--dim);
+    margin-top: 3px;
+  }
+  select {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  button#growBtn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border: none;
+    color: #06131a;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 4px;
+    letter-spacing: 0.01em;
+  }
+  button#growBtn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  button#growBtn:hover:not(:disabled) { filter: brightness(1.08); }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  canvas#lattice {
+    background: #05070a;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 420px;
+    aspect-ratio: 1 / 1;
+  }
+  .stage-caption {
+    font-size: 12px;
+    color: var(--dim);
+    text-align: center;
+    min-height: 16px;
+  }
+  .grade-badge {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .grade-quantum { background: rgba(111,230,200,0.15); color: var(--accent); border: 1px solid rgba(111,230,200,0.4); }
+  .grade-optical { background: rgba(63,181,224,0.15); color: var(--accent-2); border: 1px solid rgba(63,181,224,0.4); }
+  .grade-research { background: rgba(224,161,63,0.15); color: var(--warn); border: 1px solid rgba(224,161,63,0.4); }
+  .grade-scrap { background: rgba(224,95,95,0.15); color: var(--bad); border: 1px solid rgba(224,95,95,0.4); }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .k { color: var(--dim); }
+  .stat-row .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .bar-track {
+    height: 6px;
+    background: var(--panel-2);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+    transition: width 0.5s ease;
+    width: 0%;
+  }
+  .log {
+    margin-top: 20px;
+    font-size: 11.5px;
+    color: var(--dim);
+    background: var(--panel-2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    max-height: 110px;
+    overflow-y: auto;
+    line-height: 1.6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  footer {
+    margin-top: 36px;
+    padding: 18px 0 8px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-size: 12px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Lattice Bench</h1>
+    <p class="sub">A toy chemical-vapor-deposition bench. Dial in the reactor conditions used to
+      grow a synthetic single-crystal diamond wafer, run the growth, and see how far off-spec
+      conditions show up as real lattice defects — not just a number on a dial.</p>
+  </header>
+
+  <div class="grid">
+    <div class="panel" id="controls">
+      <h2>Reactor Parameters</h2>
+
+      <div class="field">
+        <label>Chamber temperature <span class="val" id="tempVal">1000 °C</span></label>
+        <input type="range" id="temp" min="700" max="1300" step="5" value="1000">
+        <div class="range-hint"><span>700</span><span>ideal 950–1050</span><span>1300</span></div>
+      </div>
+
+      <div class="field">
+        <label>Methane concentration <span class="val" id="ch4Val">2.0 %</span></label>
+        <input type="range" id="ch4" min="0.2" max="8" step="0.1" value="2.0">
+        <div class="range-hint"><span>0.2</span><span>ideal 1–3%</span><span>8</span></div>
+      </div>
+
+      <div class="field">
+        <label>Chamber pressure <span class="val" id="presVal">125 Torr</span></label>
+        <input type="range" id="pres" min="20" max="300" step="5" value="125">
+        <div class="range-hint"><span>20</span><span>ideal 100–150</span><span>300</span></div>
+      </div>
+
+      <div class="field">
+        <label>Growth duration <span class="val" id="timeVal">6 h</span></label>
+        <input type="range" id="time" min="1" max="24" step="1" value="6">
+        <div class="range-hint"><span>1h</span><span>longer = thicker</span><span>24h</span></div>
+      </div>
+
+      <div class="field">
+        <label>Substrate seed</label>
+        <select id="seed">
+          <option value="hpht">HPHT single-crystal seed</option>
+          <option value="cvd">CVD homoepitaxial seed</option>
+          <option value="ir">Iridium/sapphire (heteroepitaxial)</option>
+        </select>
+      </div>
+
+      <button id="growBtn">Run growth</button>
+    </div>
+
+    <div class="panel stage">
+      <h2 style="align-self:flex-start;">Wafer Cross-Section (live)</h2>
+      <canvas id="lattice" width="420" height="420"></canvas>
+      <div class="stage-caption" id="stageCaption">Set parameters and run a growth cycle.</div>
+      <div class="log" id="log">&gt; bench idle</div>
+    </div>
+
+    <div class="panel">
+      <h2>Output Wafer</h2>
+      <div id="gradeWrap" style="margin-bottom:14px;">
+        <span class="grade-badge grade-research" id="gradeBadge">— not grown —</span>
+      </div>
+
+      <div class="stat-row"><span class="k">Purity index</span><span class="v" id="purityStat">—</span></div>
+      <div class="bar-track"><div class="bar-fill" id="purityBar"></div></div>
+
+      <div class="stat-row" style="margin-top:14px;"><span class="k">Defect density</span><span class="v" id="defectStat">—</span></div>
+      <div class="stat-row"><span class="k">Est. thermal conductivity</span><span class="v" id="thermalStat">—</span></div>
+      <div class="stat-row"><span class="k">Wafer thickness</span><span class="v" id="thickStat">—</span></div>
+      <div class="stat-row"><span class="k">Predicted yield</span><span class="v" id="yieldStat">—</span></div>
+    </div>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Kara (YC S26). Not affiliated with Kara.</footer>
+</div>
+
+<script>
+(function () {
+  const temp = document.getElementById('temp');
+  const ch4 = document.getElementById('ch4');
+  const pres = document.getElementById('pres');
+  const time = document.getElementById('time');
+  const seed = document.getElementById('seed');
+  const growBtn = document.getElementById('growBtn');
+  const canvas = document.getElementById('lattice');
+  const ctx = canvas.getContext('2d');
+  const logEl = document.getElementById('log');
+  const stageCaption = document.getElementById('stageCaption');
+
+  const tempVal = document.getElementById('tempVal');
+  const ch4Val = document.getElementById('ch4Val');
+  const presVal = document.getElementById('presVal');
+  const timeVal = document.getElementById('timeVal');
+
+  const gradeBadge = document.getElementById('gradeBadge');
+  const purityStat = document.getElementById('purityStat');
+  const purityBar = document.getElementById('purityBar');
+  const defectStat = document.getElementById('defectStat');
+  const thermalStat = document.getElementById('thermalStat');
+  const thickStat = document.getElementById('thickStat');
+  const yieldStat = document.getElementById('yieldStat');
+
+  function syncLabels() {
+    tempVal.textContent = temp.value + ' °C';
+    ch4Val.textContent = parseFloat(ch4.value).toFixed(1) + ' %';
+    presVal.textContent = pres.value + ' Torr';
+    timeVal.textContent = time.value + ' h';
+  }
+  [temp, ch4, pres, time].forEach(el => el.addEventListener('input', syncLabels));
+  syncLabels();
+
+  function log(msg) {
+    const line = document.createElement('div');
+    line.textContent = '> ' + msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // Deviation from ideal range, 0 = perfectly in range, grows the further outside it you go
+  function deviation(v, lo, hi, softness) {
+    if (v >= lo && v <= hi) return 0;
+    const d = v < lo ? (lo - v) : (v - hi);
+    return d / softness;
+  }
+
+  const seedPenalty = { hpht: 0, cvd: 0.05, ir: 0.55 };
+
+  function computeResult() {
+    const t = parseFloat(temp.value);
+    const c = parseFloat(ch4.value);
+    const p = parseFloat(pres.value);
+    const h = parseFloat(time.value);
+    const s = seed.value;
+
+    const dTemp = deviation(t, 950, 1050, 120);
+    const dCh4 = deviation(c, 1, 3, 2.2);
+    const dPres = deviation(p, 100, 150, 80);
+    const sPen = seedPenalty[s];
+
+    // Combined stress score: 0 is ideal, grows with each out-of-spec parameter
+    const stress = dTemp + dCh4 + dPres + sPen;
+
+    // Defect density rises with stress and (mildly) with growth duration, since
+    // more hours gives more time for stray nucleation to accumulate under bad conditions
+    const defectDensity = Math.max(0.02, stress * 1.8 + stress * h * 0.03);
+
+    // Purity index: inverse of defects, clamped 0-100
+    const purity = Math.max(2, Math.min(99.5, 100 - defectDensity * 22));
+
+    // Thermal conductivity scales toward diamond's theoretical ceiling (~2400 W/m·K)
+    // as purity approaches 100, and degrades sharply with defects (phonon scattering)
+    const thermalK = Math.round(2400 * Math.pow(purity / 100, 2.6));
+
+    // Thickness scales with growth hours at a nominal rate, penalized slightly by instability
+    const thickness = (h * (0.9 - Math.min(stress, 0.6) * 0.3)).toFixed(2);
+
+    // Yield: probability the wafer survives inspection uncracked, hurt by heteroepitaxial
+    // strain (bad seed) and by thermal runaway at high stress
+    const yieldPct = Math.max(3, Math.round(96 - stress * 28 - sPen * 20));
+
+    let grade, gradeClass;
+    if (purity >= 92 && defectDensity < 0.9) { grade = 'QUANTUM GRADE'; gradeClass = 'grade-quantum'; }
+    else if (purity >= 78 && defectDensity < 2.2) { grade = 'OPTICAL GRADE'; gradeClass = 'grade-optical'; }
+    else if (purity >= 50) { grade = 'RESEARCH GRADE'; gradeClass = 'grade-research'; }
+    else { grade = 'SCRAP — RECYCLE SEED'; gradeClass = 'grade-scrap'; }
+
+    return { stress, defectDensity, purity, thermalK, thickness, yieldPct, grade, gradeClass };
+  }
+
+  function drawLattice(defectDensity, progress) {
+    const w = canvas.width, hgt = canvas.height;
+    ctx.clearRect(0, 0, w, hgt);
+    ctx.fillStyle = '#05070a';
+    ctx.fillRect(0, 0, w, hgt);
+
+    const spacing = 18;
+    const rowsTotal = Math.floor(hgt / (spacing * 0.87));
+    const rowsShown = Math.max(1, Math.floor(rowsTotal * progress));
+
+    // seeded pseudo-random so re-renders during a growth don't reshuffle already-drawn atoms
+    let seedVal = 1337;
+    function rand() {
+      seedVal = (seedVal * 9301 + 49297) % 233280;
+      return seedVal / 233280;
+    }
+
+    for (let row = 0; row < rowsShown; row++) {
+      const y = hgt - 10 - row * spacing * 0.87;
+      const offset = (row % 2 === 0) ? 0 : spacing / 2;
+      for (let x = offset + 10; x < w - 5; x += spacing) {
+        const isDefect = rand() < Math.min(0.4, defectDensity * 0.05);
+        const jitter = (rand() - 0.5) * 2;
+        ctx.beginPath();
+        ctx.arc(x + jitter, y + jitter, isDefect ? 3.4 : 2.6, 0, Math.PI * 2);
+        if (isDefect) {
+          ctx.fillStyle = '#e05f5f';
+          ctx.shadowColor = '#e05f5f';
+          ctx.shadowBlur = 6;
+        } else {
+          ctx.fillStyle = row / rowsTotal > 0.85 ? '#bff5e8' : '#6fe6c8';
+          ctx.shadowColor = '#6fe6c8';
+          ctx.shadowBlur = 3;
+        }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+
+  drawLattice(0.3, 0.15);
+
+  let growing = false;
+  growBtn.addEventListener('click', () => {
+    if (growing) return;
+    growing = true;
+    growBtn.disabled = true;
+    growBtn.textContent = 'Growing…';
+    logEl.innerHTML = '';
+    gradeBadge.textContent = '— growing —';
+    gradeBadge.className = 'grade-badge grade-research';
+
+    const result = computeResult();
+    log('reactor sealed, purging chamber');
+    log(`temp ${temp.value}°C · CH4 ${ch4.value}% · ${pres.value} Torr · seed: ${seed.options[seed.selectedIndex].text}`);
+
+    const totalFrames = 60;
+    let frame = 0;
+    const interval = setInterval(() => {
+      frame++;
+      const progress = frame / totalFrames;
+      drawLattice(result.defectDensity, progress);
+      stageCaption.textContent = `Depositing layer ${Math.ceil(progress * parseFloat(time.value))} / ${time.value}h …`;
+
+      if (frame === 15) log('nucleation stabilizing');
+      if (frame === 32) log(result.stress > 0.8 ? 'warning: off-spec conditions detected, stray nucleation rising' : 'growth front stable');
+      if (frame === 48) log('cooling ramp initiated');
+
+      if (frame >= totalFrames) {
+        clearInterval(interval);
+        finishGrowth(result);
+      }
+    }, 45);
+  });
+
+  function finishGrowth(result) {
+    growing = false;
+    growBtn.disabled = false;
+    growBtn.textContent = 'Run growth';
+    stageCaption.textContent = 'Growth cycle complete.';
+    log(`done — grade: ${result.grade}`);
+
+    gradeBadge.textContent = result.grade;
+    gradeBadge.className = 'grade-badge ' + result.gradeClass;
+
+    purityStat.textContent = result.purity.toFixed(1) + ' / 100';
+    purityBar.style.width = result.purity.toFixed(1) + '%';
+    defectStat.textContent = result.defectDensity.toFixed(2) + ' /mm³ (sim. units)';
+    thermalStat.textContent = result.thermalK.toLocaleString() + ' W/m·K';
+    thickStat.textContent = result.thickness + ' mm';
+    yieldStat.textContent = result.yieldPct + ' %';
+  }
+})();
+</script>
+</body>
+</html>

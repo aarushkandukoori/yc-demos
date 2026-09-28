@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lane Commander — Toy Demo</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#141b24;
+    --panel2:#1b2430;
+    --border:#2a3441;
+    --text:#e6edf3;
+    --muted:#8b98a5;
+    --working:#3fb950;
+    --idle:#58a6ff;
+    --waiting:#e3b341;
+    --danger:#f85149;
+    --accent:#9d7cff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 20% -10%, #1a2333 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 36px 14px;
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:26px;
+    letter-spacing:-0.02em;
+  }
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:640px;
+    line-height:1.5;
+  }
+  .layout{
+    display:grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap:20px;
+    padding:10px 36px 36px;
+    flex:1;
+  }
+  .lanes{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .lane{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px 16px;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  .lane.waiting{
+    border-color:var(--waiting);
+    box-shadow:0 0 0 1px rgba(227,179,65,0.15);
+  }
+  .lane-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .lane-name{
+    font-weight:600;
+    font-size:14px;
+  }
+  .lane-task{
+    color:var(--muted);
+    font-size:12.5px;
+    margin-top:2px;
+  }
+  .badge{
+    font-size:11px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    padding:3px 9px;
+    border-radius:20px;
+    white-space:nowrap;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .dot{
+    width:7px;height:7px;border-radius:50%;
+    display:inline-block;
+  }
+  .badge.working{ background:rgba(63,185,80,0.12); color:var(--working); }
+  .badge.working .dot{ background:var(--working); animation:pulse 1.4s infinite; }
+  .badge.idle{ background:rgba(88,166,255,0.12); color:var(--idle); }
+  .badge.idle .dot{ background:var(--idle); }
+  .badge.waiting{ background:rgba(227,179,65,0.15); color:var(--waiting); }
+  .badge.waiting .dot{ background:var(--waiting); animation:pulse .9s infinite; }
+  @keyframes pulse{
+    0%{opacity:1;} 50%{opacity:.3;} 100%{opacity:1;}
+  }
+  .progress-track{
+    margin-top:10px;
+    height:6px;
+    background:var(--panel2);
+    border-radius:4px;
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    background:linear-gradient(90deg, var(--accent), var(--idle));
+    border-radius:4px;
+    transition:width .5s ease;
+  }
+  .blocker{
+    margin-top:12px;
+    background:rgba(227,179,65,0.08);
+    border:1px solid rgba(227,179,65,0.35);
+    border-radius:8px;
+    padding:10px 12px;
+  }
+  .blocker-q{
+    font-size:13px;
+    margin:0 0 10px;
+    line-height:1.4;
+  }
+  .blocker-q b{ color:var(--waiting); }
+  .choices{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .choices button{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-size:12.5px;
+    padding:7px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    transition:background .15s, border-color .15s;
+  }
+  .choices button:hover{
+    background:#242f3d;
+    border-color:var(--accent);
+  }
+  .sidebar{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px;
+  }
+  .card h2{
+    margin:0 0 10px;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted);
+  }
+  .stat-row{
+    display:flex;
+    justify-content:space-between;
+    padding:6px 0;
+    font-size:13.5px;
+    border-bottom:1px solid var(--border);
+  }
+  .stat-row:last-child{ border-bottom:none; }
+  .stat-row .n{ font-weight:700; }
+  .n.working{ color:var(--working); }
+  .n.idle{ color:var(--idle); }
+  .n.waiting{ color:var(--waiting); }
+  .orchestrator-log{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    max-height:340px;
+    overflow-y:auto;
+    padding-right:4px;
+  }
+  .log-entry{
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--text);
+    padding-bottom:10px;
+    border-bottom:1px dashed var(--border);
+  }
+  .log-entry:last-child{ border-bottom:none; padding-bottom:0; }
+  .log-entry .tag{
+    color:var(--accent);
+    font-weight:700;
+    margin-right:6px;
+  }
+  .log-entry .time{
+    color:var(--muted);
+    font-size:11px;
+    display:block;
+    margin-top:2px;
+  }
+  .empty-log{
+    color:var(--muted);
+    font-size:12.5px;
+    font-style:italic;
+  }
+  footer{
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    padding:18px 20px 26px;
+    border-top:1px solid var(--border);
+  }
+  .flash{
+    animation:flash-bg 1s ease;
+  }
+  @keyframes flash-bg{
+    0%{ background:rgba(157,124,255,0.25); }
+    100%{ background:var(--panel); }
+  }
+  @media (max-width: 860px){
+    .layout{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Lane Commander <span style="color:var(--muted); font-weight:400; font-size:15px;">— toy demo</span></h1>
+  <p>Five coding-agent "lanes" run at once below. An orchestrator watches all of them and only interrupts you when a lane actually needs a decision. Click a suggested answer to unblock a lane and watch it resume — everything here is simulated, no real agents or network calls involved.</p>
+</header>
+
+<div class="layout">
+  <div class="lanes" id="lanes"></div>
+
+  <div class="sidebar">
+    <div class="card">
+      <h2>Fleet status</h2>
+      <div class="stat-row"><span>Working</span><span class="n working" id="count-working">0</span></div>
+      <div class="stat-row"><span>Idle</span><span class="n idle" id="count-idle">0</span></div>
+      <div class="stat-row"><span>Waiting on you</span><span class="n waiting" id="count-waiting">0</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Orchestrator report</h2>
+      <div class="orchestrator-log" id="log">
+        <div class="empty-log">Watching lanes…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Rindler (YC S26). Not affiliated with Rindler.
+</footer>
+
+<script>
+(function(){
+  const laneDefs = [
+    {
+      id: 'lane-1',
+      name: 'agent-auth-refactor',
+      task: 'Migrate session middleware to rotating tokens',
+      status: 'working',
+      progress: 12,
+      blocker: {
+        question: 'Found two valid approaches for token storage: <b>httpOnly cookie</b> or <b>in-memory + refresh endpoint</b>. Which should I use?',
+        choices: ['httpOnly cookie', 'in-memory + refresh endpoint'],
+      }
+    },
+    {
+      id: 'lane-2',
+      name: 'agent-billing-webhook',
+      task: 'Handle Stripe webhook retries idempotently',
+      status: 'working',
+      progress: 34,
+    },
+    {
+      id: 'lane-3',
+      name: 'agent-onboarding-copy',
+      task: 'Rewrite empty-state copy for new workspace flow',
+      status: 'idle',
+      progress: 100,
+    },
+    {
+      id: 'lane-4',
+      name: 'agent-search-index',
+      task: 'Backfill embeddings for legacy documents',
+      status: 'working',
+      progress: 61,
+      blocker: {
+        question: 'Backfill will touch <b>~4.2M rows</b>. Run it in a single batch tonight, or throttle across 6 hours to avoid DB load?',
+        choices: ['Single batch tonight', 'Throttle over 6 hours'],
+      }
+    },
+    {
+      id: 'lane-5',
+      name: 'agent-ci-flakiness',
+      task: 'Quarantine flaky integration tests',
+      status: 'working',
+      progress: 8,
+    },
+  ];
+
+  const lanesEl = document.getElementById('lanes');
+  const logEl = document.getElementById('log');
+  const state = {};
+
+  laneDefs.forEach(def => {
+    state[def.id] = { ...def, resolved: false };
+    lanesEl.appendChild(renderLane(state[def.id]));
+  });
+
+  function renderLane(lane){
+    const wrap = document.createElement('div');
+    wrap.className = 'lane' + (lane.status === 'waiting' ? ' waiting' : '');
+    wrap.id = lane.id;
+
+    const statusLabel = lane.status === 'working' ? 'Working'
+      : lane.status === 'idle' ? 'Idle'
+      : 'Waiting on you';
+
+    wrap.innerHTML = `
+      <div class="lane-top">
+        <div>
+          <div class="lane-name">${lane.name}</div>
+          <div class="lane-task">${lane.task}</div>
+        </div>
+        <span class="badge ${lane.status}"><span class="dot"></span>${statusLabel}</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${lane.progress}%"></div></div>
+      <div class="blocker-slot"></div>
+    `;
+
+    if (lane.blocker && !lane.resolved && lane.status !== 'waiting') {
+      // blocker appears after a short delay, simulated below
+    }
+    return wrap;
+  }
+
+  function updateLaneDOM(lane){
+    const el = document.getElementById(lane.id);
+    if (!el) return;
+    el.className = 'lane' + (lane.status === 'waiting' ? ' waiting' : '');
+    const badge = el.querySelector('.badge');
+    const statusLabel = lane.status === 'working' ? 'Working'
+      : lane.status === 'idle' ? 'Idle'
+      : 'Waiting on you';
+    badge.className = 'badge ' + lane.status;
+    badge.innerHTML = `<span class="dot"></span>${statusLabel}`;
+    el.querySelector('.progress-fill').style.width = lane.progress + '%';
+
+    const slot = el.querySelector('.blocker-slot');
+    if (lane.status === 'waiting' && lane.blocker && !lane.resolved) {
+      slot.innerHTML = `
+        <div class="blocker">
+          <p class="blocker-q">${lane.blocker.question}</p>
+          <div class="choices">
+            ${lane.blocker.choices.map((c,i) => `<button data-lane="${lane.id}" data-choice="${i}">${c}</button>`).join('')}
+          </div>
+        </div>
+      `;
+      slot.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', onChoice);
+      });
+    } else {
+      slot.innerHTML = '';
+    }
+  }
+
+  function onChoice(e){
+    const laneId = e.target.getAttribute('data-lane');
+    const choiceIdx = e.target.getAttribute('data-choice');
+    const lane = state[laneId];
+    const chosen = lane.blocker.choices[choiceIdx];
+    lane.resolved = true;
+    lane.status = 'working';
+    updateLaneDOM(lane);
+    document.getElementById(lane.id).classList.add('flash');
+    addLog(`Applied your call on <b>${lane.name}</b>: "${chosen}". Resuming.`);
+    refreshCounts();
+
+    let ticks = 0;
+    const resumeInterval = setInterval(() => {
+      lane.progress = Math.min(100, lane.progress + 7 + Math.random()*5);
+      updateLaneDOM(lane);
+      ticks++;
+      if (lane.progress >= 100) {
+        clearInterval(resumeInterval);
+        lane.status = 'idle';
+        updateLaneDOM(lane);
+        addLog(`<b>${lane.name}</b> shipped its change and went idle.`);
+        refreshCounts();
+      }
+    }, 600);
+  }
+
+  function addLog(html){
+    if (logEl.querySelector('.empty-log')) logEl.innerHTML = '';
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    const now = new Date();
+    const time = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    entry.innerHTML = `<span class="tag">orchestrator</span>${html}<span class="time">${time}</span>`;
+    logEl.prepend(entry);
+  }
+
+  function refreshCounts(){
+    const vals = Object.values(state);
+    document.getElementById('count-working').textContent = vals.filter(l => l.status === 'working').length;
+    document.getElementById('count-idle').textContent = vals.filter(l => l.status === 'idle').length;
+    document.getElementById('count-waiting').textContent = vals.filter(l => l.status === 'waiting').length;
+  }
+
+  // background progress ticking for lanes without a pending blocker
+  setInterval(() => {
+    Object.values(state).forEach(lane => {
+      if (lane.status === 'working') {
+        lane.progress = Math.min(100, lane.progress + Math.random()*3);
+        updateLaneDOM(lane);
+        if (lane.progress >= 100 && !lane.blocker) {
+          lane.status = 'idle';
+          updateLaneDOM(lane);
+          addLog(`<b>${lane.name}</b> finished with no open questions. Nothing needed from you.`);
+        }
+      }
+    });
+  }, 900);
+
+  // stagger blockers surfacing so it reads as real activity, not a wall of dialogs at once
+  setTimeout(() => {
+    const lane = state['lane-1'];
+    lane.status = 'waiting';
+    updateLaneDOM(lane);
+    addLog(`<b>${lane.name}</b> hit a decision point. Surfacing it — everything else keeps running.`);
+    refreshCounts();
+  }, 2600);
+
+  setTimeout(() => {
+    const lane = state['lane-4'];
+    lane.status = 'waiting';
+    updateLaneDOM(lane);
+    addLog(`<b>${lane.name}</b> hit a decision point. Surfacing it — everything else keeps running.`);
+    refreshCounts();
+  }, 5200);
+
+  setTimeout(() => {
+    addLog(`Summary so far: 1 lane shipped clean, 2 waiting on you, rest still working. You only had to look at this panel.`);
+  }, 6200);
+
+  refreshCounts();
+})();
+</script>
+
+</body>
+</html>

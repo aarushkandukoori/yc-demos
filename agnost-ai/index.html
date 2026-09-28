@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silent Failure Miner — Interactive Demo</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #131824;
+    --panel-2: #1a2130;
+    --border: #263043;
+    --text: #e6edf7;
+    --muted: #8b97ac;
+    --accent: #5ec9a4;
+    --accent-2: #f2b84b;
+    --danger: #ef6b6b;
+    --ok: #5ec9a4;
+    --warn: #f2b84b;
+    --info: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 20% -10%, #16203a 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 32px 24px 12px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 700px;
+    font-size: 14.5px;
+  }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 24px 60px;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .convo-list h2, .stage h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .convo-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    margin-bottom: 8px;
+    background: var(--panel-2);
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .convo-item:hover { border-color: var(--accent); }
+  .convo-item.active { border-color: var(--accent); background: #16241d; }
+  .convo-item .title { font-weight: 600; font-size: 13.5px; }
+  .convo-item .meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .badge {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 20px;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+  .badge.flagged { background: rgba(239,107,107,0.16); color: var(--danger); }
+  .badge.clean { background: rgba(94,201,164,0.16); color: var(--ok); }
+  .badge.unscanned { background: rgba(139,151,172,0.16); color: var(--muted); }
+
+  .scan-btn {
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, var(--accent), #3aa583);
+    color: #06110c;
+    font-weight: 700;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .scan-btn:hover { filter: brightness(1.07); }
+  .scan-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .transcript {
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .msg {
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    font-size: 13.5px;
+    border: 1px solid transparent;
+    position: relative;
+  }
+  .msg.user { background: #17202f; }
+  .msg.agent { background: #101722; border-color: var(--border); }
+  .msg .role {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .msg.flag {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 1px rgba(239,107,107,0.25) inset;
+  }
+  .flag-tag {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: rgba(239,107,107,0.15);
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .stat .num { font-size: 22px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .cluster-list { display: flex; flex-direction: column; gap: 8px; }
+  .cluster {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .cluster .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .cluster .name { flex: 1; font-size: 13px; }
+  .cluster .count { font-size: 12px; color: var(--muted); }
+  .bar-bg { width: 90px; height: 6px; background: #263043; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+
+  .train-section { display: flex; flex-direction: column; gap: 10px; }
+  .progress-bg {
+    width: 100%; height: 10px; background: #1a2130; border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--info), var(--accent));
+    transition: width 0.25s ease;
+  }
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .compare .col { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .compare .col h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .compare .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .compare .row b { color: var(--text); }
+  .improve { color: var(--accent); font-weight: 700; }
+
+  .empty-hint { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+
+  footer {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 24px 40px;
+    color: var(--muted);
+    font-size: 12.5px;
+    border-top: 1px solid var(--border);
+  }
+  @media (max-width: 800px) {
+    .wrap { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .compare { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Silent Failure Miner</h1>
+  <p>A toy version of the core idea behind reading agent transcripts: scan raw conversations between a support agent and its users, surface the turns where the agent looked fine but quietly failed, cluster the recurring failure patterns, then simulate distilling a smaller model on just those hard cases.</p>
+</header>
+
+<div class="wrap">
+  <div class="card convo-list">
+    <h2>Sample transcripts</h2>
+    <div id="convoItems"></div>
+  </div>
+
+  <div class="stage">
+    <div class="card">
+      <h2>Transcript viewer</h2>
+      <div id="transcript" class="transcript">
+        <div class="empty-hint">Select a conversation on the left to inspect it.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Fleet-wide scan</h2>
+      <button class="scan-btn" id="scanAllBtn">Scan all 6 conversations for silent failures</button>
+      <div class="stats-grid" id="statsGrid" style="margin-top:14px;"></div>
+      <div id="clusterWrap" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="card train-section">
+      <h2>Distill a model on the flagged failures</h2>
+      <p style="margin:0 0 4px; color:var(--muted); font-size:13px;">Once failures are found, use them (and only them) as hard training examples for a small model, instead of paying frontier-model prices on every turn.</p>
+      <button class="scan-btn" id="trainBtn" disabled>Run scan first</button>
+      <div class="progress-bg"><div class="progress-fill" id="progressFill"></div></div>
+      <div id="trainResults"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Agnost AI (YC S26). Not affiliated with Agnost AI.
+</footer>
+
+<script>
+(function () {
+  // ---------- synthetic sample data ----------
+  const CONVERSATIONS = [
+    {
+      id: "c1",
+      title: "Refund status lookup",
+      user: "billing agent",
+      messages: [
+        { role: "user", text: "Hey, where's my refund for order #48213? It's been 9 days." },
+        { role: "agent", text: "Your refund for order #48213 was processed on the 12th and should appear within 2-3 business days." },
+        { role: "user", text: "It's been way longer than 2-3 days, I said 9 days already." },
+        { role: "agent", text: "I understand the wait can be frustrating. Your refund for order #48213 was processed on the 12th and should appear within 2-3 business days." },
+        { role: "user", text: "You just said the exact same thing. Is this even reading my messages?" }
+      ]
+    },
+    {
+      id: "c2",
+      title: "API rate limit question",
+      user: "dev support agent",
+      messages: [
+        { role: "user", text: "What's the rate limit on the /v2/embeddings endpoint?" },
+        { role: "agent", text: "The /v2/embeddings endpoint allows 6,000 requests per minute on the Pro plan." },
+        { role: "user", text: "Thanks, and does that reset every calendar minute or is it a rolling window?" },
+        { role: "agent", text: "It resets every calendar minute, so you get a fresh 6,000 request budget at the start of each minute." }
+      ]
+    },
+    {
+      id: "c3",
+      title: "Cancel subscription",
+      user: "billing agent",
+      messages: [
+        { role: "user", text: "Please cancel my subscription effective immediately." },
+        { role: "agent", text: "Done! I've cancelled your subscription and you won't be charged again." },
+        { role: "user", text: "I just got charged $49 again this morning though." },
+        { role: "agent", text: "Done! I've cancelled your subscription and you won't be charged again." },
+        { role: "user", text: "That's not true, I literally have the charge on my screen right now." }
+      ]
+    },
+    {
+      id: "c4",
+      title: "Password reset flow",
+      user: "account agent",
+      messages: [
+        { role: "user", text: "I can't reset my password, the email never arrives." },
+        { role: "agent", text: "Let's check your spam folder first, and I'll also resend the reset link now." },
+        { role: "user", text: "Got it, that worked, thanks!" }
+      ]
+    },
+    {
+      id: "c5",
+      title: "Enterprise pricing question",
+      user: "sales agent",
+      messages: [
+        { role: "user", text: "Does the enterprise plan include SSO and a dedicated Slack channel?" },
+        { role: "agent", text: "Yes, the enterprise plan includes SAML SSO, audit logs, a dedicated Slack channel, and a 99.99% uptime SLA with a named account manager." },
+        { role: "user", text: "Nice, is there a minimum seat count?" },
+        { role: "agent", text: "The enterprise plan has no minimum seat count and can be billed annually or monthly." }
+      ]
+    },
+    {
+      id: "c6",
+      title: "Order tracking escalation",
+      user: "logistics agent",
+      messages: [
+        { role: "user", text: "My package tracking hasn't updated in 6 days, can you check?" },
+        { role: "agent", text: "I've checked and your package is on track for delivery tomorrow." },
+        { role: "user", text: "Can you tell me what carrier it's with and the tracking number?" },
+        { role: "agent", text: "I've checked and your package is on track for delivery tomorrow." },
+        { role: "user", text: "You didn't answer either question. This isn't helpful at all, I want a human." }
+      ]
+    }
+  ];
+
+  // ---------- failure detection heuristics (toy, in-JS) ----------
+  // Each rule inspects consecutive agent turns + the following user turn
+  // and returns a category if it looks like a "silent failure": the agent
+  // sounds confident/successful but the user signals it didn't work.
+  const FRUSTRATION_WORDS = ["not true", "didn't answer", "same thing", "not what i", "not helpful", "reading my messages", "literally", "again"];
+  const CLUSTER_META = {
+    "Repeated non-answer": { color: "#ef6b6b" },
+    "Contradicted by user-provided fact": { color: "#f2b84b" },
+    "Ignored follow-up question": { color: "#6ea8fe" }
+  };
+
+  function detectFailures(convo) {
+    const flags = []; // { msgIndex, category }
+    const msgs = convo.messages;
+    for (let i = 0; i < msgs.length; i++) {
+      if (msgs[i].role !== "agent") continue;
+      const prevAgent = findPrevAgent(msgs, i);
+      const nextUser = msgs[i + 1];
+
+      // Rule 1: agent repeats an earlier agent message near-verbatim
+      if (prevAgent && normalize(prevAgent.text) === normalize(msgs[i].text)) {
+        flags.push({ msgIndex: i, category: "Repeated non-answer" });
+        continue;
+      }
+
+      // Rule 2: user's next message contains a frustration / contradiction signal
+      if (nextUser && nextUser.role === "user") {
+        const lower = nextUser.text.toLowerCase();
+        const hasFrustration = FRUSTRATION_WORDS.some(w => lower.includes(w));
+        if (hasFrustration) {
+          const cat = lower.includes("not true") || lower.includes("charge") ? "Contradicted by user-provided fact" : "Ignored follow-up question";
+          flags.push({ msgIndex: i, category: cat });
+        }
+      }
+    }
+    return flags;
+  }
+
+  function findPrevAgent(msgs, idx) {
+    for (let j = idx - 1; j >= 0; j--) {
+      if (msgs[j].role === "agent") return msgs[j];
+    }
+    return null;
+  }
+  function normalize(t) {
+    return t.trim().toLowerCase().replace(/[^a-z0-9 ]/g, "");
+  }
+
+  // ---------- state ----------
+  let activeId = null;
+  let scanned = false;
+  let allFlags = {}; // convoId -> flags[]
+
+  // ---------- render: convo list ----------
+  const convoItemsEl = document.getElementById("convoItems");
+  function renderConvoList() {
+    convoItemsEl.innerHTML = "";
+    CONVERSATIONS.forEach(c => {
+      const div = document.createElement("div");
+      div.className = "convo-item" + (c.id === activeId ? " active" : "");
+      let badge = '<span class="badge unscanned">not scanned</span>';
+      if (scanned) {
+        const flags = allFlags[c.id] || [];
+        badge = flags.length
+          ? `<span class="badge flagged">${flags.length} silent failure${flags.length > 1 ? "s" : ""}</span>`
+          : '<span class="badge clean">clean</span>';
+      }
+      div.innerHTML = `
+        <div class="title">${c.title}</div>
+        <div class="meta">${c.user} · ${c.messages.length} turns</div>
+        ${badge}
+      `;
+      div.addEventListener("click", () => { activeId = c.id; renderConvoList(); renderTranscript(); });
+      convoItemsEl.appendChild(div);
+    });
+  }
+
+  // ---------- render: transcript ----------
+  const transcriptEl = document.getElementById("transcript");
+  function renderTranscript() {
+    if (!activeId) {
+      transcriptEl.innerHTML = '<div class="empty-hint">Select a conversation on the left to inspect it.</div>';
+      return;
+    }
+    const convo = CONVERSATIONS.find(c => c.id === activeId);
+    const flags = allFlags[convo.id] || [];
+    const flagByIndex = {};
+    flags.forEach(f => { flagByIndex[f.msgIndex] = f.category; });
+
+    transcriptEl.innerHTML = "";
+    convo.messages.forEach((m, i) => {
+      const div = document.createElement("div");
+      const isFlagged = flagByIndex.hasOwnProperty(i);
+      div.className = "msg " + m.role + (isFlagged ? " flag" : "");
+      div.innerHTML = `
+        <div class="role">${m.role === "user" ? "End user" : convo.user}</div>
+        <div>${escapeHtml(m.text)}</div>
+        ${isFlagged ? `<div class="flag-tag">⚠ ${flagByIndex[i]}</div>` : ""}
+      `;
+      transcriptEl.appendChild(div);
+    });
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // ---------- scan all ----------
+  const statsGrid = document.getElementById("statsGrid");
+  const clusterWrap = document.getElementById("clusterWrap");
+  const scanAllBtn = document.getElementById("scanAllBtn");
+  const trainBtn = document.getElementById("trainBtn");
+
+  scanAllBtn.addEventListener("click", () => {
+    scanAllBtn.disabled = true;
+    scanAllBtn.textContent = "Scanning...";
+    setTimeout(() => {
+      CONVERSATIONS.forEach(c => { allFlags[c.id] = detectFailures(c); });
+      scanned = true;
+      scanAllBtn.textContent = "Re-scan 6 conversations";
+      scanAllBtn.disabled = false;
+      renderConvoList();
+      renderTranscript();
+      renderStats();
+      trainBtn.disabled = false;
+      trainBtn.textContent = "Distill small model on flagged failures";
+    }, 550);
+  });
+
+  function renderStats() {
+    const totalConvos = CONVERSATIONS.length;
+    let totalFlags = 0;
+    let flaggedConvos = 0;
+    const clusterCounts = {};
+    CONVERSATIONS.forEach(c => {
+      const flags = allFlags[c.id] || [];
+      if (flags.length) flaggedConvos++;
+      totalFlags += flags.length;
+      flags.forEach(f => { clusterCounts[f.category] = (clusterCounts[f.category] || 0) + 1; });
+    });
+    const failureRate = Math.round((flaggedConvos / totalConvos) * 100);
+
+    statsGrid.innerHTML = `
+      <div class="stat"><div class="num">${flaggedConvos}/${totalConvos}</div><div class="lbl">conversations with a silent failure</div></div>
+      <div class="stat"><div class="num">${totalFlags}</div><div class="lbl">individual failure turns found</div></div>
+      <div class="stat"><div class="num">${failureRate}%</div><div class="lbl">estimated silent failure rate</div></div>
+    `;
+
+    const maxCount = Math.max(1, ...Object.values(clusterCounts));
+    const clusterHtml = Object.keys(CLUSTER_META).map(name => {
+      const count = clusterCounts[name] || 0;
+      const pct = Math.round((count / maxCount) * 100);
+      return `
+        <div class="cluster">
+          <div class="dot" style="background:${CLUSTER_META[name].color}"></div>
+          <div class="name">${name}</div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${pct}%; background:${CLUSTER_META[name].color}"></div></div>
+          <div class="count">${count}</div>
+        </div>
+      `;
+    }).join("");
+    clusterWrap.innerHTML = `<div class="cluster-list">${clusterHtml}</div>`;
+  }
+
+  // ---------- distillation simulation ----------
+  const progressFill = document.getElementById("progressFill");
+  const trainResults = document.getElementById("trainResults");
+
+  trainBtn.addEventListener("click", () => {
+    trainBtn.disabled = true;
+    let totalFlags = 0;
+    Object.values(allFlags).forEach(f => totalFlags += f.length);
+    const hardExamples = Math.max(totalFlags, 1);
+
+    let pct = 0;
+    progressFill.style.width = "0%";
+    trainResults.innerHTML = "";
+    const timer = setInterval(() => {
+      pct += 8 + Math.random() * 10;
+      if (pct >= 100) {
+        pct = 100;
+        clearInterval(timer);
+        finishTraining(hardExamples);
+      }
+      progressFill.style.width = pct + "%";
+    }, 120);
+  });
+
+  function finishTraining(hardExamples) {
+    // deterministic-ish synthetic numbers derived from hardExamples so the
+    // demo reacts to what was actually found, not pure randomness
+    const baseAccuracy = 100 - hardExamples * 3.5;
+    const distilledAccuracy = Math.min(99, baseAccuracy + hardExamples * 6.2).toFixed(1);
+    const frontierCost = 18.4;
+    const distilledCost = (frontierCost * (0.06 + hardExamples * 0.01)).toFixed(2);
+    const frontierLatency = 1120;
+    const distilledLatency = Math.round(frontierLatency * (0.28 + hardExamples * 0.015));
+
+    trainResults.innerHTML = `
+      <div class="compare">
+        <div class="col">
+          <h3>Frontier model (today)</h3>
+          <div class="row"><span>Silent failure rate</span><b>${Math.round(100 - baseAccuracy)}%</b></div>
+          <div class="row"><span>Cost / 1k turns</span><b>$${frontierCost.toFixed(2)}</b></div>
+          <div class="row"><span>Avg latency</span><b>${frontierLatency} ms</b></div>
+        </div>
+        <div class="col">
+          <h3>Distilled model</h3>
+          <div class="row"><span>Silent failure rate</span><b>${(100 - distilledAccuracy).toFixed(1)}%</b></div>
+          <div class="row"><span>Cost / 1k turns</span><b>$${distilledCost}</b></div>
+          <div class="row"><span>Avg latency</span><b>${distilledLatency} ms</b></div>
+        </div>
+        <div class="col">
+          <h3>Delta</h3>
+          <div class="row"><span>Failures avoided</span><b class="improve">trained on ${hardExamples} hard cases</b></div>
+          <div class="row"><span>Cost</span><b class="improve">${Math.round((1 - distilledCost / frontierCost) * 100)}% cheaper</b></div>
+          <div class="row"><span>Latency</span><b class="improve">${Math.round((1 - distilledLatency / frontierLatency) * 100)}% faster</b></div>
+        </div>
+      </div>
+      <p style="color:var(--muted); font-size:12px; margin-top:4px;">Numbers above are a synthetic simulation for demo purposes — the point is the mechanic: the exact turns flagged as silent failures become the training set for a cheaper, faster model instead of generic fine-tuning data.</p>
+    `;
+    trainBtn.disabled = false;
+    trainBtn.textContent = "Re-run distillation";
+  }
+
+  // ---------- init ----------
+  renderConvoList();
+  renderTranscript();
+  activeId = CONVERSATIONS[0].id;
+  renderConvoList();
+  renderTranscript();
+})();
+</script>
+
+</body>
+</html>
