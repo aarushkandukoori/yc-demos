@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kinship Pay — Caregiver Payment Eligibility Demo</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #ffffff;
+    --ink: #1f2a24;
+    --muted: #6b7a72;
+    --accent: #2f6f4f;
+    --accent-dark: #1e4d35;
+    --gold: #c9922f;
+    --line: #dfd9c9;
+    --danger: #b23b3b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  header {
+    padding: 40px 24px 20px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 0 8px;
+    font-size: 2rem;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0 auto;
+    max-width: 560px;
+    color: var(--muted);
+    font-size: 0.98rem;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 26px 28px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .panel h2 {
+    margin-top: 0;
+    font-size: 1.15rem;
+  }
+  .step-label {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: #eaf3ec;
+    padding: 3px 9px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+  select, input[type=range] {
+    width: 100%;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #fbfaf6;
+    font-size: 0.92rem;
+    color: var(--ink);
+  }
+  .field { margin-bottom: 14px; }
+  .hours-readout {
+    font-weight: 700;
+    color: var(--accent-dark);
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 11px 20px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  button:hover { background: var(--accent-dark); }
+  button.secondary {
+    background: transparent;
+    color: var(--accent-dark);
+    border: 1px solid var(--accent);
+  }
+  button.secondary:hover { background: #eaf3ec; }
+  .results { margin-top: 20px; }
+  .program-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .program-card.eligible { border-color: #bfdcc6; background: #f4faf5; }
+  .program-card.ineligible { opacity: 0.55; }
+  .program-name { font-weight: 700; font-size: 0.95rem; }
+  .program-why { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+  .program-rate {
+    text-align: right;
+    font-weight: 700;
+    color: var(--accent-dark);
+    white-space: nowrap;
+  }
+  .badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge.yes { background: var(--accent); color: white; }
+  .badge.no { background: #e3ddcd; color: var(--muted); }
+  .timesheet-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+  }
+  .day-col { text-align: center; }
+  .day-col label { font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; }
+  .day-col input[type=number] {
+    width: 100%;
+    padding: 8px 4px;
+    text-align: center;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    font-size: 0.9rem;
+  }
+  .bar-track {
+    height: 60px;
+    background: #f0ede2;
+    border-radius: 4px;
+    display: flex;
+    align-items: flex-end;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    width: 100%;
+    background: var(--accent);
+    border-radius: 4px 4px 0 0;
+    transition: height 0.2s ease;
+  }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .stat {
+    background: #f9f7f0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+  }
+  .stat .num { font-size: 1.5rem; font-weight: 800; color: var(--accent-dark); }
+  .stat .lbl { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  .note {
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: #fbf6e9;
+    border: 1px solid #eadfb8;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 14px;
+  }
+  .hidden { display: none; }
+  footer {
+    text-align: center;
+    padding: 28px 20px 40px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    .timesheet-grid { grid-template-columns: repeat(4, 1fr); }
+    .summary { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kinship Pay</h1>
+  <p>A toy eligibility &amp; payout engine for family caregivers. Answer four questions about your caregiving situation, find out which synthetic support programs you'd likely qualify for, then log a week of care hours and watch it turn into an actual paycheck.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="panel">
+    <span class="step-label">Step 1 — Your situation</span>
+    <h2>Tell us about the care you provide</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="relationship">Your relationship to the care recipient</label>
+        <select id="relationship">
+          <option value="spouse">Spouse</option>
+          <option value="adult-child" selected>Adult child</option>
+          <option value="parent">Parent of a minor with disabilities</option>
+          <option value="other-relative">Other relative</option>
+          <option value="non-relative">Friend / non-relative</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="coverage">Care recipient's coverage</label>
+        <select id="coverage">
+          <option value="medicaid-waiver">Medicaid home & community-based waiver</option>
+          <option value="ltci">Long-term care insurance policy</option>
+          <option value="va">VA disability benefits</option>
+          <option value="private-pay" selected>Private pay, no coverage yet</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="state">State</label>
+        <select id="state">
+          <option value="MI" selected>Michigan</option>
+          <option value="OH">Ohio</option>
+          <option value="IN">Indiana</option>
+          <option value="WI">Wisconsin</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="hours">Hours of care per week: <span class="hours-readout" id="hoursOut">28</span></label>
+        <input type="range" id="hours" min="2" max="60" value="28">
+      </div>
+    </div>
+    <button id="matchBtn">Check my eligibility</button>
+
+    <div class="results hidden" id="results"></div>
+    <div class="note" id="matchNote"></div>
+  </div>
+
+  <div class="panel hidden" id="timesheetPanel">
+    <span class="step-label">Step 2 — Log a week</span>
+    <h2>Turn hours into a payment</h2>
+    <p style="color:var(--muted); font-size:0.9rem; margin-top:-6px;">
+      Using your best-matched program's rate (<strong id="selectedProgramLabel"></strong>), log hours for each
+      day. This is exactly the kind of timesheet-to-deposit conversion the real product automates end to end.
+    </p>
+    <div class="timesheet-grid" id="timesheetGrid"></div>
+    <div class="summary">
+      <div class="stat"><div class="num" id="totalHours">0</div><div class="lbl">hours this week</div></div>
+      <div class="stat"><div class="num" id="hourlyRate">$0.00</div><div class="lbl">rate / hour</div></div>
+      <div class="stat"><div class="num" id="weeklyPay">$0.00</div><div class="lbl">est. weekly payment</div></div>
+    </div>
+    <div class="note" id="capNote"></div>
+    <button class="secondary" id="resetBtn" style="margin-top:14px;">Start over</button>
+  </div>
+
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Cova (YC S26). Not affiliated with Cova.
+</footer>
+
+<script>
+(function () {
+  // ---- Synthetic program rulebook. All numbers are illustrative sample data, not real rates. ----
+  var PROGRAMS = [
+    {
+      id: "sfc",
+      name: "Structured Family Caregiving Stipend",
+      rate: 14.75,
+      capHours: 40,
+      test: function (a) {
+        return a.coverage === "medicaid-waiver" && a.relationship !== "spouse" && a.hours <= 60;
+      },
+      why: function (a) {
+        if (a.coverage !== "medicaid-waiver") return "Requires the care recipient to be on a Medicaid HCBS waiver.";
+        if (a.relationship === "spouse") return "This synthetic program excludes spousal caregivers in our sample ruleset.";
+        return "Waiver coverage + non-spouse caregiver relationship matched.";
+      }
+    },
+    {
+      id: "ltci-reimb",
+      name: "LTCI Home Care Reimbursement",
+      rate: 18.20,
+      capHours: 35,
+      test: function (a) {
+        return a.coverage === "ltci" && a.hours >= 5;
+      },
+      why: function (a) {
+        if (a.coverage !== "ltci") return "Requires an active long-term care insurance policy with a home-care rider.";
+        return "Active LTCI policy detected; reimbursement rider applies above 5 hrs/week.";
+      }
+    },
+    {
+      id: "va-caregiver",
+      name: "Veteran Family Caregiver Support",
+      rate: 21.50,
+      capHours: 40,
+      test: function (a) {
+        return a.coverage === "va" && (a.relationship === "spouse" || a.relationship === "adult-child" || a.relationship === "other-relative");
+      },
+      why: function (a) {
+        if (a.coverage !== "va") return "Requires the care recipient to have VA disability benefits on file.";
+        return "VA-linked benefits + qualifying family relationship matched.";
+      }
+    },
+    {
+      id: "minor-dependent",
+      name: "Dependent Care Support Credit",
+      rate: 12.00,
+      capHours: 40,
+      test: function (a) {
+        return a.relationship === "parent";
+      },
+      why: function (a) {
+        if (a.relationship !== "parent") return "Reserved for parents caring for a minor dependent with disabilities.";
+        return "Parent-of-minor relationship matched.";
+      }
+    },
+    {
+      id: "private-navigator",
+      name: "Private-Pay Care Navigator Credit",
+      rate: 9.00,
+      capHours: 40,
+      test: function (a) {
+        return a.coverage === "private-pay";
+      },
+      why: function (a) {
+        return "No coverage on file yet — this program helps offset costs while you apply for Medicaid or LTCI.";
+      }
+    }
+  ];
+
+  var hoursSlider = document.getElementById("hours");
+  var hoursOut = document.getElementById("hoursOut");
+  hoursSlider.addEventListener("input", function () {
+    hoursOut.textContent = hoursSlider.value;
+  });
+
+  var results = document.getElementById("results");
+  var matchNote = document.getElementById("matchNote");
+  var timesheetPanel = document.getElementById("timesheetPanel");
+  var bestProgram = null;
+
+  document.getElementById("matchBtn").addEventListener("click", function () {
+    var answers = {
+      relationship: document.getElementById("relationship").value,
+      coverage: document.getElementById("coverage").value,
+      state: document.getElementById("state").value,
+      hours: parseInt(hoursSlider.value, 10)
+    };
+
+    var scored = PROGRAMS.map(function (p) {
+      var eligible = p.test(answers);
+      return { program: p, eligible: eligible, why: p.why(answers) };
+    });
+
+    scored.sort(function (a, b) {
+      if (a.eligible === b.eligible) return b.program.rate - a.program.rate;
+      return a.eligible ? -1 : 1;
+    });
+
+    results.innerHTML = "";
+    scored.forEach(function (s) {
+      var card = document.createElement("div");
+      card.className = "program-card " + (s.eligible ? "eligible" : "ineligible");
+      card.innerHTML =
+        '<div>' +
+          '<div class="program-name">' + s.program.name + ' <span class="badge ' + (s.eligible ? 'yes' : 'no') + '">' + (s.eligible ? 'Eligible' : 'Not matched') + '</span></div>' +
+          '<div class="program-why">' + s.why + '</div>' +
+        '</div>' +
+        '<div class="program-rate">$' + s.program.rate.toFixed(2) + '/hr' +
+          (s.eligible ? '<div style="font-weight:400;font-size:0.75rem;color:var(--muted);">cap ' + s.program.capHours + ' hrs/wk</div>' : '') +
+        '</div>';
+      results.appendChild(card);
+    });
+    results.classList.remove("hidden");
+
+    var eligibleOnes = scored.filter(function (s) { return s.eligible; });
+    if (eligibleOnes.length > 0) {
+      bestProgram = eligibleOnes[0].program;
+      matchNote.textContent = "Best match: " + bestProgram.name + " at $" + bestProgram.rate.toFixed(2) + "/hr, up to " + bestProgram.capHours + " hrs/week (state: " + answers.state + "). Sample rules only — not real program figures.";
+      setupTimesheet(bestProgram, answers.hours);
+      timesheetPanel.classList.remove("hidden");
+    } else {
+      bestProgram = null;
+      matchNote.textContent = "No synthetic program matched this combination. In the real product, this is where a caregiver gets routed to an application specialist instead of a dead end.";
+      timesheetPanel.classList.add("hidden");
+    }
+  });
+
+  var DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  function setupTimesheet(program, weeklyHoursGuess) {
+    document.getElementById("selectedProgramLabel").textContent = program.name + " ($" + program.rate.toFixed(2) + "/hr)";
+    var grid = document.getElementById("timesheetGrid");
+    grid.innerHTML = "";
+    var perDay = Math.round((weeklyHoursGuess / 7) * 10) / 10;
+    DAYS.forEach(function (day, i) {
+      var col = document.createElement("div");
+      col.className = "day-col";
+      col.innerHTML =
+        '<label>' + day + '</label>' +
+        '<input type="number" min="0" max="16" step="0.5" value="' + perDay + '" data-day="' + i + '">' +
+        '<div class="bar-track"><div class="bar-fill" style="height: 0%" id="bar' + i + '"></div></div>';
+      grid.appendChild(col);
+    });
+    grid.querySelectorAll("input").forEach(function (input) {
+      input.addEventListener("input", recalcTimesheet);
+    });
+    recalcTimesheet();
+  }
+
+  function recalcTimesheet() {
+    if (!bestProgram) return;
+    var inputs = document.querySelectorAll("#timesheetGrid input");
+    var total = 0;
+    var dayValues = [];
+    inputs.forEach(function (input) {
+      var v = parseFloat(input.value) || 0;
+      dayValues.push(v);
+      total += v;
+    });
+    var maxDay = Math.max.apply(null, dayValues.concat([1]));
+    dayValues.forEach(function (v, i) {
+      var bar = document.getElementById("bar" + i);
+      if (bar) bar.style.height = Math.round((v / maxDay) * 100) + "%";
+    });
+
+    var payableHours = Math.min(total, bestProgram.capHours);
+    var pay = payableHours * bestProgram.rate;
+
+    document.getElementById("totalHours").textContent = total.toFixed(1);
+    document.getElementById("hourlyRate").textContent = "$" + bestProgram.rate.toFixed(2);
+    document.getElementById("weeklyPay").textContent = "$" + pay.toFixed(2);
+
+    var capNote = document.getElementById("capNote");
+    if (total > bestProgram.capHours) {
+      capNote.textContent = "You logged " + total.toFixed(1) + " hrs, but this program only pays up to " + bestProgram.capHours + " hrs/week — " + (total - bestProgram.capHours).toFixed(1) + " hrs fall outside the covered cap in this simulation.";
+    } else {
+      capNote.textContent = "All logged hours fall within the program's weekly cap of " + bestProgram.capHours + " hrs.";
+    }
+  }
+
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    results.classList.add("hidden");
+    timesheetPanel.classList.add("hidden");
+    matchNote.textContent = "";
+    bestProgram = null;
+  });
+})();
+</script>
+
+</body>
+</html>
