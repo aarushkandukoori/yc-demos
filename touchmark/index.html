@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forward Capacity Exchange — a toy GPU futures market</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #131a22;
+    --panel-2: #182230;
+    --border: #24313f;
+    --text: #e7eef5;
+    --muted: #8ea3b6;
+    --accent: #4fd1a5;
+    --accent-2: #f2b84b;
+    --danger: #ef6f6f;
+    --blue: #5fa8f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    background: radial-gradient(circle at top left, #101823, #0b0f14 60%);
+    color: var(--text);
+    padding: 32px 20px 60px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  header .tag {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(79, 209, 165, 0.1);
+    border: 1px solid rgba(79, 209, 165, 0.3);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+  }
+  h1 { font-size: 30px; margin: 0 0 8px; line-height: 1.25; }
+  header p { color: var(--muted); font-size: 15px; max-width: 640px; margin: 0; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .panel h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 16px;
+  }
+
+  .provider-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .provider-row:hover { border-color: var(--accent); }
+  .provider-row.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .provider-row .name { font-weight: 600; font-size: 14px; }
+  .provider-row .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .provider-row .price { text-align: right; }
+  .provider-row .price .now { font-size: 15px; font-weight: 700; }
+  .provider-row .price .unit { color: var(--muted); font-size: 11px; }
+
+  label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .range-value { display: flex; justify-content: space-between; font-size: 13px; color: var(--text); margin-top: 4px; }
+
+  .quote-box {
+    margin-top: 18px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .quote-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px dashed var(--border); }
+  .quote-row:last-child { border-bottom: none; }
+  .quote-row .label { color: var(--muted); }
+  .quote-row .val { font-weight: 600; }
+  .quote-row .val.save { color: var(--accent); }
+
+  button.primary {
+    width: 100%;
+    margin-top: 16px;
+    padding: 13px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, var(--accent), #2fb98a);
+    color: #06110c;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.1s, filter 0.15s;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button.primary:active { transform: scale(0.99); }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .ticker {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .holdings { margin-top: 8px; }
+  .contract-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .contract-card .top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .contract-card .provider { font-weight: 700; font-size: 14px; }
+  .contract-card .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .contract-card .pnl { text-align: right; font-weight: 700; font-size: 15px; }
+  .contract-card .pnl.up { color: var(--accent); }
+  .contract-card .pnl.down { color: var(--danger); }
+  .contract-card .bar-wrap { margin-top: 10px; height: 6px; border-radius: 4px; background: #0e151d; overflow: hidden; }
+  .contract-card .bar { height: 100%; background: var(--blue); }
+  .contract-card .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .contract-card .actions button {
+    flex: 1;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .contract-card .actions button.resell { border-color: var(--accent-2); color: var(--accent-2); }
+  .contract-card .actions button.resell:hover { background: rgba(242, 184, 75, 0.1); }
+  .contract-card .actions button.burn { border-color: var(--danger); color: var(--danger); }
+  .contract-card .actions button.burn:hover { background: rgba(239, 111, 111, 0.1); }
+
+  .empty-state { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 10px; }
+
+  .market-feed {
+    margin-top: 20px;
+  }
+  .feed-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .feed-item .who { color: var(--text); }
+  .feed-item .price-tag { font-weight: 600; }
+  .feed-item .price-tag.buy { color: var(--accent); }
+  .feed-item .price-tag.resell { color: var(--accent-2); }
+
+  footer {
+    margin-top: 40px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="tag">Toy Simulation · Not Real Pricing</span>
+    <h1>Forward Capacity Exchange</h1>
+    <p>Lock in a block of inference tokens from a provider, for a future delivery window, at a price fixed today. If your plans change before delivery, list the contract back on the market for someone else to buy.</p>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>1. Pick a provider &amp; lock a rate</h2>
+      <div id="providers"></div>
+
+      <label>Window length</label>
+      <input type="range" id="windowSlider" min="1" max="12" value="4" step="1">
+      <div class="range-value"><span id="windowLabel">4 weeks from now</span><span id="windowGap"></span></div>
+
+      <label>Tokens to reserve (millions)</label>
+      <input type="range" id="volumeSlider" min="1" max="50" value="10" step="1">
+      <div class="range-value"><span id="volumeLabel">10M tokens</span><span></span></div>
+
+      <div class="quote-box">
+        <div class="quote-row"><span class="label">On-demand price today</span><span class="val" id="qOnDemand">—</span></div>
+        <div class="quote-row"><span class="label">Your fixed forward price</span><span class="val" id="qForward">—</span></div>
+        <div class="quote-row"><span class="label">Discount vs. on-demand</span><span class="val save" id="qDiscount">—</span></div>
+        <div class="quote-row"><span class="label">Total locked cost</span><span class="val" id="qTotal">—</span></div>
+      </div>
+      <button class="primary" id="lockBtn">Lock this rate</button>
+      <div class="ticker"><span class="dot"></span> Spot prices drift live to simulate a real order book</div>
+    </div>
+
+    <div class="panel">
+      <h2>2. Your reserved contracts</h2>
+      <div class="holdings" id="holdings">
+        <div class="empty-state">No contracts yet. Lock a rate on the left to create one, then watch it mark to market as spot prices move.</div>
+      </div>
+
+      <div class="market-feed">
+        <h2 style="margin-top:4px;">Live resale market</h2>
+        <div id="feed"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by Touchmark (YC S26). Not affiliated with Touchmark.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- synthetic providers ----
+  var providers = [
+    { id: "aurora",  name: "Aurora Compute",  sub: "H100 · text-large cluster", base: 3.20, vol: 0.05 },
+    { id: "helix",   name: "Helix Cloud",     sub: "H200 · multimodal cluster", base: 4.10, vol: 0.07 },
+    { id: "ionfield",name: "Ionfield GPU",    sub: "A100 · legacy-batch tier",  base: 1.85, vol: 0.03 },
+    { id: "nimbus",  name: "Nimbus AI",       sub: "B200 · frontier tier",      base: 6.40, vol: 0.09 }
+  ];
+  // price is $ per million tokens, purely illustrative
+
+  providers.forEach(function (p) { p.spot = p.base; });
+
+  var selectedId = providers[0].id;
+  var contracts = []; // {id, providerId, providerName, lockPrice, spotAtLock, tokens, weeksOut, createdAtTick, forSale, resalePrice}
+  var contractSeq = 1;
+  var tick = 0;
+  var feedItems = [];
+
+  var buyerNames = ["Delta Labs", "Quill AI", "Orbital Systems", "Fenwick Research", "Pinecrest ML", "Kestrel Studio", "Vantage NLP", "Coral Robotics"];
+
+  // ---- discount curve: farther out + more volume => bigger discount, within 10-30% ----
+  function discountFor(weeks, tokensM) {
+    var base = 0.10 + (weeks / 12) * 0.14;      // time component: up to +14pts
+    var volBoost = Math.min(tokensM / 50, 1) * 0.06; // volume component: up to +6pts
+    var d = base + volBoost;
+    return Math.max(0.10, Math.min(0.30, d));
+  }
+
+  function fmtMoney(n) {
+    return "$" + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  // ---- render provider list ----
+  var providerListEl = document.getElementById("providers");
+  function renderProviders() {
+    providerListEl.innerHTML = "";
+    providers.forEach(function (p) {
+      var row = document.createElement("div");
+      row.className = "provider-row" + (p.id === selectedId ? " selected" : "");
+      row.innerHTML =
+        '<div><div class="name">' + p.name + '</div><div class="sub">' + p.sub + '</div></div>' +
+        '<div class="price"><div class="now">' + fmtMoney(p.spot) + '</div><div class="unit">per 1M tok · on-demand</div></div>';
+      row.addEventListener("click", function () {
+        selectedId = p.id;
+        renderProviders();
+        updateQuote();
+      });
+      providerListEl.appendChild(row);
+    });
+  }
+
+  var windowSlider = document.getElementById("windowSlider");
+  var windowLabel = document.getElementById("windowLabel");
+  var volumeSlider = document.getElementById("volumeSlider");
+  var volumeLabel = document.getElementById("volumeLabel");
+
+  windowSlider.addEventListener("input", function () {
+    windowLabel.textContent = windowSlider.value + " week" + (windowSlider.value == 1 ? "" : "s") + " from now";
+    updateQuote();
+  });
+  volumeSlider.addEventListener("input", function () {
+    volumeLabel.textContent = volumeSlider.value + "M tokens";
+    updateQuote();
+  });
+
+  var qOnDemand = document.getElementById("qOnDemand");
+  var qForward = document.getElementById("qForward");
+  var qDiscount = document.getElementById("qDiscount");
+  var qTotal = document.getElementById("qTotal");
+
+  function currentQuote() {
+    var p = providers.find(function (x) { return x.id === selectedId; });
+    var weeks = parseInt(windowSlider.value, 10);
+    var tokensM = parseInt(volumeSlider.value, 10);
+    var disc = discountFor(weeks, tokensM);
+    var forwardPrice = p.spot * (1 - disc);
+    var total = forwardPrice * tokensM;
+    return { p: p, weeks: weeks, tokensM: tokensM, disc: disc, forwardPrice: forwardPrice, total: total };
+  }
+
+  function updateQuote() {
+    var q = currentQuote();
+    qOnDemand.textContent = fmtMoney(q.p.spot) + " / 1M tok";
+    qForward.textContent = fmtMoney(q.forwardPrice) + " / 1M tok";
+    qDiscount.textContent = Math.round(q.disc * 100) + "% off";
+    qTotal.textContent = fmtMoney(q.total) + " total, billed today";
+  }
+
+  document.getElementById("lockBtn").addEventListener("click", function () {
+    var q = currentQuote();
+    contracts.push({
+      id: contractSeq++,
+      providerId: q.p.id,
+      providerName: q.p.name,
+      lockPrice: q.forwardPrice,
+      spotAtLock: q.p.spot,
+      tokens: q.tokensM,
+      weeksOut: q.weeks,
+      createdAtTick: tick,
+      forSale: false,
+      resalePrice: null
+    });
+    pushFeed("You", "locked " + q.tokensM + "M tok on " + q.p.name, fmtMoney(q.forwardPrice) + "/1M", "buy");
+    renderHoldings();
+  });
+
+  // ---- holdings / mark-to-market ----
+  var holdingsEl = document.getElementById("holdings");
+
+  function renderHoldings() {
+    if (contracts.length === 0) {
+      holdingsEl.innerHTML = '<div class="empty-state">No contracts yet. Lock a rate on the left to create one, then watch it mark to market as spot prices move.</div>';
+      return;
+    }
+    holdingsEl.innerHTML = "";
+    contracts.forEach(function (c) {
+      var provider = providers.find(function (p) { return p.id === c.providerId; });
+      var currentSpot = provider.spot;
+      var pnlPct = ((currentSpot - c.lockPrice) / c.lockPrice) * 100;
+      var progressPct = Math.min(100, (tick - c.createdAtTick) / (c.weeksOut * 4) * 100 + 4);
+
+      var card = document.createElement("div");
+      card.className = "contract-card";
+      card.innerHTML =
+        '<div class="top">' +
+          '<div><div class="provider">' + c.providerName + '</div>' +
+          '<div class="meta">' + c.tokens + 'M tok · delivery in ' + c.weeksOut + 'w · locked at ' + fmtMoney(c.lockPrice) + '/1M</div></div>' +
+          '<div><div class="pnl ' + (pnlPct >= 0 ? "up" : "down") + '">' + (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + '%</div>' +
+          '<div class="meta" style="text-align:right;">vs. current spot ' + fmtMoney(currentSpot) + '</div></div>' +
+        '</div>' +
+        '<div class="bar-wrap"><div class="bar" style="width:' + progressPct + '%;"></div></div>' +
+        '<div class="actions">' +
+          (c.forSale
+            ? '<button class="burn" data-action="cancel" data-id="' + c.id + '">Cancel listing (' + fmtMoney(c.resalePrice) + '/1M)</button>'
+            : '<button class="resell" data-action="resell" data-id="' + c.id + '">List for resale</button>' +
+              '<button class="burn" data-action="deliver" data-id="' + c.id + '">Redeem at delivery</button>'
+          ) +
+        '</div>';
+      holdingsEl.appendChild(card);
+    });
+  }
+
+  holdingsEl.addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn) return;
+    var id = parseInt(btn.getAttribute("data-id"), 10);
+    var action = btn.getAttribute("data-action");
+    var c = contracts.find(function (x) { return x.id === id; });
+    if (!c) return;
+
+    if (action === "resell") {
+      var provider = providers.find(function (p) { return p.id === c.providerId; });
+      // offer a resale price between your lock price and current spot, buyer still saves vs spot
+      var mid = (c.lockPrice + provider.spot) / 2;
+      c.forSale = true;
+      c.resalePrice = mid;
+      pushFeed("You", "listed " + c.tokens + "M tok on " + c.providerName, fmtMoney(mid) + "/1M", "resell");
+      renderHoldings();
+      // simulate a buyer picking it up after a short delay
+      setTimeout(function () { maybeSellContract(c.id); }, 2200 + Math.random() * 2000);
+    } else if (action === "cancel") {
+      c.forSale = false;
+      c.resalePrice = null;
+      renderHoldings();
+    } else if (action === "deliver") {
+      var idx = contracts.indexOf(c);
+      contracts.splice(idx, 1);
+      pushFeed("You", "redeemed " + c.tokens + "M tok on " + c.providerName, fmtMoney(c.lockPrice) + "/1M", "buy");
+      renderHoldings();
+    }
+  });
+
+  function maybeSellContract(id) {
+    var c = contracts.find(function (x) { return x.id === id; });
+    if (!c || !c.forSale) return; // cancelled already
+    var buyer = buyerNames[Math.floor(Math.random() * buyerNames.length)];
+    var idx = contracts.indexOf(c);
+    contracts.splice(idx, 1);
+    pushFeed(buyer, "bought " + c.tokens + "M tok on " + c.providerName + " from you", fmtMoney(c.resalePrice) + "/1M", "resell");
+    renderHoldings();
+  }
+
+  // ---- resale market feed of other participants (ambient) ----
+  var feedEl = document.getElementById("feed");
+  function pushFeed(who, what, priceLabel, kind) {
+    feedItems.unshift({ who: who, what: what, priceLabel: priceLabel, kind: kind });
+    feedItems = feedItems.slice(0, 8);
+    renderFeed();
+  }
+  function renderFeed() {
+    feedEl.innerHTML = "";
+    feedItems.forEach(function (item) {
+      var row = document.createElement("div");
+      row.className = "feed-item";
+      row.innerHTML =
+        '<span><span class="who">' + item.who + '</span> ' + item.what + '</span>' +
+        '<span class="price-tag ' + item.kind + '">' + item.priceLabel + '</span>';
+      feedEl.appendChild(row);
+    });
+  }
+
+  function ambientActivity() {
+    var p = providers[Math.floor(Math.random() * providers.length)];
+    var who = buyerNames[Math.floor(Math.random() * buyerNames.length)];
+    var tokensM = Math.floor(2 + Math.random() * 18);
+    var weeks = Math.floor(1 + Math.random() * 10);
+    var disc = discountFor(weeks, tokensM);
+    var price = p.spot * (1 - disc);
+    pushFeed(who, "reserved " + tokensM + "M tok on " + p.name, fmtMoney(price) + "/1M", "buy");
+  }
+
+  // ---- spot price drift ----
+  function driftPrices() {
+    tick++;
+    providers.forEach(function (p) {
+      var change = (Math.random() - 0.48) * p.vol * p.base;
+      p.spot = Math.max(p.base * 0.6, p.spot + change);
+    });
+    renderProviders();
+    updateQuote();
+    renderHoldings();
+  }
+
+  setInterval(driftPrices, 2600);
+  setInterval(function () {
+    if (Math.random() < 0.7) ambientActivity();
+  }, 3400);
+
+  // seed feed with a couple of opening items
+  pushFeed("Quill AI", "reserved 14M tok on Aurora Compute", "$2.61/1M", "buy");
+  pushFeed("Fenwick Research", "bought 6M tok on Nimbus AI from Kestrel Studio", "$5.02/1M", "resell");
+
+  renderProviders();
+  updateQuote();
+  renderHoldings();
+  renderFeed();
+})();
+</script>
+</body>
+</html>
