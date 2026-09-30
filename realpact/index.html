@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deal Desk — Contract Auto-Fill Demo</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #ffffff;
+    --ink: #1f2a24;
+    --muted: #6b7268;
+    --line: #ddd6c7;
+    --accent: #2e5e4e;
+    --accent-light: #e6efe9;
+    --warn: #a5541f;
+    --warn-bg: #fbe9dd;
+    --ok: #2e5e4e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Iowan Old Style", "Georgia", serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  header {
+    padding: 32px 40px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 640px;
+  }
+  .wrap {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 24px;
+    padding: 28px 40px 60px;
+    align-items: start;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px;
+  }
+  .panel h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 14px;
+    font-family: -apple-system, sans-serif;
+    font-weight: 600;
+  }
+  select, button {
+    font-family: -apple-system, sans-serif;
+  }
+  .record-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .record-btn {
+    text-align: left;
+    background: var(--accent-light);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    font-family: -apple-system, sans-serif;
+    font-size: 13.5px;
+    color: var(--ink);
+    transition: background 0.15s, transform 0.1s;
+  }
+  .record-btn:hover { background: #dbe9e1; }
+  .record-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .record-btn .addr { font-weight: 600; display: block; }
+  .record-btn .sub { color: var(--muted); font-size: 12px; }
+  .record-btn.active .sub { color: #cfe3d9; }
+
+  #runBtn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  #runBtn:disabled { opacity: 0.5; cursor: default; }
+  #runBtn:not(:disabled):hover { background: #244d40; }
+
+  .log {
+    margin-top: 16px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    background: #10201a;
+    color: #c9e4d5;
+    border-radius: 8px;
+    padding: 14px;
+    min-height: 120px;
+    max-height: 260px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .log .line { margin-bottom: 4px; opacity: 0; animation: fadeIn 0.3s forwards; }
+  .log .src { color: #7bb89e; }
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  .contract-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .contract-head h2 { margin: 0; }
+  .status-pill {
+    font-family: -apple-system, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: #eee;
+    color: var(--muted);
+  }
+  .status-pill.filled { background: var(--accent-light); color: var(--accent); }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 150px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid #f0ece1;
+    font-size: 13.5px;
+  }
+  .field-row .label {
+    font-family: -apple-system, sans-serif;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .field-row .value {
+    min-height: 18px;
+    transition: opacity 0.4s;
+  }
+  .field-row .value.pending::after {
+    content: "—";
+    color: #c9c2ae;
+  }
+  .field-row .value.flag {
+    color: var(--warn);
+  }
+  .field-row .tag {
+    font-family: -apple-system, sans-serif;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 12px;
+    white-space: nowrap;
+  }
+  .tag.deed { background: var(--accent-light); color: var(--accent); }
+  .tag.tax { background: #e6e1f5; color: #4a3d8f; }
+  .tag.mls { background: #e0eef7; color: #2b5f8a; }
+  .tag.parcel { background: #fdf0d5; color: #8a5a10; }
+  .tag.flagged { background: var(--warn-bg); color: var(--warn); }
+
+  .deadlines {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line);
+  }
+  .deadlines h3 {
+    font-family: -apple-system, sans-serif;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .deadline-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 6px 0;
+    opacity: 0;
+  }
+  .deadline-row.show { opacity: 1; transition: opacity 0.4s; }
+  .deadline-row .days { color: var(--muted); font-family: -apple-system, sans-serif; font-size: 12px; }
+
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-family: -apple-system, sans-serif;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+  }
+
+  @media (max-width: 880px) {
+    .wrap { grid-template-columns: 1fr; padding: 20px; }
+    header { padding: 24px 20px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Deal Desk — a toy transaction assembler</h1>
+  <p>Pick an address. Watch the assembler pull synthetic county, tax, parcel, and MLS
+  records and pour them straight into a purchase contract with a live deadline calendar —
+  no manual data entry.</p>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>1. Choose a listing</h2>
+    <div class="record-picker" id="picker"></div>
+    <button id="runBtn" onclick="runAssembly()">Pull records &amp; fill contract</button>
+    <div class="log" id="log"><div class="line">Select a listing above, then run the assembler.</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="contract-head">
+      <h2>2. Purchase &amp; Sale Agreement</h2>
+      <span class="status-pill" id="statusPill">awaiting data</span>
+    </div>
+    <div id="fields"></div>
+
+    <div class="deadlines">
+      <h3>Auto-generated deadline calendar</h3>
+      <div id="deadlineList"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by RealPact (YC S26). Not affiliated with RealPact.
+</footer>
+
+<script>
+// ---- Synthetic "record sources" -------------------------------------------------
+const LISTINGS = [
+  {
+    id: "birch",
+    addr: "14 Birch Hollow Rd, Bedford, NH",
+    sub: "Single-family · Listed 6 days ago",
+    price: "$612,000",
+    closeWeeks: 6,
+    deed: { owner: "Margaret & Thomas Reyes", parcelId: "BED-0421-19", lastSale: "2011-08-03", encumbrance: null },
+    tax: { assessedValue: "$548,900", annualTax: "$9,812", exempt: false },
+    parcel: { acreage: "0.87 ac", zoning: "R-1 Residential", flood: "Zone X (minimal)" },
+    mls: { mlsId: "NHMLS-77410", daysOnMarket: 6, contingencies: ["Financing", "Inspection"] }
+  },
+  {
+    id: "elm",
+    addr: "228 Elm Crossing Ave, Manchester, NH",
+    sub: "Condo · Listed 19 days ago",
+    price: "$339,500",
+    closeWeeks: 5,
+    deed: { owner: "Priya Natarajan", parcelId: "MHT-1188-C7", lastSale: "2018-02-14", encumbrance: "Open HELOC — needs payoff letter" },
+    tax: { assessedValue: "$318,000", annualTax: "$6,104", exempt: false },
+    parcel: { acreage: "N/A (condo unit)", zoning: "MU-Downtown", flood: "Zone X (minimal)" },
+    mls: { mlsId: "NHMLS-77822", daysOnMarket: 19, contingencies: ["Financing", "HOA doc review"] }
+  },
+  {
+    id: "orchard",
+    addr: "5 Orchard Ridge Ln, Nashua, NH",
+    sub: "Single-family · Listed 2 days ago",
+    price: "$729,000",
+    closeWeeks: 7,
+    deed: { owner: "Estate of Walter Buckley", parcelId: "NAS-0937-04", lastSale: "1994-06-21", encumbrance: "Probate clearance pending" },
+    tax: { assessedValue: "$701,200", annualTax: "$12,940", exempt: false },
+    parcel: { acreage: "1.42 ac", zoning: "R-2 Residential", flood: "Zone AE — flood insurance required" },
+    mls: { mlsId: "NHMLS-78015", daysOnMarket: 2, contingencies: ["Financing", "Inspection", "Probate"] }
+  }
+];
+
+let selected = null;
+
+const picker = document.getElementById("picker");
+LISTINGS.forEach(l => {
+  const btn = document.createElement("button");
+  btn.className = "record-btn";
+  btn.id = "pick-" + l.id;
+  btn.innerHTML = `<span class="addr">${l.addr}</span><span class="sub">${l.sub} · ${l.price}</span>`;
+  btn.onclick = () => selectListing(l.id);
+  picker.appendChild(btn);
+});
+
+function selectListing(id) {
+  selected = LISTINGS.find(l => l.id === id);
+  document.querySelectorAll(".record-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("pick-" + id).classList.add("active");
+  document.getElementById("runBtn").disabled = false;
+  resetContract();
+  log(`Loaded listing ${selected.addr}. Ready to pull records.`, true);
+}
+
+// ---- Contract field schema -------------------------------------------------
+const FIELDS = [
+  { key: "buyerSeller", label: "Seller of record", tag: "deed", get: d => d.deed.owner },
+  { key: "parcelId", label: "Parcel ID", tag: "deed", get: d => d.deed.parcelId },
+  { key: "encumbrance", label: "Title encumbrance", tag: "deed", get: d => d.deed.encumbrance || "None found", flagIf: d => !!d.deed.encumbrance },
+  { key: "assessed", label: "Assessed value", tag: "tax", get: d => d.tax.assessedValue },
+  { key: "annualTax", label: "Annual property tax", tag: "tax", get: d => d.tax.annualTax },
+  { key: "acreage", label: "Lot size", tag: "parcel", get: d => d.parcel.acreage },
+  { key: "zoning", label: "Zoning", tag: "parcel", get: d => d.parcel.zoning },
+  { key: "flood", label: "Flood zone", tag: "parcel", get: d => d.parcel.flood, flagIf: d => d.parcel.flood.includes("required") },
+  { key: "mlsId", label: "MLS ID", tag: "mls", get: d => d.mls.mlsId },
+  { key: "contingencies", label: "Contingencies", tag: "mls", get: d => d.mls.contingencies.join(", ") }
+];
+
+const fieldsEl = document.getElementById("fields");
+function resetContract() {
+  fieldsEl.innerHTML = "";
+  FIELDS.forEach(f => {
+    const row = document.createElement("div");
+    row.className = "field-row";
+    row.id = "row-" + f.key;
+    row.innerHTML = `
+      <div class="label">${f.label}</div>
+      <div class="value pending" id="val-${f.key}"></div>
+      <span class="tag ${f.tag}">${f.tag}</span>
+    `;
+    fieldsEl.appendChild(row);
+  });
+  document.getElementById("statusPill").textContent = "awaiting data";
+  document.getElementById("statusPill").classList.remove("filled");
+  document.getElementById("deadlineList").innerHTML = "";
+  document.getElementById("log").innerHTML = '<div class="line">Records cleared. Run the assembler again.</div>';
+}
+
+function log(msg, clear) {
+  const el = document.getElementById("log");
+  if (clear) el.innerHTML = "";
+  const line = document.createElement("div");
+  line.className = "line";
+  line.innerHTML = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ---- The core mechanic: staged, source-attributed auto-fill -----------------
+const STAGES = [
+  { src: "Deed Agent", note: "querying county registry for ownership chain" },
+  { src: "Tax & Assessing Agent", note: "pulling latest assessment roll" },
+  { src: "Parcel Agent", note: "cross-referencing zoning + flood maps" },
+  { src: "MLS Agent", note: "syncing listing terms and contingencies" }
+];
+
+let running = false;
+
+function runAssembly() {
+  if (!selected || running) return;
+  running = true;
+  document.getElementById("runBtn").disabled = true;
+  resetContractKeepLog();
+  log("Starting record pull for " + selected.addr + "...", true);
+
+  let delay = 500;
+  STAGES.forEach((stage, i) => {
+    setTimeout(() => {
+      log(`<span class="src">[${stage.src}]</span> ${stage.note}...`);
+      fillFieldsForSource(stage.src);
+    }, delay);
+    delay += 650;
+  });
+
+  setTimeout(() => {
+    log(`<span class="src">[Deadline Agent]</span> generating closing calendar from contract date...`);
+    buildDeadlines();
+    const pill = document.getElementById("statusPill");
+    pill.textContent = "contract filled";
+    pill.classList.add("filled");
+    log("All fields populated. Review flagged items before sending to counsel.");
+    running = false;
+    document.getElementById("runBtn").disabled = false;
+  }, delay + 300);
+}
+
+function resetContractKeepLog() {
+  FIELDS.forEach(f => {
+    const val = document.getElementById("val-" + f.key);
+    val.textContent = "";
+    val.classList.add("pending");
+    val.classList.remove("flag");
+  });
+  document.getElementById("statusPill").textContent = "pulling records...";
+  document.getElementById("statusPill").classList.remove("filled");
+  document.getElementById("deadlineList").innerHTML = "";
+}
+
+const SOURCE_MAP = {
+  "Deed Agent": ["buyerSeller", "parcelId", "encumbrance"],
+  "Tax & Assessing Agent": ["assessed", "annualTax"],
+  "Parcel Agent": ["acreage", "zoning", "flood"],
+  "MLS Agent": ["mlsId", "contingencies"]
+};
+
+function fillFieldsForSource(src) {
+  const keys = SOURCE_MAP[src] || [];
+  keys.forEach(key => {
+    const f = FIELDS.find(f => f.key === key);
+    const val = document.getElementById("val-" + key);
+    val.textContent = f.get(selected);
+    val.classList.remove("pending");
+    if (f.flagIf && f.flagIf(selected)) {
+      val.classList.add("flag");
+      const row = document.getElementById("row-" + key);
+      const existingTag = row.querySelector(".tag." + f.tag);
+      const flagTag = document.createElement("span");
+      flagTag.className = "tag flagged";
+      flagTag.textContent = "needs review";
+      row.appendChild(flagTag);
+    }
+  });
+}
+
+function buildDeadlines() {
+  const start = new Date();
+  const weeks = selected.closeWeeks;
+  const items = [
+    { name: "Inspection contingency due", offsetDays: 10 },
+    { name: "Financing commitment due", offsetDays: 21 },
+    { name: "Title review complete", offsetDays: 18 },
+    { name: "Final walkthrough", offsetDays: weeks * 7 - 2 },
+    { name: "Closing date", offsetDays: weeks * 7 }
+  ];
+  const list = document.getElementById("deadlineList");
+  list.innerHTML = "";
+  items.forEach((item, i) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + item.offsetDays);
+    const row = document.createElement("div");
+    row.className = "deadline-row";
+    row.innerHTML = `<span>${item.name}</span><span class="days">${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · in ${item.offsetDays}d</span>`;
+    list.appendChild(row);
+    setTimeout(() => row.classList.add("show"), i * 120);
+  });
+}
+
+// init
+resetContract();
+</script>
+
+</body>
+</html>

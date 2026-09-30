@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groundtruth — a toy fusion engine for physical-world facts</title>
+<style>
+  :root {
+    --bg: #0b1210;
+    --panel: #121b18;
+    --panel-2: #16221e;
+    --border: #24342e;
+    --text: #e8f0ec;
+    --muted: #8aa39a;
+    --accent: #5fd0a0;
+    --accent-2: #f0b35f;
+    --warn: #e0715f;
+    --mono: 'SF Mono', 'Fira Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #17251f 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 32px 40px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    padding: 28px 40px 40px;
+    max-width: 1080px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .query-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  #query {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    outline: none;
+  }
+  #query:focus { border-color: var(--accent); }
+  #run {
+    background: var(--accent);
+    color: #08150f;
+    border: none;
+    font-weight: 700;
+    padding: 0 22px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #run:hover { filter: brightness(1.08); }
+  .presets {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 26px;
+  }
+  .preset {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .preset:hover { color: var(--text); border-color: var(--accent); }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 1.35fr;
+    gap: 22px;
+  }
+  .sources-panel, .result-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    min-height: 420px;
+  }
+  .panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .source {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    font-size: 13px;
+    background: var(--panel-2);
+    opacity: 0.4;
+    transform: translateX(-4px);
+    transition: all 0.35s ease;
+  }
+  .source.active {
+    opacity: 1;
+    transform: translateX(0);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(95,208,160,0.15);
+  }
+  .source .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .source.active .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .source .name { flex: 1; }
+  .source .lat {
+    font-family: var(--mono);
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .source.active .lat { color: var(--accent-2); }
+
+  .result-panel { display: flex; flex-direction: column; }
+  .empty-state {
+    margin: auto;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13.5px;
+    max-width: 300px;
+    line-height: 1.6;
+  }
+  .fact {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13.5px;
+    opacity: 0;
+    animation: fadeUp 0.4s ease forwards;
+  }
+  .fact:last-child { border-bottom: none; }
+  .fact-label { color: var(--muted); }
+  .fact-value { color: var(--text); font-weight: 600; }
+  .fact-source {
+    grid-column: 2;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    margin-top: 2px;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+  }
+  .result-header h2 { font-size: 16px; margin: 0; }
+  .confidence {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--accent-2);
+  }
+  .synth-note {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--panel-2);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .conflict {
+    color: var(--warn) !important;
+  }
+  footer {
+    text-align: center;
+    padding: 22px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ground<span>truth</span></h1>
+  <p>A toy fact-fusion engine. Type a place, watch it query several disconnected "silos" of physical-world data (parcels, utility feeds, environmental sensors, census blocks, permits) and merge them into one cited answer — the way an agent would need to, if it could actually see the ground.</p>
+</header>
+
+<main>
+  <div class="query-row">
+    <input id="query" type="text" placeholder="Try: 118 Birchwood Ln, or 'vacant lot near river'…" value="118 Birchwood Ln, Millhaven County">
+    <button id="run">Query</button>
+  </div>
+  <div class="presets">
+    <button class="preset" data-q="118 Birchwood Ln, Millhaven County">118 Birchwood Ln</button>
+    <button class="preset" data-q="4470 Route 9, Tannersville">4470 Route 9</button>
+    <button class="preset" data-q="Parcel 22-014-6, Cedar Fork">Parcel 22-014-6</button>
+    <button class="preset" data-q="912 Overlook Dr, Millhaven County">912 Overlook Dr</button>
+  </div>
+
+  <div class="stage">
+    <div class="sources-panel">
+      <div class="panel-title">Querying 6 disconnected sources</div>
+      <div id="sourceList"></div>
+    </div>
+    <div class="result-panel">
+      <div class="panel-title">Fused answer</div>
+      <div id="resultBody">
+        <div class="empty-state">Run a query to see synthetic land, power, flood, and zoning records get reconciled into a single structured record — with every field traced back to its source and disagreements flagged instead of hidden.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Mireye (YC S26). Not affiliated with Mireye. |
+  <a href="https://www.mireye.com/" target="_blank" rel="noopener">mireye.com</a>
+</footer>
+
+<script>
+// ---- synthetic backend --------------------------------------------------
+const SOURCES = [
+  { id: 'parcel',  name: 'County Parcel Registry (GIS)', lat: 180 },
+  { id: 'utility', name: 'Regional Utility Load Portal',  lat: 260 },
+  { id: 'flood',   name: 'Federal Flood Risk Grid',       lat: 140 },
+  { id: 'census',  name: 'Census Block Demographics',     lat: 210 },
+  { id: 'permit',  name: 'Municipal Permit Filings (PDF)',lat: 320 },
+  { id: 'sensor',  name: 'Environmental Sensor Network',  lat: 190 },
+];
+
+// A tiny deterministic hash so the same query always returns the same
+// synthetic record, like a real cache would.
+function hash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function synthesizeRecord(query) {
+  const h = hash(query.toLowerCase().trim());
+  const zoningOpts = ['R-1 Residential', 'R-2 Residential', 'AG Agricultural', 'C-1 Light Commercial'];
+  const soilOpts = ['Loam, well-drained', 'Clay-loam, moderate drainage', 'Sandy loam, fast drainage'];
+  const gridOpts = ['Stable, 99.94% uptime (90d)', 'Stable, 99.7% uptime (90d)', 'Intermittent — 3 outages (90d)'];
+  const floodOpts = ['Zone X — minimal risk', 'Zone AE — 1% annual chance', 'Zone X (shaded) — 0.2% annual chance'];
+
+  // Deliberately create a conflict sometimes: parcel registry vs permit filings disagree.
+  const hasConflict = (h % 5) === 0;
+  const parcelZoning = zoningOpts[h % zoningOpts.length];
+  const permitZoning = hasConflict ? zoningOpts[(h + 1) % zoningOpts.length] : parcelZoning;
+
+  return {
+    elevation: 180 + (h % 340),
+    parcelAcres: (0.18 + (h % 900) / 1000).toFixed(2),
+    parcelZoning,
+    permitZoning,
+    hasConflict,
+    lastPermit: 2016 + (h % 9),
+    gridStatus: gridOpts[h % gridOpts.length],
+    peakDemandKw: 4 + (h % 26),
+    floodZone: floodOpts[h % floodOpts.length],
+    population400m: 60 + (h % 900),
+    medianAge: 31 + (h % 22),
+    soil: soilOpts[h % soilOpts.length],
+    airQualityIdx: 18 + (h % 70),
+    canopyPct: (h % 65),
+    confidence: 82 + (h % 16),
+  };
+}
+
+// ---- rendering ------------------------------------------------------------
+const sourceListEl = document.getElementById('sourceList');
+const resultBodyEl = document.getElementById('resultBody');
+const queryInput = document.getElementById('query');
+const runBtn = document.getElementById('run');
+
+function renderSourceList() {
+  sourceListEl.innerHTML = SOURCES.map(s => `
+    <div class="source" id="src-${s.id}">
+      <div class="dot"></div>
+      <div class="name">${s.name}</div>
+      <div class="lat">— ms</div>
+    </div>
+  `).join('');
+}
+renderSourceList();
+
+let running = false;
+
+function runQuery() {
+  if (running) return;
+  const query = queryInput.value.trim();
+  if (!query) return;
+  running = true;
+  runBtn.textContent = 'Fusing…';
+  renderSourceList();
+  resultBodyEl.innerHTML = '<div class="empty-state">Dispatching parallel requests to 6 sources…</div>';
+
+  const record = synthesizeRecord(query);
+
+  SOURCES.forEach((s, i) => {
+    setTimeout(() => {
+      const el = document.getElementById(`src-${s.id}`);
+      el.classList.add('active');
+      el.querySelector('.lat').textContent = s.lat + ' ms';
+      if (i === SOURCES.length - 1) {
+        setTimeout(() => renderResult(query, record), 250);
+      }
+    }, 220 * (i + 1));
+  });
+}
+
+function renderResult(query, r) {
+  running = false;
+  runBtn.textContent = 'Query';
+
+  const facts = [
+    ['Elevation', `${r.elevation} ft above sea level`, 'source: USGS-style elevation grid'],
+    ['Parcel size', `${r.parcelAcres} acres`, 'source: county parcel registry (GIS)'],
+    ['Zoning (registry)', r.parcelZoning, 'source: county parcel registry (GIS)'],
+    ['Zoning (permits)', r.permitZoning + (r.hasConflict ? '  ⚠ disagrees with registry' : ''), 'source: municipal permit filings (PDF, OCR-parsed)', r.hasConflict],
+    ['Last permit filed', String(r.lastPermit), 'source: municipal permit filings (PDF, OCR-parsed)'],
+    ['Grid status', r.gridStatus, 'source: regional utility load portal'],
+    ['Peak demand', `${r.peakDemandKw} kW (est. residential)`, 'source: regional utility load portal'],
+    ['Flood risk', r.floodZone, 'source: federal flood risk grid'],
+    ['Pop. within 400m', `~${r.population400m} residents`, 'source: census block demographics'],
+    ['Median age (block)', `${r.medianAge} yrs`, 'source: census block demographics'],
+    ['Soil type', r.soil, 'source: environmental sensor network'],
+    ['Air quality index', String(r.airQualityIdx), 'source: environmental sensor network'],
+    ['Tree canopy cover', `${r.canopyPct}%`, 'source: environmental sensor network'],
+  ];
+
+  resultBodyEl.innerHTML = `
+    <div class="result-header">
+      <h2>${escapeHtml(query)}</h2>
+      <div class="confidence">confidence ${r.confidence}%</div>
+    </div>
+    ${facts.map((f, i) => `
+      <div class="fact" style="animation-delay:${i * 45}ms">
+        <div class="fact-label">${f[0]}</div>
+        <div>
+          <div class="fact-value ${f[3] ? 'conflict' : ''}">${f[1]}</div>
+          <div class="fact-source">${f[2]}</div>
+        </div>
+      </div>
+    `).join('')}
+    <div class="synth-note">
+      ${r.hasConflict
+        ? 'Note: two sources disagree on zoning. A real fusion layer would surface this instead of silently picking one — flagged here rather than resolved.'
+        : 'All sources agree on the fields above for this query. Fields are synthetic and regenerate deterministically per query text — this is a toy, not live data.'}
+    </div>
+  `;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+runBtn.addEventListener('click', runQuery);
+queryInput.addEventListener('keydown', e => { if (e.key === 'Enter') runQuery(); });
+document.querySelectorAll('.preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    queryInput.value = btn.dataset.q;
+    runQuery();
+  });
+});
+
+// auto-run once on load for immediate visual payoff
+runQuery();
+</script>
+
+</body>
+</html>
