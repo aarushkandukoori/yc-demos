@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Autoplan — Generative Facility Layout Demo</title>
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#13161b;
+    --panel2:#1a1e25;
+    --line:#262b33;
+    --text:#e7e9ec;
+    --muted:#8d94a1;
+    --accent:#5ee6c4;
+    --accent2:#f2a65a;
+    --warn:#ef6461;
+    --good:#5ee6c4;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    padding:28px 36px 18px;
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    max-width:720px;
+    line-height:1.5;
+  }
+  .wrap{
+    display:grid;
+    grid-template-columns:320px 1fr;
+    gap:0;
+    min-height:640px;
+  }
+  .controls{
+    padding:24px;
+    border-right:1px solid var(--line);
+    background:var(--panel);
+  }
+  .controls h2{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    margin:0 0 16px;
+  }
+  .field{margin-bottom:18px;}
+  .field label{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    margin-bottom:6px;
+    color:var(--text);
+  }
+  .field label span.val{color:var(--accent);font-weight:600;}
+  input[type=range]{
+    width:100%;
+    accent-color:var(--accent);
+  }
+  select{
+    width:100%;
+    padding:8px 10px;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:6px;
+    font-size:13px;
+  }
+  button#generate{
+    width:100%;
+    margin-top:10px;
+    padding:12px;
+    background:var(--accent);
+    color:#07211c;
+    font-weight:700;
+    border:none;
+    border-radius:8px;
+    font-size:14px;
+    cursor:pointer;
+    transition:transform .1s ease;
+  }
+  button#generate:hover{transform:translateY(-1px);}
+  button#generate:active{transform:translateY(0);}
+  .runlog{
+    margin-top:18px;
+    font-size:11px;
+    color:var(--muted);
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    line-height:1.6;
+    max-height:160px;
+    overflow-y:auto;
+    border-top:1px solid var(--line);
+    padding-top:12px;
+  }
+  .runlog div{opacity:0;animation:fadein .25s forwards;}
+  @keyframes fadein{to{opacity:1;}}
+  .main{padding:24px 28px;}
+  .statrow{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:12px;
+    margin-bottom:20px;
+  }
+  .stat{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 16px;
+  }
+  .stat .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  .stat .value{font-size:22px;font-weight:700;margin-top:4px;}
+  .stat .value.good{color:var(--good);}
+  .stat .value.warn{color:var(--warn);}
+  .layout-area{
+    display:grid;
+    grid-template-columns:1.3fr 1fr;
+    gap:16px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+  }
+  .panel h3{
+    margin:0 0 12px;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted);
+  }
+  #floorplan{
+    width:100%;
+    height:360px;
+    display:block;
+    background:
+      linear-gradient(var(--panel2) 1px, transparent 1px),
+      linear-gradient(90deg, var(--panel2) 1px, transparent 1px);
+    background-size:20px 20px;
+    border-radius:8px;
+    border:1px solid var(--line);
+  }
+  .legend{
+    display:flex;
+    gap:16px;
+    margin-top:10px;
+    flex-wrap:wrap;
+    font-size:11px;
+    color:var(--muted);
+  }
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .swatch{width:10px;height:10px;border-radius:2px;display:inline-block;}
+  table.spec{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12.5px;
+  }
+  table.spec td{
+    padding:7px 4px;
+    border-bottom:1px solid var(--line);
+    color:var(--muted);
+  }
+  table.spec td:last-child{
+    text-align:right;
+    color:var(--text);
+    font-weight:600;
+  }
+  .flag{
+    margin-top:10px;
+    padding:10px 12px;
+    border-radius:8px;
+    font-size:12.5px;
+    background:rgba(239,100,97,.1);
+    border:1px solid rgba(239,100,97,.35);
+    color:#f3a09e;
+    display:none;
+  }
+  .flag.show{display:block;}
+  .history{
+    margin-top:16px;
+  }
+  .history-row{
+    display:grid;
+    grid-template-columns:28px 1fr auto auto auto;
+    gap:10px;
+    align-items:center;
+    padding:8px 6px;
+    font-size:12px;
+    border-bottom:1px solid var(--line);
+    color:var(--muted);
+  }
+  .history-row b{color:var(--text);}
+  .pill{
+    font-size:10px;
+    padding:2px 7px;
+    border-radius:999px;
+    background:var(--panel2);
+    border:1px solid var(--line);
+  }
+  footer{
+    padding:18px 36px 28px;
+    border-top:1px solid var(--line);
+    color:var(--muted);
+    font-size:12px;
+  }
+  .hint{font-size:11px;color:var(--muted);margin-top:4px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Autoplan — Generative Facility Layout (toy demo)</h1>
+  <p>Set a target IT load and site envelope, then generate an engineered data hall layout:
+  white space, cooling plant sizing, electrical capacity and a rough construction cost —
+  recomputed from first principles in your browser, not fetched from a database.
+  This is an independent homage demonstrating the core mechanic of AI-driven facility design automation, not Marengo's actual software.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <h2>Design Inputs</h2>
+
+    <div class="field">
+      <label>IT Load Target <span class="val" id="loadVal">8 MW</span></label>
+      <input type="range" id="loadSlider" min="2" max="40" value="8" step="1">
+    </div>
+
+    <div class="field">
+      <label>Site Width <span class="val" id="wVal">180 m</span></label>
+      <input type="range" id="wSlider" min="80" max="320" value="180" step="10">
+    </div>
+
+    <div class="field">
+      <label>Site Depth <span class="val" id="dVal">120 m</span></label>
+      <input type="range" id="dSlider" min="60" max="240" value="120" step="10">
+    </div>
+
+    <div class="field">
+      <label>Cooling Strategy</label>
+      <select id="coolSelect">
+        <option value="air">Air-cooled (CRAH + chillers)</option>
+        <option value="liquid">Direct liquid cooling</option>
+        <option value="hybrid">Hybrid air/liquid</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Redundancy</label>
+      <select id="redSelect">
+        <option value="n">N</option>
+        <option value="n1" selected>N+1</option>
+        <option value="2n">2N</option>
+      </select>
+    </div>
+
+    <button id="generate">Generate design →</button>
+    <div class="hint">Each run re-derives the layout from your parameters — nothing is pre-baked per combination.</div>
+
+    <div class="runlog" id="runlog"></div>
+  </div>
+
+  <div class="main">
+    <div class="statrow">
+      <div class="stat"><div class="label">White space</div><div class="value" id="statWhite">—</div></div>
+      <div class="stat"><div class="label">Power density</div><div class="value" id="statDensity">—</div></div>
+      <div class="stat"><div class="label">PUE estimate</div><div class="value" id="statPue">—</div></div>
+      <div class="stat"><div class="label">Rough cost</div><div class="value" id="statCost">—</div></div>
+    </div>
+
+    <div class="flag" id="flag"></div>
+
+    <div class="layout-area">
+      <div class="panel">
+        <h3>Generated floor plan</h3>
+        <canvas id="floorplan" width="700" height="360"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:#f2a65a"></i>Data hall</span>
+          <span><i class="swatch" style="background:#5ee6c4"></i>Electrical / switchgear</span>
+          <span><i class="swatch" style="background:#6b9bf2"></i>Cooling plant</span>
+          <span><i class="swatch" style="background:#8d94a1"></i>Circulation / support</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Engineering spec sheet (synthetic)</h3>
+        <table class="spec" id="specTable"></table>
+      </div>
+    </div>
+
+    <div class="panel history">
+      <h3>Design iteration history (this session)</h3>
+      <div id="historyList" style="font-size:12px;color:var(--muted);">No iterations yet — generate a design to start the log.</div>
+    </div>
+  </div>
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Marengo (YC S26). Not affiliated with Marengo.</footer>
+
+<script>
+(function(){
+  const loadSlider = document.getElementById('loadSlider');
+  const wSlider = document.getElementById('wSlider');
+  const dSlider = document.getElementById('dSlider');
+  const coolSelect = document.getElementById('coolSelect');
+  const redSelect = document.getElementById('redSelect');
+  const loadVal = document.getElementById('loadVal');
+  const wVal = document.getElementById('wVal');
+  const dVal = document.getElementById('dVal');
+  const runlog = document.getElementById('runlog');
+  const flag = document.getElementById('flag');
+  const historyList = document.getElementById('historyList');
+  const canvas = document.getElementById('floorplan');
+  const ctx = canvas.getContext('2d');
+
+  let history = [];
+  let runCount = 0;
+
+  loadSlider.oninput = () => loadVal.textContent = loadSlider.value + ' MW';
+  wSlider.oninput = () => wVal.textContent = wSlider.value + ' m';
+  dSlider.oninput = () => dVal.textContent = dSlider.value + ' m';
+
+  const COOL_FACTORS = {
+    air:    { pue: 1.45, density: 8,  costPerMW: 7.8, label: 'Air-cooled' },
+    liquid: { pue: 1.18, density: 22, costPerMW: 10.4, label: 'Direct liquid' },
+    hybrid: { pue: 1.28, density: 14, costPerMW: 9.1, label: 'Hybrid' }
+  };
+  const RED_FACTORS = {
+    n:   { mult: 1.0,  label: 'N' },
+    n1:  { mult: 1.18, label: 'N+1' },
+    '2n':{ mult: 1.85, label: '2N' }
+  };
+
+  function log(msg, delay){
+    const d = document.createElement('div');
+    d.textContent = msg;
+    d.style.animationDelay = delay + 'ms';
+    runlog.appendChild(d);
+    runlog.scrollTop = runlog.scrollHeight;
+  }
+
+  function fmtMoney(m){
+    return '$' + m.toFixed(1) + 'M';
+  }
+
+  function seededRand(seed){
+    // simple deterministic pseudo-random so same inputs -> same layout
+    let x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  }
+
+  function generate(){
+    runlog.innerHTML = '';
+    const loadMW = parseFloat(loadSlider.value);
+    const siteW = parseFloat(wSlider.value);
+    const siteD = parseFloat(dSlider.value);
+    const cool = COOL_FACTORS[coolSelect.value];
+    const red = RED_FACTORS[redSelect.value];
+
+    log('> parsing design envelope: ' + siteW + 'm × ' + siteD + 'm', 0);
+    log('> target IT load: ' + loadMW + ' MW, redundancy ' + red.label, 120);
+    log('> selecting cooling plant: ' + cool.label, 260);
+
+    // core sizing logic
+    const whiteSpaceSqm = (loadMW * 1000) / cool.density; // kW per sqm density
+    const siteArea = siteW * siteD;
+    const whiteSpacePct = Math.min(0.55, whiteSpaceSqm / siteArea);
+    const electricalPct = 0.12 * red.mult;
+    const coolingPct = 0.18 * (cool === COOL_FACTORS.liquid ? 0.8 : 1.1);
+    const circPct = Math.max(0.1, 1 - whiteSpacePct - electricalPct - coolingPct);
+
+    const pue = cool.pue + (red.mult - 1) * 0.03;
+    const totalLoadWithRed = loadMW * red.mult;
+    const costPerMW = cool.costPerMW * (0.92 + red.mult * 0.1);
+    const roughCost = totalLoadWithRed * costPerMW;
+
+    let overCapacity = whiteSpaceSqm > siteArea * 0.6;
+
+    log('> computing power density: ' + cool.density + ' kW/m²', 400);
+    log('> sizing electrical gear at ' + (electricalPct*100).toFixed(0) + '% of floor area', 540);
+    log('> estimating PUE from plant + redundancy overhead', 680);
+    log(overCapacity ? '! site envelope undersized for this load — layout will show constraint' : '> layout fits within envelope', 820);
+    log('> done in 1.1s', 960);
+
+    setTimeout(() => render({
+      loadMW, siteW, siteD, cool, red, whiteSpacePct, electricalPct, coolingPct, circPct,
+      pue, roughCost, totalLoadWithRed, overCapacity, costPerMW, density: cool.density
+    }), 1050);
+  }
+
+  function render(d){
+    document.getElementById('statWhite').textContent = (d.whiteSpacePct*100).toFixed(0) + '% of site';
+    document.getElementById('statDensity').textContent = d.density + ' kW/m²';
+    const pueEl = document.getElementById('statPue');
+    pueEl.textContent = d.pue.toFixed(2);
+    pueEl.className = 'value ' + (d.pue < 1.3 ? 'good' : (d.pue > 1.4 ? 'warn' : ''));
+    document.getElementById('statCost').textContent = fmtMoney(d.roughCost);
+
+    if(d.overCapacity){
+      flag.textContent = '⚠ Site envelope is tight for ' + d.loadMW + ' MW at this density — the generator compressed circulation space below recommended minimums. Try a larger site or liquid cooling to raise density.';
+      flag.classList.add('show');
+    } else {
+      flag.classList.remove('show');
+    }
+
+    drawFloorplan(d);
+    fillSpec(d);
+    pushHistory(d);
+  }
+
+  function drawFloorplan(d){
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#13161b';
+    ctx.fillRect(0,0,W,H);
+
+    const pad = 16;
+    const innerW = W - pad*2, innerH = H - pad*2;
+
+    // zones stacked as proportional bands for clarity + a side column
+    const seed = d.loadMW * 7 + d.siteW * 3 + (d.cool.density);
+    let x = pad;
+
+    const zones = [
+      { pct: d.whiteSpacePct, color: '#f2a65a', label: 'Data Hall' },
+      { pct: d.electricalPct, color: '#5ee6c4', label: 'Electrical' },
+      { pct: d.coolingPct, color: '#6b9bf2', label: 'Cooling' },
+      { pct: d.circPct, color: '#8d94a1', label: 'Circulation' }
+    ];
+    const totalPct = zones.reduce((s,z)=>s+z.pct,0);
+
+    zones.forEach((z, i) => {
+      const w = innerW * (z.pct/totalPct);
+      ctx.fillStyle = z.color;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(x, pad, w, innerH);
+      ctx.globalAlpha = 1;
+
+      // sub-rack texture for data hall
+      if(z.label === 'Data Hall'){
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 1;
+        const rows = 8;
+        for(let r=1;r<rows;r++){
+          const ry = pad + (innerH/rows)*r;
+          ctx.beginPath();
+          ctx.moveTo(x+4, ry);
+          ctx.lineTo(x+w-4, ry);
+          ctx.stroke();
+        }
+      }
+
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.font = '11px -apple-system, sans-serif';
+      ctx.save();
+      ctx.translate(x + w/2, pad + innerH - 10);
+      if(w < 50){
+        ctx.rotate(-Math.PI/2);
+        ctx.textAlign = 'left';
+      } else {
+        ctx.textAlign = 'center';
+      }
+      ctx.fillText(z.label, 0, 0);
+      ctx.restore();
+
+      x += w;
+    });
+
+    ctx.strokeStyle = '#30353f';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(pad, pad, innerW, innerH);
+  }
+
+  function fillSpec(d){
+    const tbl = document.getElementById('specTable');
+    const rows = [
+      ['Target IT load', d.loadMW + ' MW'],
+      ['Load incl. redundancy (' + d.red.label + ')', d.totalLoadWithRed.toFixed(1) + ' MW'],
+      ['Cooling strategy', d.cool.label],
+      ['Power density', d.density + ' kW/m²'],
+      ['White space required', Math.round((d.loadMW*1000)/d.density) + ' m²'],
+      ['Site envelope', d.siteW + ' × ' + d.siteD + ' m'],
+      ['Estimated PUE', d.pue.toFixed(2)],
+      ['Cost basis', '$' + d.costPerMW.toFixed(1) + 'M / MW'],
+      ['Rough order-of-magnitude cost', fmtMoney(d.roughCost)]
+    ];
+    tbl.innerHTML = rows.map(r => '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>').join('');
+  }
+
+  function pushHistory(d){
+    runCount++;
+    history.unshift({ n: runCount, d: new Date(), load: d.loadMW, cool: d.cool.label, pue: d.pue, cost: d.roughCost, over: d.overCapacity });
+    history = history.slice(0, 8);
+    historyList.innerHTML = history.map(h => `
+      <div class="history-row">
+        <b>#${h.n}</b>
+        <span>${h.load} MW · ${h.cool}</span>
+        <span class="pill">PUE ${h.pue.toFixed(2)}</span>
+        <span class="pill">${fmtMoney(h.cost)}</span>
+        <span class="pill" style="${h.over ? 'border-color:#ef6461;color:#f3a09e' : ''}">${h.over ? 'constrained' : 'fits envelope'}</span>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('generate').addEventListener('click', generate);
+
+  // initial run
+  generate();
+})();
+</script>
+
+</body>
+</html>
