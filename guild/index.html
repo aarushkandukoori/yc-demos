@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Forgeline — Spec to Shipped Part</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#131824; --panel2:#171d2c; --line:#263048;
+    --text:#e7ecf7; --muted:#8a94ab; --accent:#ff7a33; --accent2:#2fd6a7;
+    --warn:#ffcf5c; --danger:#ff5c6c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+      radial-gradient(circle at 20% -10%, #1b2436 0%, transparent 45%),
+      radial-gradient(circle at 90% 10%, #1a1f2d 0%, transparent 40%),
+      var(--bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:28px 40px 16px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  }
+  .brand{display:flex; align-items:center; gap:12px;}
+  .logo{
+    width:38px; height:38px; border-radius:8px;
+    background:linear-gradient(135deg, var(--accent), #c44a14);
+    display:flex; align-items:center; justify-content:center; font-weight:800; font-size:18px;
+    box-shadow:0 0 18px rgba(255,122,51,0.35);
+  }
+  .brand h1{font-size:19px; margin:0; letter-spacing:0.5px;}
+  .brand p{margin:2px 0 0; font-size:12.5px; color:var(--muted);}
+  .pill{
+    font-size:11.5px; color:var(--accent2); border:1px solid rgba(47,214,167,0.35);
+    background:rgba(47,214,167,0.08); padding:5px 10px; border-radius:999px;
+  }
+  main{max-width:1180px; margin:0 auto; padding:30px 40px 60px;}
+  .intro{max-width:720px; margin-bottom:28px;}
+  .intro h2{font-size:24px; margin:0 0 8px;}
+  .intro p{color:var(--muted); font-size:14.5px; line-height:1.55; margin:0;}
+  .grid{display:grid; grid-template-columns:380px 1fr; gap:22px;}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
+  .card{
+    background:linear-gradient(180deg, var(--panel), var(--panel2));
+    border:1px solid var(--line); border-radius:14px; padding:22px;
+  }
+  .card h3{margin:0 0 14px; font-size:14px; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted);}
+  label{display:block; font-size:12.5px; color:var(--muted); margin:14px 0 6px;}
+  label:first-of-type{margin-top:0;}
+  select, input{
+    width:100%; background:#0d121c; border:1px solid var(--line); color:var(--text);
+    padding:10px 12px; border-radius:8px; font-size:14px; font-family:inherit;
+  }
+  select:focus, input:focus{outline:none; border-color:var(--accent);}
+  .spec-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .btn{
+    margin-top:20px; width:100%; padding:13px; border:none; border-radius:9px;
+    background:linear-gradient(135deg, var(--accent), #e0601f); color:#fff; font-weight:700;
+    font-size:14.5px; cursor:pointer; letter-spacing:0.3px; transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover{transform:translateY(-1px); box-shadow:0 8px 22px rgba(255,122,51,0.3);}
+  .btn:active{transform:translateY(0);}
+  .btn.secondary{
+    background:transparent; border:1px solid var(--accent2); color:var(--accent2);
+    box-shadow:none;
+  }
+  .btn.secondary:hover{box-shadow:0 8px 22px rgba(47,214,167,0.18);}
+  .btn:disabled{opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none;}
+  .placeholder{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:420px; color:var(--muted); text-align:center; gap:10px; font-size:13.5px;
+  }
+  .placeholder .big{font-size:38px;}
+  .result-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;}
+  .result-head h3{margin:0; font-size:17px; color:var(--text); text-transform:none; letter-spacing:0;}
+  .status-tag{
+    font-size:11.5px; padding:4px 10px; border-radius:999px; font-weight:700; letter-spacing:0.3px;
+  }
+  .status-green{background:rgba(47,214,167,0.12); color:var(--accent2); border:1px solid rgba(47,214,167,0.35);}
+  .status-amber{background:rgba(255,207,92,0.12); color:var(--warn); border:1px solid rgba(255,207,92,0.35);}
+  .status-red{background:rgba(255,92,108,0.12); color:var(--danger); border:1px solid rgba(255,92,108,0.35);}
+  .metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:18px 0;}
+  @media (max-width:640px){ .metrics{grid-template-columns:repeat(2,1fr);} }
+  .metric{background:#0d121c; border:1px solid var(--line); border-radius:10px; padding:12px;}
+  .metric .v{font-size:19px; font-weight:800;}
+  .metric .l{font-size:11px; color:var(--muted); margin-top:3px;}
+  .section-label{font-size:12px; text-transform:uppercase; letter-spacing:0.6px; color:var(--muted); margin:20px 0 10px;}
+  .ops{display:flex; flex-direction:column; gap:8px;}
+  .op{
+    display:grid; grid-template-columns:26px 1fr auto auto; align-items:center; gap:12px;
+    background:#0d121c; border:1px solid var(--line); border-radius:9px; padding:10px 12px; font-size:13px;
+  }
+  .op .num{
+    width:22px; height:22px; border-radius:50%; background:#1c2436; color:var(--accent2);
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+  }
+  .op .machine{color:var(--muted); font-size:11.5px;}
+  .op .time{color:var(--text); font-weight:600; font-size:12.5px;}
+  .flags{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px;}
+  .flag{font-size:11.5px; padding:5px 10px; border-radius:7px; border:1px solid var(--line); color:var(--muted); background:#0d121c;}
+  .flag.ok{color:var(--accent2); border-color:rgba(47,214,167,0.3);}
+  .flag.warn{color:var(--warn); border-color:rgba(255,207,92,0.3);}
+  .queue{display:flex; flex-direction:column; gap:10px; margin-top:10px;}
+  .qrow{background:#0d121c; border:1px solid var(--line); border-radius:9px; padding:11px 13px;}
+  .qrow .top{display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:7px;}
+  .qrow .top span:first-child{color:var(--text); font-weight:600;}
+  .qrow .top span:last-child{color:var(--muted);}
+  .bar{height:7px; background:#1c2436; border-radius:999px; overflow:hidden;}
+  .bar-fill{height:100%; width:0%; background:linear-gradient(90deg, var(--accent2), #1fa888); transition:width .4s ease;}
+  .bar-fill.active{background:linear-gradient(90deg, var(--accent), #e0601f);}
+  .ship-banner{
+    margin-top:18px; padding:14px 16px; border-radius:10px; border:1px solid rgba(47,214,167,0.35);
+    background:rgba(47,214,167,0.08); color:var(--accent2); font-size:13.5px; display:none; align-items:center; gap:10px;
+  }
+  .ship-banner.show{display:flex;}
+  footer{
+    border-top:1px solid var(--line); padding:20px 40px; text-align:center;
+    color:var(--muted); font-size:12px; line-height:1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">F</div>
+    <div>
+      <h1>Forgeline</h1>
+      <p>Spec-to-shipped planning for mil/aero hardware</p>
+    </div>
+  </div>
+  <div class="pill">● synthetic demo — no real contracts, parts, or facilities</div>
+</header>
+
+<main>
+  <div class="intro">
+    <h2>Turn a part drawing into a priced, scheduled production run — automatically.</h2>
+    <p>Pick a part off a government RFQ. Forgeline reads the spec, builds a machining plan, prices it, flags compliance risk, and queues it on the shop floor — the step that normally takes a quoting engineer two days.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>1 · Part Spec</h3>
+      <label for="part">RFQ line item</label>
+      <select id="part"></select>
+
+      <div class="spec-row">
+        <div>
+          <label for="qty">Quantity</label>
+          <input type="number" id="qty" min="1" max="500" value="25">
+        </div>
+        <div>
+          <label for="due">Due in (days)</label>
+          <input type="number" id="due" min="5" max="180" value="30">
+        </div>
+      </div>
+
+      <div id="specDetails" style="margin-top:16px; font-size:12.5px; color:var(--muted); line-height:1.7;"></div>
+
+      <button class="btn" id="genBtn">Generate process plan</button>
+      <button class="btn secondary" id="resetBtn" style="display:none;">Reset demo</button>
+    </div>
+
+    <div class="card" id="outputCard">
+      <div class="placeholder" id="placeholder">
+        <div class="big">⚙</div>
+        <div>Select a part and generate a plan to see<br>the machining sequence, quote, and risk flags.</div>
+      </div>
+
+      <div id="resultArea" style="display:none;">
+        <div class="result-head">
+          <div>
+            <h3 id="resultTitle">—</h3>
+            <div style="color:var(--muted); font-size:12.5px; margin-top:4px;" id="resultSub"></div>
+          </div>
+          <span class="status-tag" id="statusTag"></span>
+        </div>
+
+        <div class="metrics">
+          <div class="metric"><div class="v" id="mCost">—</div><div class="l">Quoted total</div></div>
+          <div class="metric"><div class="v" id="mLead">—</div><div class="l">Est. lead time</div></div>
+          <div class="metric"><div class="v" id="mMargin">—</div><div class="l">Target margin</div></div>
+          <div class="metric"><div class="v" id="mRisk">—</div><div class="l">Schedule risk</div></div>
+        </div>
+
+        <div class="section-label">Compliance &amp; eligibility</div>
+        <div class="flags" id="flags"></div>
+
+        <div class="section-label">Generated process plan</div>
+        <div class="ops" id="ops"></div>
+
+        <button class="btn" id="submitBtn" style="margin-top:22px;">Submit to production queue</button>
+
+        <div id="productionArea" style="display:none; margin-top:22px;">
+          <div class="section-label">Production queue — live</div>
+          <div class="queue" id="queue"></div>
+          <div class="ship-banner" id="shipBanner">🚀 <span id="shipText"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by GUILD (YC S26). Not affiliated with GUILD.
+</footer>
+
+<script>
+// ---------- synthetic part catalog ----------
+const PARTS = [
+  {
+    id: "bracket",
+    name: "Titanium Mounting Bracket",
+    program: "USAF — Structural Fasteners RFQ 4471",
+    material: "Ti-6Al-4V",
+    toleranceClass: "tight",   // tight | standard | loose
+    toleranceIn: "±0.0005 in",
+    stock: "Forged billet",
+    itar: true,
+    baseRate: 42,      // $ per machining minute (material + machine class)
+    baseMinutes: 38,   // machining minutes per unit at qty=1
+  },
+  {
+    id: "manifold",
+    name: "Hydraulic Manifold Block",
+    program: "NAVAIR — Actuation Subsystem RFQ 1182",
+    material: "17-4PH Stainless",
+    toleranceClass: "tight",
+    toleranceIn: "±0.0008 in",
+    stock: "Billet, 5-axis",
+    itar: true,
+    baseRate: 36,
+    baseMinutes: 61,
+  },
+  {
+    id: "bracketAl",
+    name: "Avionics Chassis Panel",
+    program: "USSF — Ground Comms RFQ 902",
+    material: "6061-T6 Aluminum",
+    toleranceClass: "standard",
+    toleranceIn: "±0.003 in",
+    stock: "Plate stock",
+    itar: false,
+    baseRate: 19,
+    baseMinutes: 22,
+  },
+  {
+    id: "turbine",
+    name: "Turbine Inlet Housing",
+    program: "USAF — Propulsion Sustainment RFQ 2290",
+    material: "Inconel 718",
+    toleranceClass: "tight",
+    toleranceIn: "±0.0004 in",
+    stock: "Forged billet",
+    itar: true,
+    baseRate: 58,
+    baseMinutes: 94,
+  },
+  {
+    id: "bushing",
+    name: "Landing Gear Bushing",
+    program: "Army — Rotary Wing Sustainment RFQ 3315",
+    material: "4340 Steel",
+    toleranceClass: "standard",
+    toleranceIn: "±0.002 in",
+    stock: "Bar stock",
+    itar: false,
+    baseRate: 24,
+    baseMinutes: 17,
+  },
+];
+
+const sel = document.getElementById("part");
+PARTS.forEach((p, i) => {
+  const o = document.createElement("option");
+  o.value = p.id;
+  o.textContent = p.name;
+  sel.appendChild(o);
+});
+
+function currentPart(){ return PARTS.find(p => p.id === sel.value); }
+
+function renderSpecDetails(){
+  const p = currentPart();
+  document.getElementById("specDetails").innerHTML = `
+    <strong style="color:var(--text)">${p.program}</strong><br>
+    Material: ${p.material}<br>
+    Tolerance: ${p.toleranceIn}<br>
+    Stock form: ${p.stock}<br>
+    ITAR-controlled drawing: ${p.itar ? "Yes" : "No"}
+  `;
+}
+sel.addEventListener("change", renderSpecDetails);
+renderSpecDetails();
+
+// ---------- plan generation logic (the "AI" is a deterministic cost/ops model) ----------
+const OP_LIBRARY = {
+  tight:    [["Rough mill", 0.30],["Heat stabilize", 0.08],["Finish mill 5-axis", 0.32],["Wire EDM detail", 0.10],["CMM inspection", 0.12],["Passivate / coat", 0.08]],
+  standard: [["Rough mill", 0.35],["Finish mill 3-axis", 0.30],["Drill & tap", 0.15],["Deburr", 0.08],["In-process inspection", 0.12]],
+  loose:    [["Rough mill", 0.40],["Finish pass", 0.30],["Deburr", 0.15],["Visual inspection", 0.15]],
+};
+const MACHINES = {
+  tight: ["5-axis mill", "5-axis mill", "Oven", "Wire EDM", "CMM", "Coat line"],
+  standard: ["3-axis mill", "3-axis mill", "CNC drill", "Deburr cell", "QC station"],
+  loose: ["3-axis mill", "3-axis mill", "Deburr cell", "QC station"],
+};
+
+function generatePlan(part, qty, dueDays){
+  const qtyFactor = 1 + Math.log2(qty) * 0.18;          // setup amortizes, but complexity scales
+  const totalMinutes = part.baseMinutes * qtyFactor;
+  const machineCost = totalMinutes * part.baseRate;
+  const materialCost = qty * (part.baseRate * 4.2);
+  const qaOverhead = part.toleranceClass === "tight" ? 0.22 : 0.12;
+  const subtotal = machineCost + materialCost;
+  const quote = subtotal * (1 + qaOverhead);
+  const margin = part.toleranceClass === "tight" ? 0.24 : 0.31;
+
+  const minLeadDays = Math.ceil((totalMinutes / 60) / 6 + qty * 0.18 + (part.toleranceClass === "tight" ? 4 : 1.5));
+  const leadDays = Math.max(minLeadDays, part.itar ? minLeadDays + 2 : minLeadDays);
+
+  let risk = "Low", riskClass = "status-green";
+  if (dueDays < leadDays) { risk = "Over capacity"; riskClass = "status-red"; }
+  else if (dueDays < leadDays * 1.25) { risk = "Tight"; riskClass = "status-amber"; }
+
+  const ops = OP_LIBRARY[part.toleranceClass].map((o, i) => ({
+    name: o[0],
+    minutes: Math.round(totalMinutes * o[1]),
+    machine: MACHINES[part.toleranceClass][i],
+  }));
+
+  const flags = [];
+  flags.push(part.itar ? {label: "ITAR drawing — access-controlled", ok:true} : {label: "Non-ITAR — standard handling", ok:true});
+  flags.push({label: "AS9100D traveler auto-generated", ok:true});
+  flags.push(qty >= 50 ? {label: "Qty triggers 2nd supplier qual", ok:false} : {label: "Single-source eligible", ok:true});
+  flags.push(part.toleranceClass === "tight" ? {label: "First-article inspection required", ok:false} : {label: "No FAI required", ok:true});
+
+  return { quote, leadDays, margin, risk, riskClass, ops, flags, totalMinutes };
+}
+
+// ---------- UI wiring ----------
+const genBtn = document.getElementById("genBtn");
+const resetBtn = document.getElementById("resetBtn");
+const placeholder = document.getElementById("placeholder");
+const resultArea = document.getElementById("resultArea");
+let currentPlan = null;
+
+genBtn.addEventListener("click", () => {
+  const part = currentPart();
+  const qty = Math.max(1, Math.min(500, parseInt(document.getElementById("qty").value) || 1));
+  const due = Math.max(5, Math.min(180, parseInt(document.getElementById("due").value) || 30));
+
+  currentPlan = generatePlan(part, qty, due);
+
+  placeholder.style.display = "none";
+  resultArea.style.display = "block";
+  genBtn.textContent = "Regenerate plan";
+  resetBtn.style.display = "block";
+
+  document.getElementById("resultTitle").textContent = part.name;
+  document.getElementById("resultSub").textContent = `${part.program} · qty ${qty} · due in ${due}d`;
+
+  const tag = document.getElementById("statusTag");
+  tag.textContent = currentPlan.risk;
+  tag.className = "status-tag " + currentPlan.riskClass;
+
+  document.getElementById("mCost").textContent = "$" + Math.round(currentPlan.quote).toLocaleString();
+  document.getElementById("mLead").textContent = currentPlan.leadDays + " days";
+  document.getElementById("mMargin").textContent = Math.round(currentPlan.margin * 100) + "%";
+  document.getElementById("mRisk").textContent = currentPlan.risk;
+
+  const flagsEl = document.getElementById("flags");
+  flagsEl.innerHTML = "";
+  currentPlan.flags.forEach(f => {
+    const d = document.createElement("div");
+    d.className = "flag " + (f.ok ? "ok" : "warn");
+    d.textContent = (f.ok ? "✓ " : "! ") + f.label;
+    flagsEl.appendChild(d);
+  });
+
+  const opsEl = document.getElementById("ops");
+  opsEl.innerHTML = "";
+  currentPlan.ops.forEach((op, i) => {
+    const row = document.createElement("div");
+    row.className = "op";
+    row.innerHTML = `
+      <div class="num">${i+1}</div>
+      <div>${op.name}<div class="machine">${op.machine}</div></div>
+      <div class="time">${op.minutes} min</div>
+      <div></div>
+    `;
+    opsEl.appendChild(row);
+  });
+
+  document.getElementById("productionArea").style.display = "none";
+  document.getElementById("shipBanner").classList.remove("show");
+  document.getElementById("submitBtn").style.display = "block";
+  document.getElementById("submitBtn").disabled = false;
+  document.getElementById("submitBtn").textContent = "Submit to production queue";
+});
+
+resetBtn.addEventListener("click", () => {
+  placeholder.style.display = "flex";
+  resultArea.style.display = "none";
+  genBtn.textContent = "Generate process plan";
+  resetBtn.style.display = "none";
+  currentPlan = null;
+});
+
+document.getElementById("submitBtn").addEventListener("click", function(){
+  if (!currentPlan) return;
+  this.disabled = true;
+  this.textContent = "Running on shop floor…";
+
+  const productionArea = document.getElementById("productionArea");
+  productionArea.style.display = "block";
+  const queue = document.getElementById("queue");
+  queue.innerHTML = "";
+
+  const rows = currentPlan.ops.map((op, i) => {
+    const row = document.createElement("div");
+    row.className = "qrow";
+    row.innerHTML = `
+      <div class="top"><span>${op.name} — ${op.machine}</span><span id="qpct${i}">0%</span></div>
+      <div class="bar"><div class="bar-fill" id="qbar${i}"></div></div>
+    `;
+    queue.appendChild(row);
+    return row;
+  });
+
+  let stepIndex = 0;
+  function runStep(){
+    if (stepIndex >= rows.length){
+      document.getElementById("shipText").textContent =
+        `All ${currentPlan.ops.length} operations complete. Traveler closed, QA packet attached, unit en route to destination facility.`;
+      document.getElementById("shipBanner").classList.add("show");
+      document.getElementById("submitBtn").textContent = "Shipped ✓";
+      return;
+    }
+    const bar = document.getElementById("qbar" + stepIndex);
+    const pct = document.getElementById("qpct" + stepIndex);
+    bar.classList.add("active");
+    let p = 0;
+    const iv = setInterval(() => {
+      p += 8 + Math.random() * 10;
+      if (p >= 100) { p = 100; clearInterval(iv); bar.classList.remove("active"); stepIndex++; setTimeout(runStep, 150); }
+      bar.style.width = p + "%";
+      pct.textContent = Math.round(p) + "%";
+    }, 90);
+  }
+  runStep();
+});
+</script>
+</body>
+</html>

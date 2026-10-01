@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Exception Desk — an order-to-cash agent, toy edition</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --panel-2: #171b24;
+    --line: #262c38;
+    --text: #e6e9ef;
+    --muted: #8690a3;
+    --accent: #5ee6a8;
+    --accent-dim: #2b6b53;
+    --warn: #f0a858;
+    --bad: #ef6a6a;
+    --blue: #6fa8ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: radial-gradient(circle at 20% -10%, #141926, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 40px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.3px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; max-width: 640px; line-height: 1.5; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    background: rgba(94,230,168,0.08);
+    padding: 3px 8px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+  }
+  .stats {
+    display: flex;
+    gap: 28px;
+    padding: 18px 40px;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .stat { min-width: 130px; }
+  .stat .num { font-size: 24px; font-weight: 600; }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .stat.good .num { color: var(--accent); }
+  .layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 170px);
+  }
+  .queue {
+    border-right: 1px solid var(--line);
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .queue h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin: 4px 8px 12px;
+  }
+  .invoice-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color .15s, transform .15s;
+  }
+  .invoice-card:hover { border-color: #3a4254; transform: translateY(-1px); }
+  .invoice-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); }
+  .invoice-card.resolved { opacity: 0.5; }
+  .ic-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; }
+  .ic-amt { color: var(--text); }
+  .ic-cust { color: var(--muted); font-size: 12px; margin: 4px 0; }
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .tag.stuck { background: rgba(239,106,106,0.15); color: var(--bad); }
+  .tag.working { background: rgba(240,168,88,0.15); color: var(--warn); }
+  .tag.resolved { background: rgba(94,230,168,0.15); color: var(--accent); }
+  .detail { padding: 24px 40px; max-width: 760px; }
+  .detail-empty { color: var(--muted); padding-top: 60px; text-align: center; }
+  .detail h2 { margin: 0 0 4px; font-size: 20px; }
+  .detail .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .thread {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    line-height: 1.6;
+  }
+  .thread b { color: var(--text); }
+  button.run {
+    background: var(--accent);
+    color: #04140c;
+    border: none;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  button.run:disabled { background: #333a47; color: var(--muted); cursor: not-allowed; }
+  .steps { margin-top: 20px; }
+  .step {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--line);
+    font-size: 13px;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: appear .35s forwards;
+  }
+  @keyframes appear { to { opacity: 1; transform: translateY(0); } }
+  .step .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--panel-2); border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0; margin-top: 1px;
+  }
+  .step.done .dot { background: var(--accent); color: #04140c; border-color: var(--accent); }
+  .step .txt b { color: var(--text); }
+  .step .txt span { color: var(--muted); }
+  .outcome {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: rgba(94,230,168,0.08);
+    border: 1px solid var(--accent-dim);
+    font-size: 13px;
+    display: none;
+  }
+  .outcome.show { display: block; }
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 16px 40px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">toy simulation · synthetic data only</div>
+  <h1>Exception Desk</h1>
+  <p>A miniature model of the core mechanic behind AI-run order-to-cash: every stuck invoice has a reason it's stuck, buried in an email thread or a mismatched field. An agent reads the context, decides a resolution path, and acts — instead of a human digging through a portal. Click an invoice, then run the agent.</p>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<div class="layout">
+  <div class="queue">
+    <h2>Exception queue</h2>
+    <div id="queueList"></div>
+  </div>
+  <div class="detail" id="detail">
+    <div class="detail-empty">Select an invoice from the queue to inspect its exception.</div>
+  </div>
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Rex (YC S26). Not affiliated with Rex.</footer>
+
+<script>
+const INVOICES = [
+  {
+    id: "INV-10492",
+    customer: "Northwind Retail Group",
+    amount: 48250,
+    status: "stuck",
+    exceptionType: "PO mismatch",
+    thread: [
+      { from: "AP @ Northwind", text: "We can't approve INV-10492 — the PO number on the invoice (PO-7731) doesn't match what's in our system (PO-7731-R2). Please resend." },
+      { from: "You (3 weeks ago)", text: "Hi, following up on invoice 10492, let us know if you need anything." },
+      { from: "AP @ Northwind", text: "Still showing a PO mismatch on our end, can you check?" }
+    ],
+    steps: [
+      { label: "Pull PO history from ERP", detail: "found PO-7731 was revised to PO-7731-R2 after a quantity change on 8/14" },
+      { label: "Match invoice line items against revised PO", detail: "12 of 12 line items reconcile against PO-7731-R2" },
+      { label: "Reissue invoice referencing PO-7731-R2", detail: "corrected invoice generated and attached" },
+      { label: "Send to Northwind AP with reconciliation note", detail: "explained the PO revision in plain language, flagged for same-day approval" }
+    ],
+    outcome: "Reissued and resubmitted in 4 steps. Cash expected to post within Northwind's normal 3-day AP cycle instead of sitting in dispute."
+  },
+  {
+    id: "INV-10517",
+    customer: "Baypoint Logistics",
+    amount: 112900,
+    status: "stuck",
+    exceptionType: "disputed amount",
+    thread: [
+      { from: "AP @ Baypoint", text: "We're disputing $9,400 of this invoice — looks like we were billed for 2 pallets that were returned on 9/2." },
+      { from: "You (2 weeks ago)", text: "Can you send the return confirmation so we can verify?" },
+      { from: "AP @ Baypoint", text: "Attached. Please issue a credit memo and resend the corrected total." }
+    ],
+    steps: [
+      { label: "Verify return against warehouse return log", detail: "2 pallets confirmed returned 9/2, RMA #RMA-4471" },
+      { label: "Calculate credit amount", detail: "$9,400 matches disputed line items exactly, no discrepancy" },
+      { label: "Issue credit memo CM-2203", detail: "applied against INV-10517, new balance $103,500" },
+      { label: "Resend corrected invoice + credit memo", detail: "sent with a one-line explanation referencing RMA-4471" }
+    ],
+    outcome: "Dispute closed without escalation. Corrected balance of $103,500 sent for approval same day."
+  },
+  {
+    id: "INV-10588",
+    customer: "Cascadia Health Systems",
+    amount: 76300,
+    status: "stuck",
+    exceptionType: "missing remittance info",
+    thread: [
+      { from: "AP @ Cascadia", text: "Invoice looks fine on our side but we need your updated W-9 and banking details on file before we can cut payment — ours expired." },
+      { from: "You (10 days ago)", text: "Sending W-9 now, let us know if anything else is needed." },
+      { from: "AP @ Cascadia", text: "Also need the remit-to address confirmed, it changed on our vendor portal." }
+    ],
+    steps: [
+      { label: "Check vendor master record in Cascadia's portal", detail: "remit-to address flagged as 'pending verification' since 9/10" },
+      { label: "Pull current W-9 and banking letter from document vault", detail: "both on file and unexpired" },
+      { label: "Submit vendor profile update through Cascadia's portal", detail: "confirmed new remit-to address, attached W-9" },
+      { label: "Notify AP contact that vendor profile is unblocked", detail: "requested payment run confirmation" }
+    ],
+    outcome: "Vendor profile unblocked. Invoice cleared for the next scheduled payment run instead of waiting on another email round-trip."
+  },
+  {
+    id: "INV-10601",
+    customer: "Harrow & Finch LLP",
+    amount: 29150,
+    status: "stuck",
+    exceptionType: "approver out of office",
+    thread: [
+      { from: "AP @ Harrow & Finch", text: "Our approver for invoices over $25k is out until next week, nothing I can do until she's back." },
+      { from: "You (1 week ago)", text: "Is there a backup approver we can route this to?" },
+      { from: "AP @ Harrow & Finch", text: "Didn't think to check, let me look." }
+    ],
+    steps: [
+      { label: "Check org chart / delegation rules on file", detail: "backup approver on record: J. Alvarez, Finance Director" },
+      { label: "Re-route approval request to backup approver", detail: "sent with original invoice and approval history attached" },
+      { label: "Set reminder to confirm approval within 48h", detail: "escalation path queued if no response by Thursday" }
+    ],
+    outcome: "Routed around a single point of failure instead of waiting a week. Approval requested from a backup who was available the whole time."
+  }
+];
+
+let activeId = null;
+let runningSteps = [];
+
+function fmtMoney(n) {
+  return "$" + n.toLocaleString("en-US");
+}
+
+function renderStats() {
+  const total = INVOICES.reduce((s, i) => s + i.amount, 0);
+  const resolved = INVOICES.filter(i => i.status === "resolved");
+  const recovered = resolved.reduce((s, i) => s + i.amount, 0);
+  const stats = [
+    { num: fmtMoney(total), lbl: "total in exception queue" },
+    { num: resolved.length + " / " + INVOICES.length, lbl: "exceptions resolved" },
+    { num: fmtMoney(recovered), lbl: "cash unblocked", good: true },
+  ];
+  document.getElementById("stats").innerHTML = stats.map(s =>
+    `<div class="stat ${s.good ? "good" : ""}"><div class="num">${s.num}</div><div class="lbl">${s.lbl}</div></div>`
+  ).join("");
+}
+
+function renderQueue() {
+  const list = document.getElementById("queueList");
+  list.innerHTML = INVOICES.map(inv => `
+    <div class="invoice-card ${inv.id === activeId ? "active" : ""} ${inv.status === "resolved" ? "resolved" : ""}" onclick="selectInvoice('${inv.id}')">
+      <div class="ic-top">
+        <span>${inv.id}</span>
+        <span class="ic-amt">${fmtMoney(inv.amount)}</span>
+      </div>
+      <div class="ic-cust">${inv.customer}</div>
+      <span class="tag ${inv.status}">${inv.status === "resolved" ? "resolved" : inv.exceptionType}</span>
+    </div>
+  `).join("");
+}
+
+function selectInvoice(id) {
+  activeId = id;
+  renderQueue();
+  renderDetail();
+}
+
+function renderDetail() {
+  const detail = document.getElementById("detail");
+  const inv = INVOICES.find(i => i.id === activeId);
+  if (!inv) {
+    detail.innerHTML = `<div class="detail-empty">Select an invoice from the queue to inspect its exception.</div>`;
+    return;
+  }
+  const threadHtml = inv.thread.map(m => `<b>${m.from}:</b> ${m.text}`).join("\n\n");
+  const alreadyResolved = inv.status === "resolved";
+  detail.innerHTML = `
+    <h2>${inv.id} — ${inv.customer}</h2>
+    <div class="sub">${fmtMoney(inv.amount)} · flagged as <b>${inv.exceptionType}</b></div>
+    <div class="thread">${threadHtml}</div>
+    <button class="run" id="runBtn" ${alreadyResolved ? "disabled" : ""} onclick="runAgent()">
+      ${alreadyResolved ? "Already resolved" : "Run agent on this exception"}
+    </button>
+    <div class="steps" id="stepsWrap"></div>
+    <div class="outcome" id="outcomeWrap"></div>
+  `;
+  if (alreadyResolved) {
+    const stepsWrap = document.getElementById("stepsWrap");
+    stepsWrap.innerHTML = inv.steps.map((s, i) =>
+      `<div class="step done"><div class="dot">✓</div><div class="txt"><b>${s.label}</b><br><span>${s.detail}</span></div></div>`
+    ).join("");
+    const out = document.getElementById("outcomeWrap");
+    out.classList.add("show");
+    out.textContent = inv.outcome;
+  }
+}
+
+function runAgent() {
+  const inv = INVOICES.find(i => i.id === activeId);
+  if (!inv || inv.status === "resolved") return;
+  const btn = document.getElementById("runBtn");
+  btn.disabled = true;
+  btn.textContent = "Agent working...";
+  inv.status = "working";
+  renderQueue();
+
+  const stepsWrap = document.getElementById("stepsWrap");
+  stepsWrap.innerHTML = "";
+  let i = 0;
+
+  function nextStep() {
+    if (i >= inv.steps.length) {
+      inv.status = "resolved";
+      renderQueue();
+      btn.textContent = "Already resolved";
+      const out = document.getElementById("outcomeWrap");
+      out.classList.add("show");
+      out.textContent = inv.outcome;
+      renderStats();
+      return;
+    }
+    const s = inv.steps[i];
+    const el = document.createElement("div");
+    el.className = "step";
+    el.innerHTML = `<div class="dot">${i + 1}</div><div class="txt"><b>${s.label}</b><br><span>working...</span></div>`;
+    stepsWrap.appendChild(el);
+    setTimeout(() => {
+      el.classList.add("done");
+      el.querySelector(".dot").textContent = "✓";
+      el.querySelector("span").textContent = s.detail;
+      i++;
+      setTimeout(nextStep, 450);
+    }, 500);
+  }
+  nextStep();
+}
+
+renderStats();
+renderQueue();
+</script>
+
+</body>
+</html>
