@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sandbox Playground — spin up a fake API in milliseconds</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1c2430;
+    --border: #2a333f;
+    --text: #e6edf3;
+    --dim: #8b96a5;
+    --accent: #5ee6c2;
+    --accent-dim: #2a8f74;
+    --warn: #f0b94d;
+    --err: #ff6b6b;
+    --mono: "SF Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 28px 32px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.3px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--dim);
+    font-size: 14px;
+    max-width: 680px;
+    line-height: 1.5;
+  }
+  .wrap {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 110px);
+  }
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 20px;
+  }
+  .sidebar h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    margin: 0 0 10px;
+  }
+  .scenario-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+  .scenario-btn {
+    text-align: left;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: border-color .15s;
+  }
+  .scenario-btn:hover { border-color: var(--accent-dim); }
+  .scenario-btn.active {
+    border-color: var(--accent);
+    background: #122a24;
+  }
+  .scenario-btn small { display: block; color: var(--dim); margin-top: 3px; font-size: 11px; }
+
+  .sandbox-status {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 12px;
+  }
+  .sandbox-status .row { display: flex; justify-content: space-between; padding: 4px 0; color: var(--dim); }
+  .sandbox-status .row b { color: var(--text); font-weight: 500; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.live { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .dot.off { background: #4a5568; }
+
+  .boot-btn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #04231c;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .boot-btn:disabled { opacity: .5; cursor: default; }
+  .reset-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 9px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--dim);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .reset-btn:hover { color: var(--text); border-color: var(--dim); }
+
+  main { padding: 24px 32px; }
+  .timer {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+  }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 16px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+  }
+  .panel h3 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .endpoint-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .endpoint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .endpoint:hover { border-color: var(--accent-dim); }
+  .endpoint .method {
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+  }
+  .m-get { background: #1d3a52; color: #7ec4ff; }
+  .m-post { background: #1d4a33; color: #7ee6a8; }
+  .m-delete { background: #4a1d1d; color: #ff9a9a; }
+
+  textarea, pre {
+    width: 100%;
+    background: #0a0e14;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px;
+    white-space: pre-wrap;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  pre { flex: 1; overflow-y: auto; margin: 0; }
+
+  .run-btn {
+    margin-top: 10px;
+    align-self: flex-start;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    background: var(--accent);
+    color: #04231c;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .run-btn:disabled { opacity: .4; cursor: default; }
+
+  .state-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .state-table th, .state-table td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .state-table th { color: var(--dim); font-weight: 500; }
+  .diff-add { background: rgba(94,230,194,0.08); }
+  .diff-remove { background: rgba(255,107,107,0.08); text-decoration: line-through; color: var(--dim); }
+  .empty-state {
+    color: var(--dim);
+    font-size: 13px;
+    margin: auto;
+    text-align: center;
+    padding: 40px 10px;
+  }
+
+  .log-line { color: var(--dim); }
+  .log-line.ok { color: var(--accent); }
+  .log-line.err { color: var(--err); }
+
+  footer {
+    text-align: center;
+    padding: 18px;
+    color: var(--dim);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sandbox Playground <span>·</span> throwaway API environments for agent runs</h1>
+  <p>Pick a mock API environment, boot a sandbox, fire requests at it, watch state mutate in real time, then reset to a clean snapshot instantly. Everything below runs in your browser — no network calls, no real services.</p>
+</header>
+
+<div class="wrap">
+  <div class="sidebar">
+    <h2>Environments</h2>
+    <div class="scenario-list" id="scenarioList"></div>
+
+    <h2>Sandbox</h2>
+    <div class="sandbox-status">
+      <div class="row"><span><span class="dot off" id="statusDot"></span>Status</span><b id="statusText">cold</b></div>
+      <div class="row"><span>Env</span><b id="envText">—</b></div>
+      <div class="row"><span>Boot time</span><b id="bootTime">—</b></div>
+      <div class="row"><span>Requests run</span><b id="reqCount">0</b></div>
+      <div class="row"><span>Resets</span><b id="resetCount">0</b></div>
+    </div>
+    <button class="boot-btn" id="bootBtn">Boot sandbox</button>
+    <button class="reset-btn" id="resetBtn" disabled>Reset to clean snapshot</button>
+  </div>
+
+  <main>
+    <div class="timer" id="timerLine">no sandbox running</div>
+
+    <div class="panels">
+      <div class="panel">
+        <h3>Request a mock endpoint</h3>
+        <div class="endpoint-list" id="endpointList"></div>
+        <textarea id="bodyInput" placeholder="request body (JSON)"></textarea>
+        <button class="run-btn" id="runBtn" disabled>Send request</button>
+        <h3 style="margin-top:14px;">Response / log</h3>
+        <pre id="log"><span class="log-line">boot a sandbox to begin...</span></pre>
+      </div>
+
+      <div class="panel">
+        <h3>Live sandbox state</h3>
+        <div id="stateArea"><div class="empty-state">State inspector will populate once a sandbox is booted and you send requests against it.</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Archal (YC S26). Not affiliated with Archal.
+</footer>
+
+<script>
+(function () {
+  // ---- scenario definitions: tiny synthetic "API worlds" ----
+  const SCENARIOS = {
+    payments: {
+      label: "Payments API",
+      desc: "customers, charges, refunds",
+      seed: () => ({
+        customers: [
+          { id: "cus_01", name: "Avery Chen", balance_cents: 0 },
+          { id: "cus_02", name: "Priya Nair", balance_cents: 0 }
+        ],
+        charges: []
+      }),
+      endpoints: [
+        { method: "POST", path: "/customers", m: "m-post",
+          sample: '{\n  "name": "New Customer"\n}',
+          run: (state, body) => {
+            const id = "cus_" + String(state.customers.length + 1).padStart(2, "0");
+            const name = (body && body.name) || "Unnamed Customer";
+            state.customers.push({ id, name, balance_cents: 0 });
+            return { status: 201, body: { id, name } };
+          }
+        },
+        { method: "POST", path: "/charges", m: "m-post",
+          sample: '{\n  "customer_id": "cus_01",\n  "amount_cents": 2500\n}',
+          run: (state, body) => {
+            const cust = state.customers.find(c => c.id === (body && body.customer_id));
+            if (!cust) return { status: 404, body: { error: "customer not found" } };
+            const amt = (body && body.amount_cents) || 0;
+            const charge = { id: "ch_" + (state.charges.length + 1), customer_id: cust.id, amount_cents: amt, status: "succeeded" };
+            state.charges.push(charge);
+            cust.balance_cents += amt;
+            return { status: 200, body: charge };
+          }
+        },
+        { method: "DELETE", path: "/charges/:id/refund", m: "m-delete",
+          sample: '{\n  "charge_id": "ch_1"\n}',
+          run: (state, body) => {
+            const charge = state.charges.find(c => c.id === (body && body.charge_id));
+            if (!charge) return { status: 404, body: { error: "charge not found" } };
+            if (charge.status === "refunded") return { status: 409, body: { error: "already refunded" } };
+            charge.status = "refunded";
+            const cust = state.customers.find(c => c.id === charge.customer_id);
+            if (cust) cust.balance_cents -= charge.amount_cents;
+            return { status: 200, body: charge };
+          }
+        }
+      ],
+      renderState: (state) => renderTables([
+        { title: "customers", rows: state.customers, cols: ["id", "name", "balance_cents"] },
+        { title: "charges", rows: state.charges, cols: ["id", "customer_id", "amount_cents", "status"] }
+      ])
+    },
+    inventory: {
+      label: "Inventory API",
+      desc: "SKUs, stock levels, orders",
+      seed: () => ({
+        skus: [
+          { sku: "SKU-100", name: "Widget", stock: 40 },
+          { sku: "SKU-200", name: "Gadget", stock: 12 }
+        ],
+        orders: []
+      }),
+      endpoints: [
+        { method: "POST", path: "/orders", m: "m-post",
+          sample: '{\n  "sku": "SKU-100",\n  "qty": 5\n}',
+          run: (state, body) => {
+            const item = state.skus.find(s => s.sku === (body && body.sku));
+            if (!item) return { status: 404, body: { error: "sku not found" } };
+            const qty = (body && body.qty) || 0;
+            if (qty > item.stock) return { status: 409, body: { error: "insufficient stock" } };
+            item.stock -= qty;
+            const order = { id: "ord_" + (state.orders.length + 1), sku: item.sku, qty, status: "placed" };
+            state.orders.push(order);
+            return { status: 201, body: order };
+          }
+        },
+        { method: "POST", path: "/restock", m: "m-post",
+          sample: '{\n  "sku": "SKU-200",\n  "qty": 20\n}',
+          run: (state, body) => {
+            const item = state.skus.find(s => s.sku === (body && body.sku));
+            if (!item) return { status: 404, body: { error: "sku not found" } };
+            item.stock += (body && body.qty) || 0;
+            return { status: 200, body: item };
+          }
+        },
+        { method: "DELETE", path: "/orders/:id", m: "m-delete",
+          sample: '{\n  "order_id": "ord_1"\n}',
+          run: (state, body) => {
+            const order = state.orders.find(o => o.id === (body && body.order_id));
+            if (!order) return { status: 404, body: { error: "order not found" } };
+            if (order.status === "cancelled") return { status: 409, body: { error: "already cancelled" } };
+            order.status = "cancelled";
+            const item = state.skus.find(s => s.sku === order.sku);
+            if (item) item.stock += order.qty;
+            return { status: 200, body: order };
+          }
+        }
+      ],
+      renderState: (state) => renderTables([
+        { title: "skus", rows: state.skus, cols: ["sku", "name", "stock"] },
+        { title: "orders", rows: state.orders, cols: ["id", "sku", "qty", "status"] }
+      ])
+    }
+  };
+
+  let currentScenarioKey = "payments";
+  let sandbox = null; // { state, bootedAt, reqCount }
+  let resetCount = 0;
+  let prevSnapshot = null;
+
+  const el = (id) => document.getElementById(id);
+  const scenarioList = el("scenarioList");
+  const endpointList = el("endpointList");
+  const bodyInput = el("bodyInput");
+  const runBtn = el("runBtn");
+  const bootBtn = el("bootBtn");
+  const resetBtn = el("resetBtn");
+  const logEl = el("log");
+  const stateArea = el("stateArea");
+  let selectedEndpoint = null;
+
+  function renderScenarioList() {
+    scenarioList.innerHTML = "";
+    Object.entries(SCENARIOS).forEach(([key, s]) => {
+      const btn = document.createElement("button");
+      btn.className = "scenario-btn" + (key === currentScenarioKey ? " active" : "");
+      btn.innerHTML = `${s.label}<small>${s.desc}</small>`;
+      btn.onclick = () => {
+        currentScenarioKey = key;
+        sandbox = null;
+        prevSnapshot = null;
+        selectedEndpoint = null;
+        renderScenarioList();
+        renderEndpoints();
+        updateStatus();
+        stateArea.innerHTML = '<div class="empty-state">State inspector will populate once a sandbox is booted and you send requests against it.</div>';
+        logEl.innerHTML = '<span class="log-line">switched environment — boot a sandbox to begin...</span>';
+      };
+      scenarioList.appendChild(btn);
+    });
+  }
+
+  function renderEndpoints() {
+    const scenario = SCENARIOS[currentScenarioKey];
+    endpointList.innerHTML = "";
+    scenario.endpoints.forEach((ep, i) => {
+      const div = document.createElement("div");
+      div.className = "endpoint";
+      div.innerHTML = `<span class="method ${ep.m}">${ep.method}</span><span>${ep.path}</span>`;
+      div.onclick = () => {
+        selectedEndpoint = i;
+        bodyInput.value = ep.sample;
+        [...endpointList.children].forEach(c => c.style.borderColor = "var(--border)");
+        div.style.borderColor = "var(--accent)";
+      };
+      endpointList.appendChild(div);
+    });
+  }
+
+  function updateStatus() {
+    const dot = el("statusDot");
+    const statusText = el("statusText");
+    const envText = el("envText");
+    const bootTimeEl = el("bootTime");
+    const reqCountEl = el("reqCount");
+    const resetCountEl = el("resetCount");
+
+    if (sandbox) {
+      dot.className = "dot live";
+      statusText.textContent = "live";
+      envText.textContent = SCENARIOS[currentScenarioKey].label;
+      bootTimeEl.textContent = sandbox.bootMs + "ms";
+      reqCountEl.textContent = sandbox.reqCount;
+      bootBtn.disabled = true;
+      bootBtn.textContent = "Sandbox running";
+      resetBtn.disabled = false;
+      runBtn.disabled = false;
+    } else {
+      dot.className = "dot off";
+      statusText.textContent = "cold";
+      envText.textContent = "—";
+      bootTimeEl.textContent = "—";
+      reqCountEl.textContent = "0";
+      bootBtn.disabled = false;
+      bootBtn.textContent = "Boot sandbox";
+      resetBtn.disabled = true;
+      runBtn.disabled = true;
+    }
+    resetCountEl.textContent = resetCount;
+  }
+
+  function appendLog(text, cls) {
+    const line = document.createElement("div");
+    line.className = "log-line" + (cls ? " " + cls : "");
+    line.textContent = text;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function renderTables(tables) {
+    return tables.map(t => {
+      const cols = t.cols;
+      const rows = t.rows.map(r => {
+        const dirty = r.__dirty;
+        return `<tr class="${dirty ? 'diff-add' : ''}">` +
+          cols.map(c => `<td>${r[c]}</td>`).join("") + "</tr>";
+      }).join("");
+      return `<div style="margin-bottom:14px;">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:4px;">${t.title} (${t.rows.length})</div>
+        <table class="state-table">
+          <thead><tr>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead>
+          <tbody>${rows || `<tr><td colspan="${cols.length}" style="color:var(--dim);">empty</td></tr>`}</tbody>
+        </table>
+      </div>`;
+    }).join("");
+  }
+
+  function renderState() {
+    if (!sandbox) return;
+    const scenario = SCENARIOS[currentScenarioKey];
+    stateArea.innerHTML = scenario.renderState(sandbox.state);
+  }
+
+  function markDirty(before, after) {
+    // naive diff: mark rows whose JSON changed or are new
+    const beforeStr = JSON.stringify(before);
+    Object.keys(after).forEach(table => {
+      after[table].forEach(row => {
+        const match = (before[table] || []).find(r => JSON.stringify(r) === JSON.stringify({ ...row, __dirty: undefined }));
+        if (!match) row.__dirty = true;
+      });
+    });
+  }
+
+  bootBtn.onclick = () => {
+    const t0 = performance.now();
+    const scenario = SCENARIOS[currentScenarioKey];
+    const state = scenario.seed();
+    const t1 = performance.now();
+    sandbox = { state, bootMs: Math.max(1, Math.round(t1 - t0 + Math.random() * 8)), reqCount: 0 };
+    prevSnapshot = JSON.parse(JSON.stringify(state));
+    updateStatus();
+    logEl.innerHTML = "";
+    appendLog(`sandbox booted — ${scenario.label}, clean snapshot loaded`, "ok");
+    el("timerLine").textContent = `sandbox live · ${scenario.label}`;
+    renderState();
+  };
+
+  resetBtn.onclick = () => {
+    if (!sandbox) return;
+    const scenario = SCENARIOS[currentScenarioKey];
+    sandbox.state = scenario.seed();
+    sandbox.reqCount = 0;
+    prevSnapshot = JSON.parse(JSON.stringify(sandbox.state));
+    resetCount++;
+    appendLog("— reset to clean snapshot (<1ms) —", "ok");
+    updateStatus();
+    renderState();
+  };
+
+  runBtn.onclick = () => {
+    if (!sandbox || selectedEndpoint === null) {
+      appendLog("select an endpoint above first", "err");
+      return;
+    }
+    const scenario = SCENARIOS[currentScenarioKey];
+    const ep = scenario.endpoints[selectedEndpoint];
+    let body = null;
+    try {
+      body = bodyInput.value.trim() ? JSON.parse(bodyInput.value) : {};
+    } catch (e) {
+      appendLog("invalid JSON body: " + e.message, "err");
+      return;
+    }
+    const before = JSON.parse(JSON.stringify(sandbox.state));
+    const result = ep.run(sandbox.state, body);
+    sandbox.reqCount++;
+    markDirty(before, sandbox.state);
+
+    appendLog(`→ ${ep.method} ${ep.path}`);
+    appendLog(JSON.stringify(body));
+    appendLog(`← ${result.status} ${JSON.stringify(result.body)}`, result.status < 400 ? "ok" : "err");
+    updateStatus();
+    renderState();
+
+    setTimeout(() => {
+      Object.values(sandbox.state).forEach(arr => Array.isArray(arr) && arr.forEach(r => delete r.__dirty));
+    }, 1200);
+  };
+
+  renderScenarioList();
+  renderEndpoints();
+  updateStatus();
+})();
+</script>
+
+</body>
+</html>

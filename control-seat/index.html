@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Line Sense — Factory Signal Demo</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121820;
+    --panel2: #182230;
+    --line: #253140;
+    --text: #dbe6f0;
+    --dim: #7e93a8;
+    --accent: #38c6a6;
+    --warn: #e8a33d;
+    --crit: #e85d5d;
+    --good: #38c6a6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 28px 36px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.3px;
+  }
+  header p {
+    margin: 0;
+    color: var(--dim);
+    font-size: 14px;
+    max-width: 680px;
+    line-height: 1.5;
+  }
+  .wrap {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 20px;
+    padding: 24px 36px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    margin: 0 0 14px;
+  }
+  .machines {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .machine {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s;
+    position: relative;
+  }
+  .machine:hover { border-color: #39566f; transform: translateY(-1px); }
+  .machine.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .machine .name { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    display: inline-block; margin-right: 6px;
+    background: var(--good);
+  }
+  .machine.warn .dot { background: var(--warn); }
+  .machine.crit .dot { background: var(--crit); }
+  .spark {
+    height: 36px;
+    margin-top: 8px;
+  }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 6px;
+  }
+  .metric-row b { color: var(--text); font-weight: 600; }
+
+  .feed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .event {
+    border-left: 3px solid var(--line);
+    padding: 8px 10px;
+    background: var(--panel2);
+    border-radius: 0 6px 6px 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    animation: slidein .25s ease-out;
+  }
+  .event.info { border-left-color: #3a6ea5; }
+  .event.warn { border-left-color: var(--warn); }
+  .event.crit { border-left-color: var(--crit); }
+  .event .ts { color: var(--dim); font-size: 11px; margin-right: 6px; }
+  .event .tag {
+    display: inline-block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    background: var(--line);
+    color: var(--dim);
+  }
+  .event.crit .tag { background: #3a1818; color: var(--crit); }
+  .event.warn .tag { background: #3a2f14; color: var(--warn); }
+
+  @keyframes slidein {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .detail-empty {
+    color: var(--dim);
+    font-size: 13px;
+    padding: 20px 4px;
+  }
+  .chain {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .step .bullet {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--line);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 2px;
+  }
+  .step.root .bullet { background: var(--crit); color: #fff; }
+  .step .body b { display: block; font-size: 13px; }
+  .step .body span { font-size: 12px; color: var(--dim); }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    padding: 0 36px 4px;
+  }
+  button {
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 7px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.active { border-color: var(--accent); color: var(--accent); background: #10231d; }
+
+  footer {
+    text-align: center;
+    color: var(--dim);
+    font-size: 12px;
+    padding: 30px 20px 24px;
+    border-top: 1px solid var(--line);
+    margin-top: 10px;
+  }
+
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: 1fr; }
+    .machines { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Line Sense — one timeline for every machine on the floor</h1>
+  <p>Toy demo of the core idea: instead of six dashboards for six systems, every sensor feeds one timeline, and an always-on watcher flags the moment something drifts — then traces it back to the cause. Click a machine, or hit "simulate fault" to watch it catch one live.</p>
+</header>
+
+<div class="controls">
+  <button id="btnFault" onclick="injectFault()">Simulate fault</button>
+  <button id="btnRun" class="active" onclick="toggleRun()">⏸ Pause stream</button>
+  <button onclick="resetAll()">Reset</button>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <h2>Plant floor — live state</h2>
+    <div class="machines" id="machines"></div>
+
+    <h2 style="margin-top:22px;">Root-cause trace</h2>
+    <div id="traceBox" class="detail-empty">Select a flagged machine, or trigger a fault, to see the trace build.</div>
+  </div>
+
+  <div class="card">
+    <h2>Unified event feed</h2>
+    <div class="feed" id="feed"></div>
+  </div>
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Control Seat (YC S26). Not affiliated with Control Seat.
+</footer>
+
+<script>
+(function () {
+  const machines = [
+    { id: 'ext1', name: 'Extruder 1', base: 72, noise: 2, unit: '°C', metric: 'barrel temp', state: 'good', history: [] },
+    { id: 'pump3', name: 'Pump 3', base: 44, noise: 1.5, unit: 'psi', metric: 'discharge pressure', state: 'good', history: [] },
+    { id: 'conv2', name: 'Conveyor 2', base: 1.2, noise: 0.05, unit: 'm/s', metric: 'belt speed', state: 'good', history: [] },
+    { id: 'chill1', name: 'Chiller 1', base: 6, noise: 0.4, unit: '°C', metric: 'supply temp', state: 'good', history: [] },
+    { id: 'press4', name: 'Press 4', base: 180, noise: 4, unit: 'bar', metric: 'clamp force', state: 'good', history: [] },
+    { id: 'robot2', name: 'Robot Arm 2', base: 0.3, noise: 0.02, unit: 'mm', metric: 'path deviation', state: 'good', history: [] },
+  ];
+
+  const feedEl = document.getElementById('feed');
+  const machinesEl = document.getElementById('machines');
+  const traceBox = document.getElementById('traceBox');
+  let running = true;
+  let selected = null;
+  let tick = 0;
+  let faultActive = null;
+
+  function fmt(n, d=1) { return Number(n).toFixed(d); }
+
+  function pushEvent(msg, level, machineName) {
+    const div = document.createElement('div');
+    div.className = 'event ' + level;
+    const t = new Date();
+    const ts = t.toLocaleTimeString([], { hour12: false });
+    div.innerHTML = `<span class="ts">${ts}</span>${msg}<span class="tag">${machineName}</span>`;
+    feedEl.prepend(div);
+    while (feedEl.children.length > 40) feedEl.removeChild(feedEl.lastChild);
+  }
+
+  function drawSpark(canvas, history, state) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.clientWidth * 2;
+    const h = canvas.height = canvas.clientHeight * 2;
+    ctx.clearRect(0, 0, w, h);
+    if (history.length < 2) return;
+    const min = Math.min(...history);
+    const max = Math.max(...history);
+    const range = (max - min) || 1;
+    ctx.beginPath();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = state === 'crit' ? '#e85d5d' : state === 'warn' ? '#e8a33d' : '#38c6a6';
+    history.forEach((v, i) => {
+      const x = (i / (history.length - 1)) * w;
+      const y = h - ((v - min) / range) * (h * 0.8) - h * 0.1;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  function render() {
+    machinesEl.innerHTML = '';
+    machines.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'machine ' + m.state + (selected === m.id ? ' selected' : '');
+      div.onclick = () => selectMachine(m.id);
+      const latest = m.history[m.history.length - 1] ?? m.base;
+      div.innerHTML = `
+        <div class="name"><span class="dot"></span>${m.name}</div>
+        <canvas class="spark"></canvas>
+        <div class="metric-row"><span>${m.metric}</span><b>${fmt(latest, m.unit === 'm/s' || m.unit === 'mm' ? 2 : 1)} ${m.unit}</b></div>
+      `;
+      machinesEl.appendChild(div);
+      drawSpark(div.querySelector('canvas'), m.history, m.state);
+    });
+  }
+
+  function selectMachine(id) {
+    selected = id;
+    const m = machines.find(x => x.id === id);
+    render();
+    if (m.state === 'good') {
+      traceBox.className = 'detail-empty';
+      traceBox.innerHTML = `${m.name} is nominal — no trace to show. Try "Simulate fault" to force a deviation.`;
+      return;
+    }
+    buildTrace(m);
+  }
+
+  function buildTrace(m) {
+    traceBox.className = 'chain';
+    const chain = m.trace || [
+      { label: `${m.metric} on ${m.name} drifted past baseline`, detail: 'flagged by continuous threshold watch, not a fixed alarm', root: false },
+      { label: 'Correlated against upstream feed', detail: 'checked the 3 systems that write to this line in the last 10 min window', root: false },
+      { label: m.rootCause || 'Likely root cause identified', detail: m.rootDetail || 'pattern matches a known precursor signature', root: true },
+    ];
+    traceBox.innerHTML = chain.map(step => `
+      <div class="step ${step.root ? 'root' : ''}">
+        <div class="bullet">${step.root ? '!' : ''}</div>
+        <div class="body"><b>${step.label}</b><span>${step.detail}</span></div>
+      </div>
+    `).join('');
+  }
+
+  function stepMachine(m) {
+    let drift = 0;
+    let magnitude = 1;
+    if (faultActive === m.id) {
+      const elapsed = tick - m.faultStart;
+      drift = Math.min(elapsed * 0.9, 18) * m.faultDir;
+      magnitude = 1 + elapsed * 0.08;
+    }
+    const noiseVal = (Math.random() - 0.5) * 2 * m.noise * magnitude;
+    const val = m.base + drift + noiseVal;
+    m.history.push(val);
+    if (m.history.length > 24) m.history.shift();
+
+    const deviation = Math.abs(val - m.base) / (m.noise * 4 || 1);
+    let newState = 'good';
+    if (deviation > 2.4) newState = 'crit';
+    else if (deviation > 1.3) newState = 'warn';
+
+    if (newState !== m.state) {
+      if (newState === 'warn' && m.state === 'good') {
+        pushEvent(`${m.metric} drifted outside normal range (${fmt(val)} ${m.unit})`, 'warn', m.name);
+      }
+      if (newState === 'crit') {
+        pushEvent(`${m.metric} crossed critical threshold — root-cause trace available`, 'crit', m.name);
+      }
+      if (newState === 'good' && m.state !== 'good') {
+        pushEvent(`${m.metric} back within normal range`, 'info', m.name);
+      }
+      m.state = newState;
+      if (selected === m.id) buildTrace(m);
+    }
+  }
+
+  const faultLibrary = {
+    chill1: {
+      dir: 1,
+      rootCause: 'Chiller 1 compressor cycling faster than spec',
+      rootDetail: 'discharge pressure rose in the 90s before supply temp moved — chiller logs flagged a short-cycle 4 min prior',
+      cascadeTo: 'ext1',
+      cascadeMsg: 'Extruder 1 barrel temp rising — fed by Chiller 1 loop'
+    },
+    pump3: {
+      dir: -1,
+      rootCause: 'Pump 3 discharge pressure sagging under load',
+      rootDetail: 'matches the signature logged twice last month before a seal replacement',
+      cascadeTo: 'press4',
+      cascadeMsg: 'Press 4 clamp force unstable — downstream of Pump 3 hydraulic feed'
+    }
+  };
+
+  function injectFault() {
+    if (faultActive) return;
+    const ids = Object.keys(faultLibrary);
+    const id = ids[Math.floor(Math.random() * ids.length)];
+    const m = machines.find(x => x.id === id);
+    const spec = faultLibrary[id];
+    m.faultStart = tick;
+    m.faultDir = spec.dir;
+    m.rootCause = spec.rootCause;
+    m.rootDetail = spec.rootDetail;
+    faultActive = id;
+    pushEvent(`Deviation seeded on ${m.name} for demo purposes`, 'info', m.name);
+
+    setTimeout(() => {
+      if (faultActive !== id) return;
+      const downstream = machines.find(x => x.id === spec.cascadeTo);
+      if (downstream) {
+        downstream.faultStart = tick;
+        downstream.faultDir = 1;
+        downstream.rootCause = spec.rootCause;
+        downstream.rootDetail = spec.rootDetail + ' — same root cause as ' + m.name + '.';
+        pushEvent(spec.cascadeMsg, 'warn', downstream.name);
+      }
+    }, 3200);
+  }
+
+  function resetAll() {
+    machines.forEach(m => {
+      m.state = 'good';
+      m.history = [];
+      m.faultStart = undefined;
+      m.rootCause = undefined;
+      m.rootDetail = undefined;
+    });
+    faultActive = null;
+    selected = null;
+    feedEl.innerHTML = '';
+    traceBox.className = 'detail-empty';
+    traceBox.innerHTML = 'Select a flagged machine, or trigger a fault, to see the trace build.';
+    pushEvent('Stream reset', 'info', 'system');
+    render();
+  }
+
+  function toggleRun() {
+    running = !running;
+    const btn = document.getElementById('btnRun');
+    btn.textContent = running ? '⏸ Pause stream' : '▶ Resume stream';
+    btn.classList.toggle('active', running);
+  }
+
+  function loop() {
+    if (running) {
+      tick++;
+      machines.forEach(stepMachine);
+      render();
+      if (faultActive) {
+        const m = machines.find(x => x.id === faultActive);
+        if (m.state === 'crit' && tick - m.faultStart > 40) {
+          faultActive = null;
+        }
+      }
+    }
+    setTimeout(loop, 700);
+  }
+
+  // seed initial history so sparklines aren't empty on load
+  machines.forEach(m => {
+    for (let i = 0; i < 10; i++) {
+      m.history.push(m.base + (Math.random() - 0.5) * 2 * m.noise);
+    }
+  });
+  pushEvent('Connected to 6 machines across 1 simulated line', 'info', 'system');
+  render();
+  loop();
+  window.injectFault = injectFault;
+  window.resetAll = resetAll;
+  window.toggleRun = toggleRun;
+})();
+</script>
+
+</body>
+</html>

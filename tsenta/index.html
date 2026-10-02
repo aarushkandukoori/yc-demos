@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autopilot — a job-matching + auto-apply toy demo</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a24;
+    --panel-2: #1f2330;
+    --line: #2a2f3e;
+    --text: #e8eaf0;
+    --muted: #8b90a3;
+    --accent: #5ee6c1;
+    --accent-dim: #2d8f78;
+    --warn: #f0b05a;
+    --bad: #e2667b;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 32px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 640px;
+    line-height: 1.5;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+  }
+  .profile-pane {
+    border-right: 1px solid var(--line);
+    padding: 24px;
+    background: var(--panel);
+    overflow-y: auto;
+  }
+  .profile-pane h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  .chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+  .chip {
+    padding: 7px 13px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .chip:hover { border-color: var(--accent-dim); color: var(--text); }
+  .chip.active {
+    background: rgba(94,230,193,0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .field-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .range-val {
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+  select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 9px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 22px;
+  }
+  .autopilot-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+  }
+  .autopilot-toggle div.label { font-size: 13px; }
+  .autopilot-toggle div.sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background: #3a3f52;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .switch.on { background: var(--accent-dim); }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .switch.on::after { transform: translateX(20px); }
+  .stat-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .stat-box {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .stat-box .num { font-size: 20px; font-weight: 600; color: var(--accent); }
+  .stat-box .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .feed-pane {
+    padding: 24px 28px;
+    overflow-y: auto;
+  }
+  .feed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+  }
+  .feed-header h2 { font-size: 15px; margin: 0; }
+  .feed-header span { font-size: 12px; color: var(--muted); }
+  .job-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .job-card.processing { border-color: var(--warn); }
+  .job-card.applied { border-color: var(--accent-dim); }
+  .job-main { flex: 1; min-width: 0; }
+  .job-title { font-size: 14.5px; font-weight: 600; }
+  .job-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .match-ring {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    flex-shrink: 0;
+  }
+  .match-ring svg { transform: rotate(-90deg); }
+  .match-ring .pct {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .job-status {
+    width: 150px;
+    text-align: right;
+    font-size: 12.5px;
+    flex-shrink: 0;
+  }
+  .status-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .status-idle { background: #2a2f3e; color: var(--muted); }
+  .status-processing { background: rgba(240,176,90,0.15); color: var(--warn); }
+  .status-applied { background: rgba(94,230,193,0.15); color: var(--accent); }
+  .status-skipped { background: rgba(226,102,123,0.1); color: var(--bad); }
+  .tailored-note {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 5px;
+    font-style: italic;
+  }
+  .empty-hint {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 60px 20px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+  }
+  footer {
+    padding: 14px 32px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .reset-btn {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 10px;
+    width: 100%;
+  }
+  .reset-btn:hover { border-color: var(--accent-dim); color: var(--text); }
+  @media (max-width: 800px) {
+    main { grid-template-columns: 1fr; }
+    .profile-pane { border-right: none; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Autopilot — toy job-matching &amp; auto-apply engine</h1>
+  <p>Set your criteria, flip on autopilot, and watch the matcher score a live feed of synthetic openings, then tailor and submit applications for the ones that clear your bar. This is a self-contained simulation — no real postings, no real submissions.</p>
+</header>
+
+<main>
+  <div class="profile-pane">
+    <h2>Your profile</h2>
+
+    <p class="field-label">Target roles</p>
+    <div class="chip-group" id="role-chips">
+      <div class="chip active" data-val="Backend Engineer">Backend Engineer</div>
+      <div class="chip" data-val="Data Scientist">Data Scientist</div>
+      <div class="chip" data-val="Product Manager">Product Manager</div>
+      <div class="chip" data-val="ML Engineer">ML Engineer</div>
+    </div>
+
+    <p class="field-label">Minimum base salary: <span id="salary-out">$120k</span></p>
+    <input type="range" id="salary" min="60" max="260" value="120" step="5">
+
+    <p class="field-label">Work style</p>
+    <select id="remote">
+      <option value="any">Open to any</option>
+      <option value="remote" selected>Remote only</option>
+      <option value="hybrid">Hybrid only</option>
+    </select>
+
+    <p class="field-label">Minimum match score to auto-apply: <span id="thresh-out">70%</span></p>
+    <input type="range" id="threshold" min="40" max="95" value="70" step="5">
+
+    <div class="autopilot-toggle">
+      <div>
+        <div class="label">Autopilot applying</div>
+        <div class="sub" id="autopilot-sub">Off — review matches manually</div>
+      </div>
+      <div class="switch" id="autopilot-switch"></div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="num" id="stat-scanned">0</div>
+        <div class="lbl">scanned</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="stat-applied">0</div>
+        <div class="lbl">applied</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="stat-rate">0%</div>
+        <div class="lbl">hit rate</div>
+      </div>
+    </div>
+
+    <button class="reset-btn" id="reset-btn">Reset simulation</button>
+  </div>
+
+  <div class="feed-pane">
+    <div class="feed-header">
+      <h2>Live opening feed</h2>
+      <span id="feed-sub">New postings arrive every few seconds</span>
+    </div>
+    <div id="feed"></div>
+    <div class="empty-hint" id="empty-hint">Waiting for the first posting to come in...</div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Tsenta (YC S26). Not affiliated with Tsenta.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  const COMPANIES = ["Northwind Labs", "Fernhill Systems", "Vantage Robotics", "Cobalt Health",
+    "Lumenware", "Pinecrest Data", "Arcway", "Greenline Logistics", "Solstice Analytics",
+    "Mosaic Financial", "Harborlight", "TrueAxis", "Kindle & Co", "Redshift Biotech", "Glidepath"];
+
+  const ROLE_TITLES = {
+    "Backend Engineer": ["Backend Engineer", "Senior Backend Engineer", "Platform Engineer", "Infrastructure Engineer"],
+    "Data Scientist": ["Data Scientist", "Senior Data Scientist", "Analytics Scientist", "Applied Scientist"],
+    "Product Manager": ["Product Manager", "Senior PM", "Growth PM", "Technical PM"],
+    "ML Engineer": ["ML Engineer", "Senior ML Engineer", "Applied ML Engineer", "AI Engineer"]
+  };
+
+  const SKILL_POOL = {
+    "Backend Engineer": ["Go", "Postgres", "Kubernetes", "gRPC", "AWS", "distributed systems", "Kafka"],
+    "Data Scientist": ["Python", "SQL", "experimentation", "statistics", "dbt", "forecasting", "A/B testing"],
+    "Product Manager": ["roadmapping", "user research", "SQL", "stakeholder mgmt", "pricing", "growth loops"],
+    "ML Engineer": ["PyTorch", "model serving", "CUDA", "LLM fine-tuning", "MLOps", "vector search", "Python"]
+  };
+
+  const REMOTE_OPTS = ["remote", "hybrid", "onsite"];
+
+  let state = {
+    role: "Backend Engineer",
+    minSalary: 120,
+    remotePref: "remote",
+    threshold: 70,
+    autopilot: false,
+    scanned: 0,
+    applied: 0,
+    jobs: [],
+    timer: null,
+    jobIdCounter: 0
+  };
+
+  const el = (id) => document.getElementById(id);
+
+  function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function pick(arr) { return arr[rand(0, arr.length - 1)]; }
+
+  function scoreJob(job) {
+    let score = 50;
+    if (job.role === state.role) score += 22;
+    if (job.salary >= state.minSalary) score += 14;
+    else score -= Math.min(20, (state.minSalary - job.salary) / 2);
+    if (state.remotePref === "any") score += 8;
+    else if (job.remote === state.remotePref) score += 14;
+    else score -= 12;
+    score += job.skillOverlap * 3;
+    score += rand(-5, 5);
+    return Math.max(2, Math.min(98, Math.round(score)));
+  }
+
+  function makeJob() {
+    const role = state.role;
+    const title = pick(ROLE_TITLES[role]);
+    const company = pick(COMPANIES);
+    const salary = rand(80, 240);
+    const remote = pick(REMOTE_OPTS);
+    const pool = SKILL_POOL[role];
+    const skills = [];
+    const overlapCount = rand(1, pool.length);
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    for (let i = 0; i < Math.min(3, shuffled.length); i++) skills.push(shuffled[i]);
+    const job = {
+      id: ++state.jobIdCounter,
+      title, company, salary, remote,
+      skills,
+      skillOverlap: overlapCount / pool.length * 2,
+      role,
+      status: "idle"
+    };
+    job.match = scoreJob(job);
+    return job;
+  }
+
+  function ringSvg(pct) {
+    const r = 20, c = 2 * Math.PI * r;
+    const offset = c - (pct / 100) * c;
+    const color = pct >= state.threshold ? "#5ee6c1" : (pct >= state.threshold - 20 ? "#f0b05a" : "#e2667b");
+    return `<svg width="50" height="50">
+      <circle cx="25" cy="25" r="${r}" stroke="#2a2f3e" stroke-width="5" fill="none"/>
+      <circle cx="25" cy="25" r="${r}" stroke="${color}" stroke-width="5" fill="none"
+        stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  function statusPill(job) {
+    switch (job.status) {
+      case "processing": return `<span class="status-pill status-processing">tailoring resume...</span>`;
+      case "applied": return `<span class="status-pill status-applied">applied ✓</span>`;
+      case "skipped": return `<span class="status-pill status-skipped">below threshold</span>`;
+      default: return `<span class="status-pill status-idle">new match</span>`;
+    }
+  }
+
+  function tailoredNote(job) {
+    if (job.status !== "applied") return "";
+    return `<div class="tailored-note">Resume bullets reordered to front-load: ${job.skills.join(", ")}</div>`;
+  }
+
+  function render() {
+    const feed = el("feed");
+    el("empty-hint").style.display = state.jobs.length ? "none" : "block";
+    feed.innerHTML = state.jobs.map(job => `
+      <div class="job-card ${job.status}" data-id="${job.id}">
+        <div class="match-ring">
+          ${ringSvg(job.match)}
+          <div class="pct">${job.match}%</div>
+        </div>
+        <div class="job-main">
+          <div class="job-title">${job.title} · ${job.company}</div>
+          <div class="job-sub">$${job.salary}k · ${job.remote} · ${job.skills.join(", ")}</div>
+          ${tailoredNote(job)}
+        </div>
+        <div class="job-status">
+          ${statusPill(job)}
+          ${job.status === "idle" ? `<div><button class="reset-btn" style="width:auto;padding:5px 10px;margin-top:6px;font-size:11px;" onclick="window.__applyManually(${job.id})">Apply now</button></div>` : ""}
+        </div>
+      </div>
+    `).join("");
+    el("stat-scanned").textContent = state.scanned;
+    el("stat-applied").textContent = state.applied;
+    el("stat-rate").textContent = state.scanned ? Math.round((state.applied / state.scanned) * 100) + "%" : "0%";
+  }
+
+  function processJob(job) {
+    state.scanned++;
+    state.jobs.unshift(job);
+    if (state.jobs.length > 12) state.jobs.pop();
+    render();
+
+    if (state.autopilot && job.match >= state.threshold) {
+      job.status = "processing";
+      render();
+      setTimeout(() => {
+        job.status = "applied";
+        state.applied++;
+        render();
+      }, 900 + rand(0, 600));
+    } else if (state.autopilot) {
+      job.status = "skipped";
+      render();
+    }
+  }
+
+  window.__applyManually = function (id) {
+    const job = state.jobs.find(j => j.id === id);
+    if (!job || job.status !== "idle") return;
+    job.status = "processing";
+    render();
+    setTimeout(() => {
+      job.status = "applied";
+      state.applied++;
+      render();
+    }, 700);
+  };
+
+  function tick() {
+    processJob(makeJob());
+  }
+
+  function startFeed() {
+    if (state.timer) clearInterval(state.timer);
+    state.timer = setInterval(tick, 1800);
+    tick();
+  }
+
+  // --- wiring ---
+  document.querySelectorAll("#role-chips .chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("#role-chips .chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      state.role = chip.dataset.val;
+    });
+  });
+
+  el("salary").addEventListener("input", (e) => {
+    state.minSalary = parseInt(e.target.value, 10);
+    el("salary-out").textContent = "$" + state.minSalary + "k";
+  });
+
+  el("remote").addEventListener("change", (e) => { state.remotePref = e.target.value; });
+
+  el("threshold").addEventListener("input", (e) => {
+    state.threshold = parseInt(e.target.value, 10);
+    el("thresh-out").textContent = state.threshold + "%";
+    render();
+  });
+
+  el("autopilot-switch").addEventListener("click", () => {
+    state.autopilot = !state.autopilot;
+    el("autopilot-switch").classList.toggle("on", state.autopilot);
+    el("autopilot-sub").textContent = state.autopilot
+      ? "On — auto-applying above threshold"
+      : "Off — review matches manually";
+  });
+
+  el("reset-btn").addEventListener("click", () => {
+    state.scanned = 0;
+    state.applied = 0;
+    state.jobs = [];
+    render();
+  });
+
+  startFeed();
+  render();
+})();
+</script>
+
+</body>
+</html>
