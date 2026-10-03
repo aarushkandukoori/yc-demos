@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Watch-to-Act: a toy video-to-policy demo</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --line: #2a313c;
+    --ink: #e6edf3;
+    --dim: #8b949e;
+    --accent: #5fd0a8;
+    --accent2: #f2b84b;
+    --danger: #e5676b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 20% -10%, #132019 0%, var(--bg) 55%);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 40px 12px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.02em; }
+  header p { margin: 0; color: var(--dim); max-width: 680px; line-height: 1.5; font-size: 14px; }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 22px;
+    padding: 10px 40px 20px;
+  }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .panel h2 { margin: 0 0 4px; font-size: 15px; }
+  .panel .sub { color: var(--dim); font-size: 12.5px; margin: 0 0 14px; }
+  .tasks { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .task-btn {
+    background: #1c232c;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .task-btn.active { background: var(--accent); color: #06201a; border-color: var(--accent); font-weight: 600; }
+  .stage-wrap { display: flex; gap: 18px; }
+  .stage {
+    position: relative;
+    width: 280px;
+    height: 280px;
+    background: #0b0f14;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .grid-cell {
+    position: absolute;
+    width: 56px; height: 56px;
+    border: 1px dashed #1f2630;
+  }
+  .obj {
+    position: absolute;
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    transition: left 0.45s cubic-bezier(.4,0,.2,1), top 0.45s cubic-bezier(.4,0,.2,1), transform 0.3s;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+  }
+  .arm {
+    position: absolute;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(95,208,168,0.18);
+    transition: left 0.45s cubic-bezier(.4,0,.2,1), top 0.45s cubic-bezier(.4,0,.2,1);
+    z-index: 5;
+  }
+  .stage-log { flex: 1; min-width: 0; }
+  .stage-log .mode-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 6px; }
+  .log-list { list-style: none; margin: 0; padding: 0; font-size: 13px; line-height: 1.9; max-height: 200px; overflow-y: auto; }
+  .log-list li { color: var(--dim); }
+  .log-list li.now { color: var(--accent); font-weight: 600; }
+  .log-list li.done { color: var(--ink); }
+  .controls { display: flex; gap: 10px; margin-top: 16px; }
+  button.run {
+    background: var(--accent);
+    color: #06201a;
+    border: none;
+    font-weight: 700;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+  }
+  button.run:disabled { opacity: 0.5; cursor: default; }
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+  }
+  .confidence-row { margin-top: 16px; }
+  .confidence-row .label { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); margin-bottom: 5px; }
+  .bar-bg { height: 8px; border-radius: 6px; background: #1c232c; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); width: 0%; transition: width 0.4s; }
+  .fleet-section { margin-top: 18px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .stat-row .big { font-size: 22px; font-weight: 700; }
+  .stat-row .tag { font-size: 11.5px; color: var(--dim); }
+  .deploy-feed { font-size: 12.5px; color: var(--dim); line-height: 1.8; max-height: 110px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+  .deploy-feed .new { color: var(--accent); }
+  .note {
+    font-size: 12px;
+    color: var(--dim);
+    background: #11161d;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 16px;
+    line-height: 1.5;
+  }
+  footer {
+    text-align: center;
+    padding: 16px;
+    color: var(--dim);
+    font-size: 11.5px;
+    border-top: 1px solid var(--line);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Watch-to-Act <span style="color:var(--dim); font-weight:400; font-size:15px;">— a toy video-to-policy demo</span></h1>
+  <p>Pick a chore. The model has only ever "watched" demonstrations of it on video — it has never touched this exact object before. Press run and watch it attempt the task, then see how its confidence climbs after a simulated fleet of robots feeds real trials back into training.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1. Choose a task the model watched on video</h2>
+    <p class="sub">Each task below is backed by a synthetic "video-pretraining" count — a stand-in for hours of footage the toy model was shown.</p>
+    <div class="tasks" id="taskButtons"></div>
+
+    <div class="stage-wrap">
+      <div class="stage" id="stage"></div>
+      <div class="stage-log">
+        <div class="mode-label" id="modeLabel">Idle</div>
+        <ul class="log-list" id="logList"></ul>
+        <div class="confidence-row">
+          <div class="label"><span>Policy confidence</span><span id="confVal">—</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="confBar"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="run" id="runBtn">▶ Run attempt</button>
+      <button class="ghost" id="resetBtn">Reset stage</button>
+    </div>
+
+    <div class="note" id="resultNote">Select a task, then run an attempt. The robot plans from its video-pretrained policy, not from a hand-coded script — watch what happens when confidence is low.</div>
+  </section>
+
+  <section class="panel">
+    <h2>2. Fleet feedback loop</h2>
+    <p class="sub">In the real system, every deployed unit's trial — success or failure — becomes training signal for the next policy version. This panel simulates that loop for the task you picked.</p>
+
+    <div class="fleet-section">
+      <div class="stat-row">
+        <div>
+          <div class="big" id="trialCount">0</div>
+          <div class="tag">real-world trials folded in</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="big" id="successRate">—</div>
+          <div class="tag">rolling success rate</div>
+        </div>
+      </div>
+      <div class="controls" style="margin-top:0;">
+        <button class="ghost" id="deployBtn">+ Deploy 10 robots overnight</button>
+        <button class="ghost" id="rewindBtn">↺ Rewind fleet data</button>
+      </div>
+      <div class="deploy-feed" id="deployFeed">No deployments yet for this task.</div>
+    </div>
+
+    <div class="note">
+      This is a simplified stand-in for retraining: each simulated batch of deployments nudges confidence toward the task's "difficulty ceiling," and nudges it back down slightly for tasks that get skipped — just like a real policy that stops improving on tasks it no longer sees data for.
+    </div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by OS3 (YC S26). Not affiliated with OS3.</footer>
+
+<script>
+(function () {
+  const TASKS = [
+    { id: "fold", name: "Fold towel", icon: "🧺", pretrainHours: 42000, ceiling: 0.95, steps: [
+        { from: [20,20], to: [120,20], obj: [20,20] },
+        { from: [120,20], to: [120,120], obj: [120,20] },
+        { from: [120,120], to: [60,170], obj: [120,120] }
+      ], objEmoji: "🧻", labels: ["locate edge", "fold corner", "stack & smooth"] },
+    { id: "tray", name: "Clear room-service tray", icon: "🍽️", pretrainHours: 18500, ceiling: 0.82, steps: [
+        { from: [40,40], to: [160,40], obj: [40,40] },
+        { from: [160,40], to: [160,160], obj: [160,40] },
+        { from: [160,160], to: [220,200], obj: [160,160] }
+      ], objEmoji: "🫖", labels: ["approach tray", "lift item", "place in bin"] },
+    { id: "vial", name: "Rack a lab vial", icon: "🧪", pretrainHours: 6200, ceiling: 0.68, steps: [
+        { from: [30,30], to: [100,30], obj: [30,30] },
+        { from: [100,30], to: [100,110], obj: [100,30] },
+        { from: [100,110], to: [180,150], obj: [100,110] }
+      ], objEmoji: "🧫", labels: ["grasp vial", "align to rack", "insert & release" ] },
+    { id: "cable", name: "Route a server cable", icon: "🖥️", pretrainHours: 2100, ceiling: 0.55, steps: [
+        { from: [25,200], to: [100,150], obj: [25,200] },
+        { from: [100,150], to: [180,90], obj: [100,150] },
+        { from: [180,90], to: [230,40], obj: [180,90] }
+      ], objEmoji: "🔌", labels: ["grip cable", "thread path", "seat connector"] }
+  ];
+
+  const fleetState = {};
+  TASKS.forEach(t => fleetState[t.id] = { trials: 0, successes: 0 });
+
+  let currentTask = TASKS[0];
+  let running = false;
+
+  const taskButtonsEl = document.getElementById("taskButtons");
+  const stageEl = document.getElementById("stage");
+  const logListEl = document.getElementById("logList");
+  const modeLabelEl = document.getElementById("modeLabel");
+  const confValEl = document.getElementById("confVal");
+  const confBarEl = document.getElementById("confBar");
+  const resultNoteEl = document.getElementById("resultNote");
+  const runBtn = document.getElementById("runBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const deployBtn = document.getElementById("deployBtn");
+  const rewindBtn = document.getElementById("rewindBtn");
+  const trialCountEl = document.getElementById("trialCount");
+  const successRateEl = document.getElementById("successRate");
+  const deployFeedEl = document.getElementById("deployFeed");
+
+  function baseConfidence(task) {
+    const f = fleetState[task.id];
+    const pretrainFactor = Math.min(task.pretrainHours / 50000, 1) * 0.35;
+    const fleetFactor = Math.min(f.trials / 60, 1) * (task.ceiling - 0.3 - pretrainFactor);
+    return Math.max(0.12, Math.min(task.ceiling, 0.3 + pretrainFactor + Math.max(fleetFactor, 0)));
+  }
+
+  function renderTaskButtons() {
+    taskButtonsEl.innerHTML = "";
+    TASKS.forEach(t => {
+      const btn = document.createElement("button");
+      btn.className = "task-btn" + (t.id === currentTask.id ? " active" : "");
+      btn.textContent = t.icon + " " + t.name;
+      btn.onclick = () => { currentTask = t; onTaskChange(); };
+      taskButtonsEl.appendChild(btn);
+    });
+  }
+
+  function onTaskChange() {
+    renderTaskButtons();
+    resetStage();
+    updateFleetPanel();
+    resultNoteEl.textContent = currentTask.pretrainHours.toLocaleString() + "h of video pretraining on this task. Press run to see the policy attempt it.";
+  }
+
+  function resetStage() {
+    running = false;
+    stageEl.innerHTML = "";
+    logListEl.innerHTML = "";
+    modeLabelEl.textContent = "Idle";
+    confValEl.textContent = "—";
+    confBarEl.style.width = "0%";
+    runBtn.disabled = false;
+
+    for (let i = 0; i < 25; i++) {
+      const c = document.createElement("div");
+      c.className = "grid-cell";
+      c.style.left = (i % 5) * 56 + "px";
+      c.style.top = Math.floor(i / 5) * 56 + "px";
+      stageEl.appendChild(c);
+    }
+    const obj = document.createElement("div");
+    obj.className = "obj";
+    obj.id = "sim-obj";
+    obj.textContent = currentTask.objEmoji;
+    obj.style.left = currentTask.steps[0].obj[0] + "px";
+    obj.style.top = currentTask.steps[0].obj[1] + "px";
+    obj.style.background = "#1c232c";
+    stageEl.appendChild(obj);
+
+    const arm = document.createElement("div");
+    arm.className = "arm";
+    arm.id = "sim-arm";
+    arm.style.left = currentTask.steps[0].from[0] + "px";
+    arm.style.top = currentTask.steps[0].from[1] + "px";
+    stageEl.appendChild(arm);
+
+    currentTask.labels.forEach(l => {
+      const li = document.createElement("li");
+      li.textContent = l;
+      logListEl.appendChild(li);
+    });
+  }
+
+  function updateFleetPanel() {
+    const f = fleetState[currentTask.id];
+    trialCountEl.textContent = f.trials;
+    successRateEl.textContent = f.trials === 0 ? "—" : Math.round((f.successes / f.trials) * 100) + "%";
+    deployFeedEl.innerHTML = f.trials === 0
+      ? "No deployments yet for this task."
+      : f.log.slice(-6).reverse().map(l => '<div' + (l.fresh ? ' class="new"' : '') + '>' + l.text + '</div>').join("");
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async function runAttempt() {
+    if (running) return;
+    running = true;
+    runBtn.disabled = true;
+    resetStage();
+    running = true;
+    runBtn.disabled = true;
+
+    const conf = baseConfidence(currentTask);
+    modeLabelEl.textContent = "Executing policy (video-conditioned)";
+    confValEl.textContent = Math.round(conf * 100) + "%";
+    confBarEl.style.width = Math.round(conf * 100) + "%";
+
+    const arm = document.getElementById("sim-arm");
+    const obj = document.getElementById("sim-obj");
+    const items = logListEl.querySelectorAll("li");
+    let willSucceed = Math.random() < conf;
+    let failStep = willSucceed ? -1 : Math.floor(Math.random() * currentTask.steps.length);
+
+    for (let i = 0; i < currentTask.steps.length; i++) {
+      items.forEach(li => li.classList.remove("now"));
+      items[i].classList.add("now");
+      const step = currentTask.steps[i];
+      arm.style.left = step.from[0] + "px";
+      arm.style.top = step.from[1] + "px";
+      await sleep(250);
+      arm.style.left = step.to[0] + "px";
+      arm.style.top = step.to[1] + "px";
+      obj.style.left = step.to[0] + "px";
+      obj.style.top = step.to[1] + "px";
+      await sleep(480);
+
+      if (i === failStep) {
+        obj.style.background = "rgba(229,103,107,0.25)";
+        items[i].classList.add("now");
+        items[i].textContent += " — slipped (low-confidence region)";
+        break;
+      } else {
+        items[i].classList.remove("now");
+        items[i].classList.add("done");
+      }
+    }
+
+    const f = fleetState[currentTask.id];
+    f.trials++;
+    if (!f.log) f.log = [];
+    f.log.forEach(l => l.fresh = false);
+    if (willSucceed) {
+      f.successes++;
+      obj.style.background = "rgba(95,208,168,0.3)";
+      modeLabelEl.textContent = "Attempt complete — success";
+      resultNoteEl.textContent = "Success. This trial gets logged and folded into the next fleet retraining batch.";
+      f.log.push({ text: "✓ attempt #" + f.trials + " succeeded", fresh: true });
+    } else {
+      modeLabelEl.textContent = "Attempt complete — failed, logged for retraining";
+      resultNoteEl.textContent = "Failed at step " + (failStep + 1) + ". Low pretraining + few fleet trials means lower confidence — this failure becomes a training example, not a dead end.";
+      f.log.push({ text: "✗ attempt #" + f.trials + " failed at step " + (failStep + 1), fresh: true });
+    }
+    updateFleetPanel();
+    runBtn.disabled = false;
+    running = false;
+  }
+
+  function deployFleet() {
+    const f = fleetState[currentTask.id];
+    if (!f.log) f.log = [];
+    f.log.forEach(l => l.fresh = false);
+    let newSuccesses = 0;
+    for (let i = 0; i < 10; i++) {
+      const conf = baseConfidence(currentTask);
+      const ok = Math.random() < conf;
+      f.trials++;
+      if (ok) { f.successes++; newSuccesses++; }
+    }
+    f.log.push({ text: "⚙ overnight batch: " + newSuccesses + "/10 succeeded (" + f.trials + " total trials)", fresh: true });
+    updateFleetPanel();
+    const newConf = baseConfidence(currentTask);
+    confValEl.textContent = Math.round(newConf * 100) + "%";
+    confBarEl.style.width = Math.round(newConf * 100) + "%";
+    resultNoteEl.textContent = "Fleet data folded in. Policy confidence for \"" + currentTask.name + "\" is now " + Math.round(newConf * 100) + "%, trending toward its " + Math.round(currentTask.ceiling * 100) + "% ceiling.";
+  }
+
+  function rewindFleet() {
+    fleetState[currentTask.id] = { trials: 0, successes: 0, log: [] };
+    updateFleetPanel();
+    resultNoteEl.textContent = "Fleet data cleared for this task. Confidence drops back to the video-pretraining baseline.";
+    const conf = baseConfidence(currentTask);
+    confValEl.textContent = "—";
+    confBarEl.style.width = "0%";
+  }
+
+  runBtn.addEventListener("click", runAttempt);
+  resetBtn.addEventListener("click", resetStage);
+  deployBtn.addEventListener("click", deployFleet);
+  rewindBtn.addEventListener("click", rewindFleet);
+
+  renderTaskButtons();
+  resetStage();
+  updateFleetPanel();
+})();
+</script>
+
+</body>
+</html>
