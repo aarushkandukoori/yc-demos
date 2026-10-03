@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Glimpse — a model that learns software by watching it</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2a3240;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #6ee7b7;
+    --accent-2: #60a5fa;
+    --warn: #f5a524;
+    --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 20% 0%, #15202b 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 40px 10px;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.5;
+    max-width: 680px;
+  }
+  main {
+    flex: 1;
+    max-width: 1100px;
+    margin: 20px auto 40px;
+    width: 100%;
+    padding: 0 40px;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .panel h2 {
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .mode-toggle {
+    display: flex;
+    background: var(--panel-2);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+    margin-bottom: 16px;
+  }
+  .mode-toggle button {
+    flex: 1;
+    padding: 8px 6px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .mode-toggle button.active {
+    background: var(--accent);
+    color: #04231a;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .stat-row b { color: var(--text); font-weight: 600; }
+  .bar-bg {
+    height: 8px;
+    border-radius: 5px;
+    background: var(--panel-2);
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-2), var(--accent));
+    border-radius: 5px;
+    transition: width 0.4s ease;
+  }
+  .side-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .side-btn:hover { border-color: var(--accent-2); }
+  .side-btn.ghost { background: transparent; color: var(--muted); }
+  .log {
+    margin-top: 16px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    line-height: 1.6;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px dashed var(--border); }
+  .stage {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .frame-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
+  }
+  .frame-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+    align-self: flex-start;
+  }
+  .badge-observe { background: #1f2d22; color: var(--accent); }
+  .badge-high { background: #16301f; color: var(--accent); }
+  .badge-low { background: #332a14; color: var(--warn); }
+  .badge-none { background: #311919; color: var(--bad); }
+  .screen {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fafafa;
+    color: #1a1a1a;
+    min-height: 240px;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    transition: filter 0.2s ease;
+  }
+  .screen.glitch {
+    filter: blur(0.4px) saturate(0.6);
+  }
+  .screen.glitch::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(248,113,113,0.06) 0 2px, transparent 2px 4px);
+    pointer-events: none;
+  }
+  .titlebar {
+    background: #e9e9ec;
+    padding: 9px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 1px solid #ddd;
+  }
+  .screen-body { padding: 16px 18px; min-height: 190px; }
+  .row-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border: 1px solid #e3e3e6;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    background: #fff;
+  }
+  .row-item:hover { border-color: #60a5fa; }
+  .row-item .meta { color: #999; font-size: 11.5px; }
+  .email-body { font-size: 13px; line-height: 1.6; color: #333; margin: 10px 0 18px; }
+  .from-line { font-size: 12px; color: #777; margin-bottom: 10px; }
+  textarea.compose-area {
+    width: 100%;
+    height: 90px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 13px;
+    resize: none;
+    margin: 10px 0;
+  }
+  .confirm { text-align: center; padding: 40px 0; color: #2e7d32; font-weight: 600; }
+  .actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  .act-btn {
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .act-btn:hover { border-color: var(--accent-2); }
+  .act-btn.primary { background: var(--accent); color: #04231a; border-color: var(--accent); }
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.5;
+    background: var(--panel-2);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .reveal-box {
+    margin-top: 10px;
+    font-size: 12.5px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--panel-2);
+  }
+  .match { color: var(--accent); font-weight: 700; }
+  .mismatch { color: var(--bad); font-weight: 700; }
+  footer {
+    text-align: center;
+    padding: 22px 20px 30px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--accent-2); }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Glimpse<span>.</span> a world-model that learns by <span>watching</span>, not reading instructions</h1>
+  <p>Below is a tiny toy inbox app. Flip to <b>Observe</b> and click around normally — every click teaches
+     a small in-browser model what happens next. Flip to <b>Imagine</b> and the UI disappears: the model
+     renders every next screen itself from what it has learned, frame by frame, with no access to the
+     real app code. Thin coverage looks glitchy on purpose — that's the model improvising.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Control</h2>
+    <div class="mode-toggle">
+      <button id="btnObserve" class="active">Observe</button>
+      <button id="btnImagine">Imagine</button>
+    </div>
+
+    <div class="stat-row"><span>Transitions learned</span><b id="statLearned">0 / 10</b></div>
+    <div class="bar-bg"><div class="bar-fill" id="barCoverage" style="width:0%"></div></div>
+
+    <div class="stat-row" style="margin-top:14px"><span>Imagined frames rendered</span><b id="statImagined">0</b></div>
+    <div class="stat-row"><span>Matched reality</span><b id="statAccuracy">—</b></div>
+
+    <button class="side-btn" id="btnAutoWatch">▶ Fast-forward: watch 25 sessions</button>
+    <button class="side-btn ghost" id="btnReset">Reset model</button>
+
+    <h2 style="margin-top:18px">What it has seen</h2>
+    <div class="log" id="logBox"><div style="color:var(--muted)">No observations yet.</div></div>
+  </div>
+
+  <div class="stage">
+    <div class="frame-wrap">
+      <div class="frame-badge badge-observe" id="frameBadge">OBSERVING — ground truth</div>
+      <div class="screen" id="screen"></div>
+      <div class="actions" id="actionBar"></div>
+      <div id="revealBox"></div>
+    </div>
+    <div class="note" id="helpNote">
+      You're driving the real toy app. Click anything — the model is quietly logging
+      <code>(screen, action) → next screen</code> pairs in the background, the same way a screen-recording
+      pretrains on raw footage instead of labeled instructions.
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Induction Labs (YC S26). Not affiliated with Induction Labs.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- synthetic ground-truth app: a tiny inbox UI ----------------------
+  var EMAILS = {
+    e1: { from: "R. Castillo — Ops", subj: "Re: Thursday sync moved", body: "Pushed the sync to 4pm, same link. Let me know if that breaks anything on your end." },
+    e2: { from: "Priya N. — Design", subj: "New icon set v3", body: "Dropped the updated icon set in the shared folder. Mostly tweaks to stroke weight, nothing structural." }
+  };
+
+  var EDGES = {
+    "inbox|open_e1": "email1",
+    "inbox|open_e2": "email2",
+    "inbox|compose": "compose",
+    "email1|back": "inbox",
+    "email1|reply": "compose",
+    "email2|back": "inbox",
+    "email2|reply": "compose",
+    "compose|send": "sent",
+    "compose|discard": "inbox",
+    "sent|ok": "inbox"
+  };
+  var TOTAL_EDGES = Object.keys(EDGES).length;
+
+  function groundTruth(state, action) {
+    return EDGES[state + "|" + action] || null;
+  }
+
+  // ---- rendering of each real screen -------------------------------------
+  function renderScreen(state) {
+    if (state === "inbox") {
+      return {
+        title: "Inbox — 2 messages",
+        html:
+          '<div class="screen-body">' +
+          '<div class="row-item" data-action="open_e1"><div><b>' + EMAILS.e1.from + '</b><br><span>' + EMAILS.e1.subj + '</span></div><div class="meta">9:14 AM</div></div>' +
+          '<div class="row-item" data-action="open_e2"><div><b>' + EMAILS.e2.from + '</b><br><span>' + EMAILS.e2.subj + '</span></div><div class="meta">Yesterday</div></div>' +
+          '</div>',
+        buttons: [{ a: "open_e1", l: "Open first email" }, { a: "open_e2", l: "Open second email" }, { a: "compose", l: "Compose new" }]
+      };
+    }
+    if (state === "email1" || state === "email2") {
+      var m = state === "email1" ? EMAILS.e1 : EMAILS.e2;
+      return {
+        title: m.subj,
+        html:
+          '<div class="screen-body"><div class="from-line">From: ' + m.from + '</div>' +
+          '<div class="email-body">' + m.body + '</div></div>',
+        buttons: [{ a: "back", l: "← Back" }, { a: "reply", l: "Reply" }]
+      };
+    }
+    if (state === "compose") {
+      return {
+        title: "New message",
+        html: '<div class="screen-body"><div class="from-line">To: (unaddressed draft)</div>' +
+          '<textarea class="compose-area" placeholder="Synthetic draft text — this demo does not send anything real.">Thanks for the update — looping in the rest of the team now.</textarea></div>',
+        buttons: [{ a: "send", l: "Send" }, { a: "discard", l: "Discard" }]
+      };
+    }
+    if (state === "sent") {
+      return {
+        title: "Sent",
+        html: '<div class="screen-body"><div class="confirm">✓ Message sent</div></div>',
+        buttons: [{ a: "ok", l: "Back to inbox" }]
+      };
+    }
+  }
+
+  // ---- state ---------------------------------------------------------
+  var mode = "observe"; // "observe" | "imagine"
+  var current = "inbox";
+  var learned = {};      // "state|action" -> { next: state, count: n }
+  var imaginedCount = 0;
+  var matchCount = 0, checkedCount = 0;
+  var pendingReveal = null; // {state, action, predicted}
+
+  var screenEl = document.getElementById("screen");
+  var actionBarEl = document.getElementById("actionBar");
+  var badgeEl = document.getElementById("frameBadge");
+  var logEl = document.getElementById("logBox");
+  var helpNote = document.getElementById("helpNote");
+  var revealBox = document.getElementById("revealBox");
+
+  function learnedKey(s, a) { return s + "|" + a; }
+
+  function recordObservation(state, action, next) {
+    var k = learnedKey(state, action);
+    if (!learned[k]) learned[k] = { next: next, count: 0 };
+    learned[k].count++;
+    renderLog();
+    renderStats();
+  }
+
+  function renderStats() {
+    var seenEdges = Object.keys(learned).length;
+    document.getElementById("statLearned").textContent = seenEdges + " / " + TOTAL_EDGES;
+    document.getElementById("barCoverage").style.width = Math.round((seenEdges / TOTAL_EDGES) * 100) + "%";
+    document.getElementById("statImagined").textContent = imaginedCount;
+    document.getElementById("statAccuracy").textContent = checkedCount ? Math.round((matchCount / checkedCount) * 100) + "% (" + matchCount + "/" + checkedCount + ")" : "—";
+  }
+
+  function renderLog() {
+    var keys = Object.keys(learned);
+    if (!keys.length) { logEl.innerHTML = '<div style="color:var(--muted)">No observations yet.</div>'; return; }
+    logEl.innerHTML = keys.map(function (k) {
+      var parts = k.split("|");
+      return '<div>' + parts[0] + ' + <b style="color:#cbd5e1">' + parts[1] + '</b> → ' + learned[k].next + ' <span style="color:var(--accent)">×' + learned[k].count + '</span></div>';
+    }).join("");
+  }
+
+  // best-effort guess when the model has never seen this exact (state, action)
+  function imaginedGuess(state, action) {
+    // 1) try any observed transition with the same action, from a different state
+    var keys = Object.keys(learned);
+    for (var i = 0; i < keys.length; i++) {
+      var parts = keys[i].split("|");
+      if (parts[1] === action) return { next: learned[keys[i]].next, confidence: "low" };
+    }
+    // 2) otherwise stay put — the model has nothing to go on
+    return { next: state, confidence: "none" };
+  }
+
+  function renderFrame() {
+    var def = renderScreen(current);
+    screenEl.classList.remove("glitch");
+    screenEl.innerHTML = '<div class="titlebar">' + def.title + '</div>' + def.html;
+
+    actionBarEl.innerHTML = "";
+    def.buttons.forEach(function (b) {
+      var btn = document.createElement("button");
+      btn.className = "act-btn";
+      btn.textContent = b.l;
+      btn.onclick = function () { handleAction(b.a); };
+      actionBarEl.appendChild(btn);
+    });
+
+    // clicking directly on rows in inbox
+    screenEl.querySelectorAll("[data-action]").forEach(function (el) {
+      el.addEventListener("click", function () { handleAction(el.getAttribute("data-action")); });
+    });
+  }
+
+  function setBadge(kind, text) {
+    badgeEl.className = "frame-badge " + kind;
+    badgeEl.textContent = text;
+  }
+
+  function handleAction(action) {
+    revealBox.innerHTML = "";
+    if (mode === "observe") {
+      var next = groundTruth(current, action);
+      if (!next) return;
+      recordObservation(current, action, next);
+      current = next;
+      setBadge("badge-observe", "OBSERVING — ground truth");
+      renderFrame();
+      return;
+    }
+
+    // ---- imagine mode ----
+    var k = learnedKey(current, action);
+    var entry = learned[k];
+    imaginedCount++;
+    var fromState = current;
+
+    if (entry) {
+      current = entry.next;
+      var conf = entry.count >= 3 ? "badge-high" : "badge-low";
+      setBadge(conf, (entry.count >= 3 ? "IMAGINED — high confidence" : "IMAGINED — low confidence") + " (seen " + entry.count + "×)");
+      renderFrame();
+      pendingReveal = { state: fromState, action: action, predicted: current };
+    } else {
+      var guess = imaginedGuess(fromState, action);
+      current = guess.next;
+      setBadge("badge-none", guess.confidence === "low" ? "IMAGINED — borrowed from a different screen" : "IMAGINED — no data, improvising");
+      screenEl.classList.add("glitch");
+      renderFrame();
+      screenEl.classList.add("glitch");
+      pendingReveal = { state: fromState, action: action, predicted: current };
+    }
+
+    renderStats();
+    offerReveal();
+  }
+
+  function offerReveal() {
+    if (!pendingReveal) return;
+    var btn = document.createElement("button");
+    btn.className = "side-btn";
+    btn.style.marginTop = "0";
+    btn.textContent = "Reveal what would really happen →";
+    btn.onclick = function () {
+      var real = groundTruth(pendingReveal.state, pendingReveal.action) || pendingReveal.state;
+      var ok = real === pendingReveal.predicted;
+      checkedCount++;
+      if (ok) matchCount++;
+      revealBox.innerHTML = '<div class="reveal-box">Real next screen: <b>' + real + '</b> — model imagined <b>' + pendingReveal.predicted + '</b>. ' +
+        (ok ? '<span class="match">Match ✓</span>' : '<span class="mismatch">Mismatch ✗</span>') + '</div>';
+      renderStats();
+      pendingReveal = null;
+    };
+    revealBox.innerHTML = "";
+    revealBox.appendChild(btn);
+  }
+
+  // ---- fast-forward: simulate "watching" many short sessions ------------
+  function autoWatch() {
+    var sessions = 25;
+    var i = 0;
+    var savedMode = mode;
+    mode = "observe";
+    var interval = setInterval(function () {
+      if (i >= sessions) { clearInterval(interval); mode = savedMode; renderFrame(); return; }
+      var s = "inbox";
+      var steps = 2 + Math.floor(Math.random() * 3);
+      for (var j = 0; j < steps; j++) {
+        var options = Object.keys(EDGES).filter(function (k) { return k.indexOf(s + "|") === 0; });
+        if (!options.length) break;
+        var pick = options[Math.floor(Math.random() * options.length)];
+        var action = pick.split("|")[1];
+        var next = EDGES[pick];
+        recordObservation(s, action, next);
+        s = next;
+      }
+      i++;
+    }, 45);
+  }
+
+  // ---- wiring --------------------------------------------------------
+  document.getElementById("btnObserve").onclick = function () {
+    mode = "observe";
+    document.getElementById("btnObserve").classList.add("active");
+    document.getElementById("btnImagine").classList.remove("active");
+    setBadge("badge-observe", "OBSERVING — ground truth");
+    helpNote.textContent = "You're driving the real toy app. Click anything — the model is quietly logging (screen, action) → next screen pairs in the background, the same way a screen-recording pretrains on raw footage instead of labeled instructions.";
+    revealBox.innerHTML = "";
+    screenEl.classList.remove("glitch");
+    renderFrame();
+  };
+
+  document.getElementById("btnImagine").onclick = function () {
+    mode = "imagine";
+    document.getElementById("btnImagine").classList.add("active");
+    document.getElementById("btnObserve").classList.remove("active");
+    setBadge("badge-observe", "IMAGINE mode — try an action");
+    helpNote.textContent = "The real app is gone. Every screen below is being hallucinated frame-by-frame from what the model watched. Click 'Reveal' after a prediction to check it against the real transition table.";
+    revealBox.innerHTML = "";
+    screenEl.classList.remove("glitch");
+    renderFrame();
+  };
+
+  document.getElementById("btnAutoWatch").onclick = autoWatch;
+
+  document.getElementById("btnReset").onclick = function () {
+    learned = {};
+    imaginedCount = 0; matchCount = 0; checkedCount = 0;
+    current = "inbox";
+    pendingReveal = null;
+    revealBox.innerHTML = "";
+    renderLog();
+    renderStats();
+    renderFrame();
+  };
+
+  renderFrame();
+  renderStats();
+})();
+</script>
+</body>
+</html>

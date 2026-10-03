@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Failure-to-Recipe: a toy provenance pipeline</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#121722; --panel2:#171d2b; --border:#242c3d;
+    --text:#e6e9f0; --muted:#8891a7; --accent:#5fd3a6; --accent2:#f0b94d;
+    --bad:#e2616b; --mid:#f0b94d; --good:#5fd3a6; --blue:#6ea8ff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:radial-gradient(circle at 20% -10%, #1a2233 0%, var(--bg) 55%);
+    color:var(--text); min-height:100vh;
+  }
+  header{padding:36px 28px 18px; max-width:1180px; margin:0 auto;}
+  header h1{margin:0 0 8px; font-size:26px; letter-spacing:-0.5px;}
+  header p{margin:0; color:var(--muted); max-width:720px; line-height:1.5; font-size:14.5px;}
+  main{max-width:1180px; margin:0 auto; padding:10px 28px 40px;}
+  .step-label{font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--accent2); font-weight:600; margin-bottom:6px;}
+  section.card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:20px 22px; margin-bottom:18px;
+  }
+  .hyp-grid{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+  .hyp{
+    border:1px solid var(--border); background:var(--panel2); border-radius:10px;
+    padding:10px 14px; cursor:pointer; font-size:13.5px; color:var(--text); flex:1 1 220px;
+    transition:border-color .15s, background .15s;
+  }
+  .hyp:hover{border-color:var(--blue);}
+  .hyp.active{border-color:var(--accent); background:#152219;}
+  .hyp b{display:block; font-size:13.5px; margin-bottom:3px;}
+  .hyp span{color:var(--muted); font-size:12px; line-height:1.4;}
+  .controls{display:flex; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap;}
+  button{
+    background:var(--accent); color:#06140f; border:none; border-radius:8px;
+    padding:10px 16px; font-size:13.5px; font-weight:600; cursor:pointer;
+  }
+  button.secondary{background:var(--panel2); color:var(--text); border:1px solid var(--border);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button:hover:not(:disabled){filter:brightness(1.08);}
+  .pipeline{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
+  @media (max-width:860px){.pipeline{grid-template-columns:1fr;}}
+  .col h3{margin:0 0 4px; font-size:13.5px;}
+  .col .count{color:var(--muted); font-size:12px; margin-bottom:10px;}
+  .col-body{min-height:70px; display:flex; flex-direction:column; gap:8px; max-height:420px; overflow-y:auto;}
+  .sub{
+    border:1px solid var(--border); border-radius:9px; padding:9px 11px; background:var(--panel2);
+    font-size:12px; animation:slidein .25s ease;
+  }
+  @keyframes slidein{from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:translateY(0);}}
+  .sub .top{display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;}
+  .sub .id{font-weight:700; color:var(--blue);}
+  .sub .risk{font-weight:700; padding:1px 7px; border-radius:20px; font-size:10.5px;}
+  .risk.good{background:#15291f; color:var(--good);}
+  .risk.mid{background:#2b2512; color:var(--mid);}
+  .risk.bad{background:#2b1518; color:var(--bad);}
+  .chips{display:flex; flex-wrap:wrap; gap:4px; margin:5px 0;}
+  .chip{background:#0d1119; border:1px solid var(--border); border-radius:5px; padding:2px 6px; font-size:10.5px; color:var(--muted);}
+  .reasons{color:var(--muted); font-size:11px; line-height:1.5; margin-top:4px;}
+  .review-actions{display:flex; gap:6px; margin-top:7px;}
+  .review-actions button{padding:5px 10px; font-size:11.5px; flex:1;}
+  .approve-btn{background:var(--good); color:#06140f;}
+  .reject-btn{background:var(--bad); color:#210a0c;}
+  .empty-hint{color:var(--muted); font-size:12px; font-style:italic; padding:8px 0;}
+  .recipe-card{display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; margin-top:14px;}
+  .gauge-wrap{flex:1 1 260px;}
+  .gauge-track{background:var(--panel2); border-radius:8px; height:14px; overflow:hidden; border:1px solid var(--border);}
+  .gauge-fill{height:100%; background:linear-gradient(90deg, var(--accent), var(--accent2)); transition:width .3s;}
+  .gauge-label{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:5px;}
+  .locked-panel{flex:1 1 320px; border:1px dashed var(--border); border-radius:10px; padding:14px; background:#0e1a15;}
+  .locked-panel.inactive{opacity:.45;}
+  .locked-panel h4{margin:0 0 8px; font-size:13.5px; color:var(--accent);}
+  .scale-row{display:flex; align-items:center; gap:10px; margin-top:10px;}
+  .scale-row input[type=range]{flex:1;}
+  .proj{font-size:21px; font-weight:700; color:var(--accent2);}
+  .proj-sub{font-size:11.5px; color:var(--muted);}
+  footer{
+    text-align:center; padding:26px 20px 40px; color:var(--muted); font-size:12px;
+    border-top:1px solid var(--border); margin-top:10px;
+  }
+  footer a{color:var(--blue);}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--muted); margin-top:6px;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Failure &rarr; Hypothesis &rarr; Recipe</h1>
+  <p>A toy simulation of one idea: treat a model's failure mode as a data-collection hypothesis, run every incoming submission through a provenance-aware QA check (who, what device, what session, consent, rights — not just the file), and once enough submissions clear review, lock a reusable "recipe" you can scale up. Everything below runs in your browser on synthetic data — nothing is sent anywhere.</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <div class="step-label">Step 1 — pick a model failure to turn into a hypothesis</div>
+    <div class="hyp-grid" id="hypGrid"></div>
+  </section>
+
+  <section class="card">
+    <div class="step-label">Step 2 — stream in submissions, watch the provenance/QA engine triage them</div>
+    <div class="controls">
+      <button id="runOneBtn" disabled>Submit one</button>
+      <button id="runFiveBtn" class="secondary" disabled>Submit 5</button>
+      <button id="resetBtn" class="secondary">Reset</button>
+      <span class="legend">
+        <span><span class="dot" style="background:var(--good)"></span>auto-approved</span>
+        <span><span class="dot" style="background:var(--mid)"></span>flagged for review</span>
+        <span><span class="dot" style="background:var(--bad)"></span>auto-rejected</span>
+      </span>
+    </div>
+
+    <div class="pipeline" style="margin-top:18px;">
+      <div class="col">
+        <h3>Incoming review queue</h3>
+        <div class="count" id="reviewCount">0 pending</div>
+        <div class="col-body" id="reviewCol"><div class="empty-hint">Nothing needs a human yet.</div></div>
+      </div>
+      <div class="col">
+        <h3>Auto-rejected</h3>
+        <div class="count" id="rejectCount">0 rejected</div>
+        <div class="col-body" id="rejectCol"><div class="empty-hint">Rejections will land here with reasons.</div></div>
+      </div>
+      <div class="col">
+        <h3>Validated dataset</h3>
+        <div class="count" id="approveCount">0 approved</div>
+        <div class="col-body" id="approveCol"><div class="empty-hint">Approved submissions build the dataset.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="step-label">Step 3 — once a hypothesis has enough clean coverage, the recipe locks</div>
+    <div class="recipe-card">
+      <div class="gauge-wrap">
+        <div class="gauge-track"><div class="gauge-fill" id="gaugeFill" style="width:0%"></div></div>
+        <div class="gauge-label"><span id="gaugeText">0 / 12 validated</span><span id="gaugePct">0%</span></div>
+      </div>
+      <div class="locked-panel inactive" id="lockedPanel">
+        <h4 id="lockedTitle">Recipe not yet locked</h4>
+        <div class="proj-sub" id="lockedSub">Keep submitting until the hypothesis has 12 clean, validated samples.</div>
+        <div class="scale-row" id="scaleRow" style="display:none;">
+          <label for="scaleSlider" style="font-size:12px; color:var(--muted); white-space:nowrap;">Scale factor</label>
+          <input type="range" id="scaleSlider" min="1" max="50" value="1">
+          <span id="scaleVal" style="font-size:12px; color:var(--muted);">1x</span>
+        </div>
+        <div class="proj" id="projNum" style="display:none;"></div>
+        <div class="proj-sub" id="projSub" style="display:none;"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Datoric (YC S26). Not affiliated with Datoric.
+</footer>
+
+<script>
+const HYPOTHESES = [
+  {id:'transparent', label:'Robot arm fails to grasp transparent objects', modality:'robotics',
+   task:'Pick-and-place 12 transparent containers under 3 lighting rigs', baseWeekly:420},
+  {id:'overlap', label:'Voice model collapses on overlapping speech', modality:'voice',
+   task:'Record 2-speaker overlapping dialogue across 5 noise profiles', baseWeekly:900},
+  {id:'occlusion', label:'World model loses object identity after occlusion', modality:'world model',
+   task:'Film objects passing behind occluders at varied speeds/angles', baseWeekly:260},
+];
+
+const DEVICES = ['rig-07','rig-12','rig-19','mobile-A3','mobile-B1','studio-K2'];
+const CONTRIBUTORS = ['c_104','c_221','c_338','c_457','c_512','c_690','c_733'];
+
+let state = null;
+
+function freshState(hyp){
+  return {
+    hyp, nextId:1, deviceUse:{}, contributorUse:{},
+    review:[], rejected:[], approved:[], locked:false,
+  };
+}
+
+function resetAll(){
+  state = null;
+  document.querySelectorAll('.hyp').forEach(h=>h.classList.remove('active'));
+  document.getElementById('runOneBtn').disabled = true;
+  document.getElementById('runFiveBtn').disabled = true;
+  renderQueues();
+  renderGauge();
+  document.getElementById('lockedPanel').classList.add('inactive');
+  document.getElementById('lockedTitle').textContent = 'Recipe not yet locked';
+  document.getElementById('lockedSub').textContent = 'Keep submitting until the hypothesis has 12 clean, validated samples.';
+  document.getElementById('scaleRow').style.display = 'none';
+  document.getElementById('projNum').style.display = 'none';
+  document.getElementById('projSub').style.display = 'none';
+}
+
+function buildHypGrid(){
+  const grid = document.getElementById('hypGrid');
+  grid.innerHTML = '';
+  HYPOTHESES.forEach(h=>{
+    const div = document.createElement('div');
+    div.className = 'hyp';
+    div.dataset.id = h.id;
+    div.innerHTML = `<b>${h.label}</b><span>${h.task}</span>`;
+    div.onclick = ()=> selectHypothesis(h.id);
+    grid.appendChild(div);
+  });
+}
+
+function selectHypothesis(id){
+  const hyp = HYPOTHESES.find(h=>h.id===id);
+  state = freshState(hyp);
+  document.querySelectorAll('.hyp').forEach(h=>h.classList.toggle('active', h.dataset.id===id));
+  document.getElementById('runOneBtn').disabled = false;
+  document.getElementById('runFiveBtn').disabled = false;
+  renderQueues();
+  renderGauge();
+  document.getElementById('lockedPanel').classList.add('inactive');
+  document.getElementById('lockedTitle').textContent = 'Recipe not yet locked';
+  document.getElementById('lockedSub').textContent = `Keep submitting until "${hyp.label}" has 12 clean, validated samples.`;
+  document.getElementById('scaleRow').style.display = 'none';
+  document.getElementById('projNum').style.display = 'none';
+  document.getElementById('projSub').style.display = 'none';
+}
+
+function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
+function synthSubmission(){
+  const device = rand(DEVICES);
+  const contributor = rand(CONTRIBUTORS);
+  state.deviceUse[device] = (state.deviceUse[device]||0) + 1;
+  state.contributorUse[contributor] = (state.contributorUse[contributor]||0) + 1;
+
+  const consent = Math.random() > 0.12;
+  const rights = Math.random() > 0.08;
+  const sessionGapSec = randInt(2, 900);
+  const deviceReuse = state.deviceUse[device];
+  const contributorReuse = state.contributorUse[contributor];
+
+  const sub = {
+    id: 'sub_' + String(state.nextId++).padStart(4,'0'),
+    contributor, device, sessionGapSec, consent, rights,
+    deviceReuse, contributorReuse,
+    task: state.hyp.task,
+    timestamp: new Date(Date.now() - randInt(0,1000)*1000).toISOString().slice(11,19),
+  };
+  return scoreSubmission(sub);
+}
+
+function scoreSubmission(sub){
+  let risk = 0;
+  const reasons = [];
+
+  if(!sub.consent){ risk += 55; reasons.push('missing recorded consent for this session'); }
+  if(!sub.rights){ risk += 50; reasons.push('rights clearance not attached to submission'); }
+  if(sub.deviceReuse > 4){ risk += 25; reasons.push(`device ${sub.device} has submitted ${sub.deviceReuse}x today — possible farming`); }
+  if(sub.contributorReuse > 5){ risk += 20; reasons.push(`contributor ${sub.contributor} reused ${sub.contributorReuse}x — throughput outlier`); }
+  if(sub.sessionGapSec < 5){ risk += 18; reasons.push('session-to-upload gap under 5s — implausible for task'); }
+  if(sub.sessionGapSec > 700){ risk += 8; reasons.push('long idle gap before upload'); }
+
+  risk += randInt(0,6);
+  risk = Math.min(100, risk);
+
+  let tier;
+  if(risk >= 55) tier = 'bad';
+  else if(risk >= 25) tier = 'mid';
+  else tier = 'good';
+
+  if(reasons.length===0) reasons.push('clean provenance chain: consent, rights, device and session all check out');
+
+  sub.risk = risk; sub.tier = tier; sub.reasons = reasons;
+  return sub;
+}
+
+function subCardHTML(sub, withActions){
+  const chips = `
+    <span class="chip">dev ${sub.device}</span>
+    <span class="chip">${sub.contributor}</span>
+    <span class="chip">${sub.timestamp}</span>
+    <span class="chip">${sub.consent?'consent ok':'no consent'}</span>
+    <span class="chip">${sub.rights?'rights ok':'no rights'}</span>
+  `;
+  const actions = withActions ? `
+    <div class="review-actions">
+      <button class="approve-btn" onclick="resolveReview('${sub.id}', true)">Approve</button>
+      <button class="reject-btn" onclick="resolveReview('${sub.id}', false)">Reject</button>
+    </div>` : '';
+  return `
+    <div class="sub" id="card-${sub.id}">
+      <div class="top"><span class="id">${sub.id}</span><span class="risk ${sub.tier}">risk ${sub.risk}</span></div>
+      <div class="chips">${chips}</div>
+      <div class="reasons">${sub.reasons.join(' · ')}</div>
+      ${actions}
+    </div>`;
+}
+
+function renderQueues(){
+  const r = state ? state.review : [];
+  const j = state ? state.rejected : [];
+  const a = state ? state.approved : [];
+
+  document.getElementById('reviewCount').textContent = r.length + ' pending';
+  document.getElementById('rejectCount').textContent = j.length + ' rejected';
+  document.getElementById('approveCount').textContent = a.length + ' approved';
+
+  document.getElementById('reviewCol').innerHTML = r.length
+    ? r.map(s=>subCardHTML(s, true)).join('')
+    : '<div class="empty-hint">Nothing needs a human yet.</div>';
+  document.getElementById('rejectCol').innerHTML = j.length
+    ? j.map(s=>subCardHTML(s, false)).join('')
+    : '<div class="empty-hint">Rejections will land here with reasons.</div>';
+  document.getElementById('approveCol').innerHTML = a.length
+    ? a.map(s=>subCardHTML(s, false)).join('')
+    : '<div class="empty-hint">Approved submissions build the dataset.</div>';
+}
+
+function renderGauge(){
+  const need = 12;
+  const have = state ? state.approved.length : 0;
+  const pct = Math.min(100, Math.round(have/need*100));
+  document.getElementById('gaugeFill').style.width = pct + '%';
+  document.getElementById('gaugeText').textContent = `${have} / ${need} validated`;
+  document.getElementById('gaugePct').textContent = pct + '%';
+
+  if(state && have >= need && !state.locked){
+    state.locked = true;
+    lockRecipe();
+  }
+}
+
+function lockRecipe(){
+  const panel = document.getElementById('lockedPanel');
+  panel.classList.remove('inactive');
+  document.getElementById('lockedTitle').textContent = `Recipe locked: "${state.hyp.label}"`;
+  document.getElementById('lockedSub').textContent =
+    `This hypothesis now has enough clean, provenance-verified coverage to become a repeatable collection recipe for ${state.hyp.modality}. Drag the slider to see what scaling it looks like.`;
+  document.getElementById('scaleRow').style.display = 'flex';
+  document.getElementById('projNum').style.display = 'block';
+  document.getElementById('projSub').style.display = 'block';
+  updateProjection();
+}
+
+function updateProjection(){
+  const scale = Number(document.getElementById('scaleSlider').value);
+  document.getElementById('scaleVal').textContent = scale + 'x';
+  const weekly = state.hyp.baseWeekly * scale;
+  document.getElementById('projNum').textContent = weekly.toLocaleString() + ' verified samples/week';
+  document.getElementById('projSub').textContent =
+    `at ${scale}x collection throughput, same QA thresholds, same ${state.hyp.modality} task spec`;
+}
+
+function resolveReview(id, approve){
+  const idx = state.review.findIndex(s=>s.id===id);
+  if(idx === -1) return;
+  const [sub] = state.review.splice(idx,1);
+  (approve ? state.approved : state.rejected).push(sub);
+  renderQueues();
+  renderGauge();
+}
+
+function submitOne(){
+  if(!state) return;
+  const sub = synthSubmission();
+  if(sub.tier === 'good') state.approved.push(sub);
+  else if(sub.tier === 'mid') state.review.push(sub);
+  else state.rejected.push(sub);
+  renderQueues();
+  renderGauge();
+}
+
+document.getElementById('runOneBtn').onclick = submitOne;
+document.getElementById('runFiveBtn').onclick = ()=>{ for(let i=0;i<5;i++) submitOne(); };
+document.getElementById('resetBtn').onclick = resetAll;
+document.getElementById('scaleSlider').oninput = updateProjection;
+
+buildHypGrid();
+</script>
+
+</body>
+</html>
