@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deskhand — toy AI office agent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --line: #2a2f3a;
+    --text: #e7e9ee;
+    --muted: #8b93a3;
+    --accent: #5fd0a8;
+    --accent-dim: #2d6e58;
+    --warn: #e0b35c;
+    --danger: #e07c7c;
+    --mono: "SF Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 28px 32px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 680px;
+  }
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 20px;
+    padding: 24px 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  @media (max-width: 880px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .scenario-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .scenario-btn {
+    text-align: left;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .scenario-btn:hover { border-color: var(--accent-dim); }
+  .scenario-btn.active { border-color: var(--accent); background: #13241d; }
+  .scenario-btn .tag {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 150px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 10px;
+    resize: vertical;
+  }
+  .run-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  button.run {
+    background: var(--accent);
+    color: #06251b;
+    border: none;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button.run:disabled { opacity: 0.5; cursor: default; }
+  button.run:hover:not(:disabled) { filter: brightness(1.08); }
+  .counter {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .counter b { color: var(--accent); }
+
+  .tools-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .tool-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    color: var(--muted);
+    transition: all .2s;
+  }
+  .tool-chip .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #44485420;
+    box-shadow: 0 0 0 2px #44485420 inset;
+    background: #444854;
+  }
+  .tool-chip.working { border-color: var(--warn); color: var(--text); }
+  .tool-chip.working .dot { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+  .tool-chip.done { border-color: var(--accent-dim); color: var(--text); }
+  .tool-chip.done .dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  .trace {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .trace .empty { color: var(--muted); font-style: italic; }
+  .step {
+    display: flex;
+    gap: 10px;
+    opacity: 0;
+    animation: fadein .35s ease forwards;
+  }
+  @keyframes fadein { to { opacity: 1; transform: translateY(0); } from { transform: translateY(4px); } }
+  .step .idx {
+    color: var(--accent);
+    min-width: 18px;
+  }
+  .step .body { color: var(--text); }
+  .step .sub { color: var(--muted); display: block; margin-top: 2px; }
+
+  .record {
+    margin-top: 14px;
+    background: #0d1117;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+    color: #9fe3c6;
+  }
+  .draft {
+    margin-top: 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 14px 0 6px;
+  }
+  footer {
+    text-align: center;
+    padding: 30px 20px 40px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--line);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Desk<span>hand</span></h1>
+  <p>A toy agent that reads an incoming message, figures out what it's asking for, checks the right tools, and takes
+  the next action on its own — the way a human office assistant would. Pick an inbox item (or write your own) and
+  press run to watch it work.</p>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Incoming message</h2>
+    <div class="scenario-list" id="scenarioList"></div>
+    <textarea id="messageBox"></textarea>
+    <div class="run-row">
+      <button class="run" id="runBtn">Run agent</button>
+      <span class="counter">Tasks completed this session: <b id="taskCount">0</b> · est. time saved: <b id="timeSaved">0 min</b></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Agent trace</h2>
+    <div class="tools-row" id="toolsRow"></div>
+    <div class="trace" id="trace"><div class="empty">Run the agent to see it work across tools.</div></div>
+
+    <div id="outputArea" style="display:none;">
+      <div class="section-label">Extracted record (written to CRM)</div>
+      <div class="record" id="recordBox"></div>
+      <div class="section-label">Drafted reply (sent from inbox)</div>
+      <div class="draft" id="draftBox"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Async (YC S26). Not affiliated with Async.
+</footer>
+
+<script>
+(function () {
+  const scenarios = [
+    {
+      id: "law",
+      label: "Law firm — new client inquiry",
+      tag: "legal intake",
+      tools: ["Inbox", "Calendar", "CRM", "Billing"],
+      text: `Subject: Car accident last week\n\nHi, I was rear-ended on Route 9 last Tuesday and the other driver's insurance is already pushing back. I think I need a consultation. Can someone call me? My name is Priya Nair, phone 617-555-0148, email priya.nair@example.com. I'm free tomorrow afternoon or Thursday morning.`
+    },
+    {
+      id: "health",
+      label: "Clinic — appointment request",
+      tag: "healthcare scheduling",
+      tools: ["Inbox", "Calendar", "EHR", "Billing"],
+      text: `Subject: Need to reschedule\n\nHello, this is Marcus Webb. I have a follow-up for my knee but I'm traveling next week for work. Could we move it to the week after, ideally a Monday or Tuesday morning? Reach me at 312-555-0199 or marcus.webb@example.com. Also wanted to ask if my insurance covers physical therapy.`
+    },
+    {
+      id: "re",
+      label: "Real estate — showing request",
+      tag: "real estate ops",
+      tools: ["Inbox", "Calendar", "CRM", "MLS"],
+      text: `Subject: 142 Birchwood Ave\n\nHi there, saw the listing at 142 Birchwood and would love to tour it this weekend, Saturday or Sunday after 1pm works best. This is urgent, we close on our current place in three weeks. I'm Dana Ellis, dana.ellis@example.com, 503-555-0122.`
+    }
+  ];
+
+  let activeId = scenarios[0].id;
+  let running = false;
+  let taskCount = 0;
+  let timeSaved = 0;
+
+  const scenarioListEl = document.getElementById("scenarioList");
+  const messageBox = document.getElementById("messageBox");
+  const runBtn = document.getElementById("runBtn");
+  const traceEl = document.getElementById("trace");
+  const toolsRow = document.getElementById("toolsRow");
+  const outputArea = document.getElementById("outputArea");
+  const recordBox = document.getElementById("recordBox");
+  const draftBox = document.getElementById("draftBox");
+  const taskCountEl = document.getElementById("taskCount");
+  const timeSavedEl = document.getElementById("timeSaved");
+
+  function renderScenarioList() {
+    scenarioListEl.innerHTML = "";
+    scenarios.forEach(s => {
+      const btn = document.createElement("button");
+      btn.className = "scenario-btn" + (s.id === activeId ? " active" : "");
+      btn.innerHTML = `${s.label}<span class="tag">${s.tag}</span>`;
+      btn.onclick = () => {
+        if (running) return;
+        activeId = s.id;
+        messageBox.value = s.text;
+        renderScenarioList();
+        renderTools();
+        resetTrace();
+      };
+      scenarioListEl.appendChild(btn);
+    });
+  }
+
+  function currentScenario() {
+    return scenarios.find(s => s.id === activeId);
+  }
+
+  function renderTools(states) {
+    const s = currentScenario();
+    toolsRow.innerHTML = "";
+    s.tools.forEach(name => {
+      const chip = document.createElement("div");
+      const state = states && states[name] ? states[name] : "idle";
+      chip.className = "tool-chip" + (state !== "idle" ? " " + state : "");
+      chip.innerHTML = `<span class="dot"></span>${name}`;
+      toolsRow.appendChild(chip);
+    });
+  }
+
+  function resetTrace() {
+    traceEl.innerHTML = '<div class="empty">Run the agent to see it work across tools.</div>';
+    outputArea.style.display = "none";
+  }
+
+  renderScenarioList();
+  messageBox.value = currentScenario().text;
+  renderTools();
+
+  // --- extraction logic (toy NLP, regex + keyword based) ---
+  function extract(text) {
+    const emailMatch = text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    const phoneMatch = text.match(/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+    const nameMatch = text.match(/(?:this is|I'm|I am|My name is)\s+([A-Z][a-z]+\s[A-Z][a-z]+)/);
+
+    const dayWords = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday","tomorrow","today"];
+    const foundDays = dayWords.filter(d => text.toLowerCase().includes(d));
+
+    const urgentWords = ["urgent", "emergency", "asap", "right away", "pushing back"];
+    const isUrgent = urgentWords.some(w => text.toLowerCase().includes(w));
+
+    let intent = "general inquiry";
+    const lower = text.toLowerCase();
+    if (lower.includes("reschedul") || lower.includes("appointment") || lower.includes("tour") || lower.includes("showing")) {
+      intent = "scheduling request";
+    } else if (lower.includes("consultation") || lower.includes("accident") || lower.includes("insurance")) {
+      intent = "new matter / consultation";
+    } else if (lower.includes("cover") || lower.includes("cost") || lower.includes("price")) {
+      intent = "billing question";
+    }
+
+    return {
+      name: nameMatch ? nameMatch[1] : "Unknown (needs manual review)",
+      email: emailMatch ? emailMatch[0] : "not provided",
+      phone: phoneMatch ? phoneMatch[0] : "not provided",
+      availability: foundDays.length ? foundDays.join(", ") : "not specified",
+      intent,
+      priority: isUrgent ? "high" : "normal"
+    };
+  }
+
+  function pickSlot(availability) {
+    const slotBank = {
+      monday: "Mon 9:30am", tuesday: "Tue 10:00am", wednesday: "Wed 2:00pm",
+      thursday: "Thu 11:15am", friday: "Fri 3:30pm", saturday: "Sat 1:30pm",
+      sunday: "Sun 2:00pm", tomorrow: "tomorrow 2:15pm", today: "today 4:45pm"
+    };
+    const first = availability.split(",")[0].trim().toLowerCase();
+    return slotBank[first] || "next available: Wed 10:00am";
+  }
+
+  function draftReply(scenario, data, slot) {
+    const greetingName = data.name.split(" ")[0] !== "Unknown" ? data.name.split(" ")[0] : "there";
+    if (scenario.id === "law") {
+      return `Hi ${greetingName},\n\nThanks for reaching out — sorry to hear about the accident. I've flagged this as a ${data.priority}-priority new matter and booked you a consultation for ${slot}. One of our attorneys will call you at ${data.phone} beforehand to confirm details.\n\nTalk soon,\nMartinez & Reyes LLP (intake)`;
+    }
+    if (scenario.id === "health") {
+      return `Hi ${greetingName},\n\nNo problem — I've moved your follow-up to ${slot}. I also checked your plan on file and physical therapy is covered under your current benefits, subject to a copay. You'll get a confirmation at ${data.email}.\n\nBest,\nRiverside Clinic (scheduling)`;
+    }
+    return `Hi ${greetingName},\n\nGreat news — 142 Birchwood is available for a tour at ${slot}. Given your timeline I've marked this as ${data.priority} priority and let the listing agent know you're under contract pressure. See you then!\n\nBest,\nHarbor Realty (showings)`;
+  }
+
+  async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function addStep(idx, text, sub) {
+    const div = document.createElement("div");
+    div.className = "step";
+    div.innerHTML = `<span class="idx">${idx}.</span><span class="body">${text}${sub ? `<span class="sub">${sub}</span>` : ""}</span>`;
+    traceEl.appendChild(div);
+  }
+
+  async function run() {
+    if (running) return;
+    running = true;
+    runBtn.disabled = true;
+    const scenario = currentScenario();
+    const text = messageBox.value.trim();
+    traceEl.innerHTML = "";
+    outputArea.style.display = "none";
+    const states = {};
+    scenario.tools.forEach(t => states[t] = "idle");
+    renderTools(states);
+
+    addStep(1, "Reading incoming message", `${text.length} characters from ${scenario.tools[0]}`);
+    states[scenario.tools[0]] = "working"; renderTools(states);
+    await sleep(500);
+    states[scenario.tools[0]] = "done"; renderTools(states);
+
+    addStep(2, "Parsing entities", "running name / phone / email / date extraction");
+    await sleep(600);
+    const data = extract(text);
+
+    addStep(3, `Classified as "${data.intent}"`, `priority: ${data.priority}`);
+    await sleep(500);
+
+    addStep(4, `Checking ${scenario.tools[1]} for openings`, `requested: ${data.availability}`);
+    states[scenario.tools[1]] = "working"; renderTools(states);
+    await sleep(700);
+    const slot = pickSlot(data.availability);
+    states[scenario.tools[1]] = "done"; renderTools(states);
+    addStep(5, `Found a slot`, slot);
+    await sleep(500);
+
+    addStep(6, `Writing record to ${scenario.tools[2]}`, "new contact + case/file notes");
+    states[scenario.tools[2]] = "working"; renderTools(states);
+    await sleep(600);
+    states[scenario.tools[2]] = "done"; renderTools(states);
+
+    if (scenario.tools[3]) {
+      addStep(7, `Cross-checking ${scenario.tools[3]}`, scenario.id === "health" ? "verifying coverage on file" : "flagging priority for billing/agent");
+      states[scenario.tools[3]] = "working"; renderTools(states);
+      await sleep(600);
+      states[scenario.tools[3]] = "done"; renderTools(states);
+    }
+
+    addStep(8, "Drafting reply and sending", `back to ${data.email}`);
+    await sleep(500);
+
+    addStep(9, "Done — no human touched this task", "escalates only if confidence is low");
+
+    recordBox.textContent = JSON.stringify({
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      intent: data.intent,
+      priority: data.priority,
+      scheduled: slot,
+      source: scenario.tools[0]
+    }, null, 2);
+    draftBox.textContent = draftReply(scenario, data, slot);
+    outputArea.style.display = "block";
+
+    taskCount += 1;
+    timeSaved += 12;
+    taskCountEl.textContent = taskCount;
+    timeSavedEl.textContent = timeSaved + " min";
+
+    running = false;
+    runBtn.disabled = false;
+  }
+
+  runBtn.addEventListener("click", run);
+})();
+</script>
+
+</body>
+</html>
