@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Workflow Compiler — agent-first process demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#131722; --panel2:#171c2a; --border:#232a3b;
+    --text:#e8ecf4; --muted:#8b94ab; --accent:#5ee6c6; --accent2:#7aa2ff;
+    --warn:#ffb86b; --bad:#ff7a7a; --good:#5ee6c6;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); line-height:1.5;}
+  .wrap{max-width:1040px; margin:0 auto; padding:40px 24px 80px;}
+  header{margin-bottom:32px;}
+  .kicker{color:var(--accent); font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;}
+  h1{font-size:30px; margin:8px 0 10px; letter-spacing:-0.02em;}
+  .sub{color:var(--muted); font-size:15px; max-width:640px;}
+  .steps{display:flex; gap:10px; margin:28px 0 20px; flex-wrap:wrap;}
+  .step-pill{border:1px solid var(--border); background:var(--panel); padding:6px 14px; border-radius:999px; font-size:13px; color:var(--muted);}
+  .step-pill.active{border-color:var(--accent); color:var(--accent); background:rgba(94,230,198,.08);}
+  .step-pill.done{border-color:var(--accent2); color:var(--accent2);}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:22px; margin-bottom:20px;}
+  .panel h2{font-size:16px; margin:0 0 6px;}
+  .panel .hint{color:var(--muted); font-size:13px; margin-bottom:16px;}
+  .workflow-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;}
+  .wf-card{border:1px solid var(--border); background:var(--panel2); border-radius:10px; padding:16px; cursor:pointer; transition:.15s;}
+  .wf-card:hover{border-color:var(--accent2);}
+  .wf-card.sel{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+  .wf-card .name{font-weight:600; margin-bottom:4px;}
+  .wf-card .meta{color:var(--muted); font-size:12.5px;}
+  button{font:inherit; cursor:pointer; border:none; border-radius:9px; padding:10px 18px; font-size:14px; font-weight:600;}
+  .btn-primary{background:var(--accent); color:#06120e;}
+  .btn-primary:disabled{opacity:.35; cursor:not-allowed;}
+  .btn-ghost{background:transparent; border:1px solid var(--border); color:var(--text);}
+  .btn-row{display:flex; gap:10px; margin-top:16px; align-items:center;}
+  .pattern-list{display:flex; flex-direction:column; gap:8px; margin-top:4px;}
+  .pattern{display:flex; justify-content:space-between; align-items:center; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:13.5px;}
+  .pattern .cov{color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums;}
+  .pipeline{display:flex; flex-direction:column; gap:8px; margin-top:4px;}
+  .pstep{display:flex; align-items:center; gap:10px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:13.5px;}
+  .pstep .tag{font-size:10.5px; padding:2px 8px; border-radius:999px; font-weight:700; letter-spacing:.03em;}
+  .tag.reused{background:rgba(122,162,255,.15); color:var(--accent2);}
+  .tag.new{background:rgba(94,230,198,.15); color:var(--accent);}
+  table{width:100%; border-collapse:collapse; font-size:13px; margin-top:6px;}
+  th{text-align:left; color:var(--muted); font-weight:600; padding:6px 10px; border-bottom:1px solid var(--border); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;}
+  td{padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top;}
+  tr.escalated{background:rgba(255,184,107,.06);}
+  .badge{font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;}
+  .badge.auto{background:rgba(94,230,198,.15); color:var(--good);}
+  .badge.escalate{background:rgba(255,184,107,.15); color:var(--warn);}
+  .conf{font-variant-numeric:tabular-nums; color:var(--muted);}
+  .summary-row{display:flex; gap:18px; margin-top:16px; flex-wrap:wrap;}
+  .stat{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; min-width:140px;}
+  .stat .num{font-size:22px; font-weight:700;}
+  .stat .lbl{font-size:12px; color:var(--muted); margin-top:2px;}
+  .lib-bar{height:10px; background:var(--panel2); border-radius:6px; overflow:hidden; border:1px solid var(--border); margin-top:10px;}
+  .lib-fill{height:100%; background:linear-gradient(90deg, var(--accent), var(--accent2)); width:0%; transition:width .6s ease;}
+  .lib-grid{display:flex; flex-wrap:wrap; gap:6px; margin-top:12px;}
+  .lib-chip{font-size:11.5px; padding:4px 10px; border-radius:999px; border:1px solid var(--border); color:var(--muted);}
+  .lib-chip.have{color:var(--accent2); border-color:var(--accent2); background:rgba(122,162,255,.08);}
+  footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px; text-align:center;}
+  .note{font-size:12px; color:var(--muted); margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">toy demo · agent-first process rebuild</div>
+    <h1>Workflow Compiler</h1>
+    <p class="sub">Point this at a messy, human-run queue. It finds the repeating patterns, compiles them into an agent pipeline with confidence thresholds, and runs it — auto-handling the clear cases and routing the rest to a human. Every pipeline it builds adds reusable steps to a shared library, so the next workflow compiles faster. Sample data below is entirely synthetic.</p>
+  </header>
+
+  <div class="steps">
+    <div class="step-pill active" id="pill-1">1. Pick a queue</div>
+    <div class="step-pill" id="pill-2">2. Discover patterns</div>
+    <div class="step-pill" id="pill-3">3. Compile agent</div>
+    <div class="step-pill" id="pill-4">4. Run on the queue</div>
+  </div>
+
+  <div class="panel">
+    <h2>1. Pick a real-looking queue</h2>
+    <div class="hint">These stand in for the spreadsheets, inboxes, and ticket queues a team already works out of.</div>
+    <div class="workflow-cards" id="wfCards"></div>
+  </div>
+
+  <div class="panel" id="discoverPanel" style="display:none;">
+    <h2>2. Discovered patterns</h2>
+    <div class="hint">Clustering the queue's free-text notes against known phrasing to find repeating decision patterns.</div>
+    <div class="pattern-list" id="patternList"></div>
+    <div class="btn-row">
+      <button class="btn-primary" id="compileBtn">Compile agent pipeline →</button>
+    </div>
+  </div>
+
+  <div class="panel" id="pipelinePanel" style="display:none;">
+    <h2>3. Compiled pipeline</h2>
+    <div class="hint">Each pattern becomes a step. Steps already in the shared library get reused instead of rebuilt.</div>
+    <div class="pipeline" id="pipelineList"></div>
+    <div class="btn-row">
+      <button class="btn-primary" id="runBtn">Run agent on the queue →</button>
+    </div>
+  </div>
+
+  <div class="panel" id="runPanel" style="display:none;">
+    <h2>4. Run results</h2>
+    <div class="hint">Rows above the confidence threshold (80%) are auto-resolved. The rest escalate to a human with the reason attached.</div>
+    <table>
+      <thead><tr><th>Row</th><th>Note</th><th>Matched pattern</th><th>Confidence</th><th>Outcome</th></tr></thead>
+      <tbody id="runBody"></tbody>
+    </table>
+    <div class="summary-row" id="runSummary"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Compounding library</h2>
+    <div class="hint">Steps built for one queue become reusable for the next. This is the part that's supposed to make agent #5 ship faster than agent #1.</div>
+    <div class="lib-bar"><div class="lib-fill" id="libFill"></div></div>
+    <div class="note" id="libNote">0 of 9 reusable steps built so far.</div>
+    <div class="lib-grid" id="libGrid"></div>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Marker (YC S26). Not affiliated with Marker.</footer>
+</div>
+
+<script>
+// ---- synthetic data ----
+const WORKFLOWS = {
+  invoice: {
+    name: "Invoice exceptions",
+    meta: "41 rows · AP queue",
+    field: "note",
+    rows: [
+      {id:"INV-3381", note:"amount exceeds PO by $40, vendor Acme Supply"},
+      {id:"INV-3382", note:"duplicate of INV-3350, same vendor and amount"},
+      {id:"INV-3383", note:"missing PO number entirely"},
+      {id:"INV-3384", note:"amount exceeds PO by $12, vendor Delta Freight"},
+      {id:"INV-3385", note:"duplicate invoice number flagged by system"},
+      {id:"INV-3386", note:"tax rate mismatch, 7% billed vs 6.5% contracted"},
+      {id:"INV-3387", note:"amount exceeds PO by $900, vendor unclear"},
+      {id:"INV-3388", note:"missing PO number, new vendor not in system"},
+      {id:"INV-3389", note:"duplicate of INV-3360"},
+      {id:"INV-3390", note:"currency mismatch, invoice in EUR not USD"}
+    ],
+    patterns: [
+      {key:"over_po", label:"Amount exceeds PO", match:n=>n.includes("exceeds po")},
+      {key:"duplicate", label:"Duplicate invoice", match:n=>n.includes("duplicate")},
+      {key:"missing_po", label:"Missing PO number", match:n=>n.includes("missing po")},
+    ]
+  },
+  refund: {
+    name: "Refund requests",
+    meta: "37 rows · support queue",
+    field: "note",
+    rows: [
+      {id:"RF-1091", note:"customer requests refund, item arrived damaged, under 30 days"},
+      {id:"RF-1092", note:"refund request, changed mind, within return window"},
+      {id:"RF-1093", note:"item never arrived per tracking, customer requests refund"},
+      {id:"RF-1094", note:"refund request, item damaged, 52 days since purchase"},
+      {id:"RF-1095", note:"customer requests refund, changed mind, 41 days out"},
+      {id:"RF-1096", note:"duplicate charge, customer requests refund"},
+      {id:"RF-1097", note:"item arrived damaged, photos attached, 10 days"},
+      {id:"RF-1098", note:"tracking shows delivered but customer says never arrived"},
+      {id:"RF-1099", note:"refund request, no reason given"},
+    ],
+    patterns: [
+      {key:"damaged_window", label:"Damaged, within window", match:n=>n.includes("damaged") && !n.includes("52 days")},
+      {key:"changed_mind", label:"Changed mind, within window", match:n=>n.includes("changed mind") && n.includes("within")},
+      {key:"never_arrived", label:"Never arrived per tracking", match:n=>n.includes("never arrived")},
+    ]
+  },
+  lead: {
+    name: "Inbound lead triage",
+    meta: "53 rows · sales queue",
+    field: "note",
+    rows: [
+      {id:"LD-7701", note:"company size 400, budget confirmed, wants demo next week"},
+      {id:"LD-7702", note:"personal email, no company listed, asking about pricing"},
+      {id:"LD-7703", note:"company size 1200, budget confirmed, enterprise tier interest"},
+      {id:"LD-7704", note:"company size 8, no budget mentioned, early research"},
+      {id:"LD-7705", note:"referral from existing customer, budget confirmed"},
+      {id:"LD-7706", note:"competitor domain, likely research not a real lead"},
+      {id:"LD-7707", note:"company size 650, budget confirmed, wants demo"},
+      {id:"LD-7708", note:"free trial signup, no company size listed"},
+    ],
+    patterns: [
+      {key:"qualified", label:"Budget confirmed, mid-market+", match:n=>n.includes("budget confirmed")},
+      {key:"early", label:"Early research, no budget", match:n=>n.includes("no budget") || n.includes("early research")},
+      {key:"noise", label:"Likely not a real lead", match:n=>n.includes("competitor") || n.includes("personal email")},
+    ]
+  }
+};
+
+const LIBRARY_STEPS = [
+  "extract_amount_field","dedupe_by_reference_id","check_threshold","classify_free_text",
+  "lookup_vendor_record","compute_days_since_event","route_to_human_queue","attach_reason_note","apply_decision"
+];
+let builtLibrary = new Set();
+
+let selectedWfKey = null;
+let currentPatterns = [];
+let currentPipeline = [];
+
+const wfCardsEl = document.getElementById('wfCards');
+Object.entries(WORKFLOWS).forEach(([key, wf]) => {
+  const card = document.createElement('div');
+  card.className = 'wf-card';
+  card.innerHTML = `<div class="name">${wf.name}</div><div class="meta">${wf.meta}</div>`;
+  card.addEventListener('click', () => selectWorkflow(key, card));
+  wfCardsEl.appendChild(card);
+});
+
+function selectWorkflow(key, card) {
+  document.querySelectorAll('.wf-card').forEach(c => c.classList.remove('sel'));
+  card.classList.add('sel');
+  selectedWfKey = key;
+  setPill(1, 'done'); setPill(2, 'active');
+  document.getElementById('pipelinePanel').style.display = 'none';
+  document.getElementById('runPanel').style.display = 'none';
+  runDiscovery();
+}
+
+function setPill(n, state) {
+  const p = document.getElementById('pill-' + n);
+  p.classList.remove('active','done');
+  if (state) p.classList.add(state);
+}
+
+function runDiscovery() {
+  const wf = WORKFLOWS[selectedWfKey];
+  const rows = wf.rows;
+  currentPatterns = wf.patterns.map(p => {
+    const matched = rows.filter(r => p.match(r.note.toLowerCase()));
+    return {...p, count: matched.length};
+  });
+  const covered = currentPatterns.reduce((a,p)=>a+p.count,0);
+  const coverage = Math.round(100 * covered / rows.length);
+
+  const listEl = document.getElementById('patternList');
+  listEl.innerHTML = '';
+  currentPatterns.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'pattern';
+    row.innerHTML = `<span>${p.label}</span><span class="cov">${p.count} rows</span>`;
+    listEl.appendChild(row);
+  });
+  const uncovered = document.createElement('div');
+  uncovered.className = 'pattern';
+  uncovered.innerHTML = `<span>Everything else (no confident pattern)</span><span class="cov" style="color:var(--warn)">${rows.length - covered} rows</span>`;
+  listEl.appendChild(uncovered);
+
+  const hint = document.querySelector('#discoverPanel .hint');
+  hint.textContent = `Found ${currentPatterns.length} repeating decision patterns covering ${coverage}% of ${rows.length} rows.`;
+
+  document.getElementById('discoverPanel').style.display = 'block';
+  document.getElementById('discoverPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+document.getElementById('compileBtn').addEventListener('click', compilePipeline);
+
+function compilePipeline() {
+  setPill(2,'done'); setPill(3,'active');
+  const wf = WORKFLOWS[selectedWfKey];
+  // deterministic mapping of each pattern + a couple of base steps to library step names
+  const stepPool = ["extract_amount_field","dedupe_by_reference_id","check_threshold","classify_free_text",
+    "lookup_vendor_record","compute_days_since_event","route_to_human_queue","attach_reason_note","apply_decision"];
+  currentPipeline = [];
+  currentPipeline.push(stepPool[3]); // classify_free_text always first
+  currentPatterns.forEach((p, i) => {
+    currentPipeline.push(stepPool[(i*2+4) % stepPool.length]);
+  });
+  currentPipeline.push("attach_reason_note", "apply_decision");
+  currentPipeline = [...new Set(currentPipeline)];
+
+  const listEl = document.getElementById('pipelineList');
+  listEl.innerHTML = '';
+  currentPipeline.forEach((step, i) => {
+    const reused = builtLibrary.has(step);
+    const row = document.createElement('div');
+    row.className = 'pstep';
+    row.innerHTML = `<span class="tag ${reused?'reused':'new'}">${reused?'REUSED':'NEW'}</span><span>${i+1}. ${step.replace(/_/g,' ')}</span>`;
+    listEl.appendChild(row);
+    builtLibrary.add(step);
+  });
+  updateLibrary();
+
+  document.getElementById('pipelinePanel').style.display = 'block';
+  document.getElementById('pipelinePanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+document.getElementById('runBtn').addEventListener('click', runAgent);
+
+function seededConf(seed) {
+  // simple deterministic pseudo-random in [0,1) from a string seed
+  let h = 0;
+  for (let i=0;i<seed.length;i++) h = (h*31 + seed.charCodeAt(i)) >>> 0;
+  return (h % 1000) / 1000;
+}
+
+function runAgent() {
+  setPill(3,'done'); setPill(4,'active');
+  const wf = WORKFLOWS[selectedWfKey];
+  const body = document.getElementById('runBody');
+  body.innerHTML = '';
+  let autoCount = 0, escCount = 0;
+
+  wf.rows.forEach(row => {
+    const note = row.note.toLowerCase();
+    const hit = currentPatterns.find(p => p.match(note));
+    let confidence, label;
+    if (hit) {
+      confidence = 0.80 + seededConf(row.id) * 0.19;
+      label = hit.label;
+    } else {
+      confidence = 0.35 + seededConf(row.id) * 0.4;
+      label = "no confident match";
+    }
+    const pct = Math.round(confidence * 100);
+    const auto = confidence >= 0.80;
+    if (auto) autoCount++; else escCount++;
+
+    const tr = document.createElement('tr');
+    if (!auto) tr.className = 'escalated';
+    tr.innerHTML = `
+      <td>${row.id}</td>
+      <td>${row.note}</td>
+      <td>${label}</td>
+      <td class="conf">${pct}%</td>
+      <td>${auto ? '<span class="badge auto">auto-resolved</span>' : '<span class="badge escalate">→ human review</span>'}</td>`;
+    body.appendChild(tr);
+  });
+
+  const summary = document.getElementById('runSummary');
+  summary.innerHTML = `
+    <div class="stat"><div class="num" style="color:var(--good)">${autoCount}</div><div class="lbl">auto-resolved</div></div>
+    <div class="stat"><div class="num" style="color:var(--warn)">${escCount}</div><div class="lbl">escalated to human</div></div>
+    <div class="stat"><div class="num">${Math.round(100*autoCount/(autoCount+escCount))}%</div><div class="lbl">handled without a person</div></div>`;
+
+  setPill(4,'done');
+  document.getElementById('runPanel').style.display = 'block';
+  document.getElementById('runPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function updateLibrary() {
+  const fill = document.getElementById('libFill');
+  const note = document.getElementById('libNote');
+  const grid = document.getElementById('libGrid');
+  const pct = Math.round(100 * builtLibrary.size / LIBRARY_STEPS.length);
+  fill.style.width = pct + '%';
+  note.textContent = `${builtLibrary.size} of ${LIBRARY_STEPS.length} reusable steps built so far — pick another queue above and watch how many come back marked REUSED.`;
+  grid.innerHTML = '';
+  LIBRARY_STEPS.forEach(s => {
+    const chip = document.createElement('div');
+    chip.className = 'lib-chip' + (builtLibrary.has(s) ? ' have' : '');
+    chip.textContent = s.replace(/_/g,' ');
+    grid.appendChild(chip);
+  });
+}
+
+updateLibrary();
+</script>
+</body>
+</html>

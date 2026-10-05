@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Workmate — ask your team's brain, in chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root {
+    --bg: #11131a;
+    --panel: #171a24;
+    --panel-2: #1d212d;
+    --border: #2a2f3d;
+    --text: #e8eaf2;
+    --muted: #8a8fa3;
+    --accent: #5ee6c9;
+    --accent-2: #7c8bff;
+    --warn: #ffc868;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at 20% -10%, #1c2033 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 28px 40px 10px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 640px;
+    margin-inline: auto;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 20px;
+    padding: 24px 40px 10px;
+    max-width: 1180px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  @media (max-width: 880px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 460px;
+  }
+  .panel-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel-2);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.r { background: #ff6a6a; }
+  .dot.y { background: #ffd56a; }
+  .dot.g { background: #6affa0; }
+  .chan { margin-left: 6px; color: var(--text); font-weight: 600; }
+
+  #feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .msg { display: flex; gap: 10px; animation: rise .25s ease; }
+  @keyframes rise { from { opacity:0; transform: translateY(6px);} to {opacity:1; transform: none;} }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; flex-shrink: 0;
+    color: #0b0d12;
+  }
+  .avatar.user { background: var(--accent-2); color: #fff; }
+  .avatar.bot { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+  .bubble-wrap { max-width: 82%; }
+  .who { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .who small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .bubble {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 13px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .bubble.bot { border-color: rgba(94,230,201,0.25); }
+  .cites {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cite {
+    font-size: 11.5px;
+    color: var(--accent);
+    background: rgba(94,230,201,0.08);
+    border: 1px solid rgba(94,230,201,0.25);
+    border-radius: 999px;
+    padding: 3px 9px;
+    cursor: default;
+  }
+  .typing {
+    display: inline-flex;
+    gap: 4px;
+    padding: 2px 0;
+  }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+    animation: bounce 1.1s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%,80%,100% { transform: translateY(0); opacity:.4; } 40% { transform: translateY(-4px); opacity:1; } }
+
+  #composer {
+    border-top: 1px solid var(--border);
+    padding: 12px 14px;
+    display: flex;
+    gap: 8px;
+    background: var(--panel-2);
+  }
+  #composer input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  #composer input:focus { outline: none; border-color: var(--accent-2); }
+  #composer button {
+    background: var(--accent);
+    border: none;
+    color: #0b0d12;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 0 18px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #composer button:hover { filter: brightness(1.08); }
+  #composer button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .suggestions {
+    padding: 10px 14px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sugg {
+    font-size: 12px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: transparent;
+    padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .sugg:hover { border-color: var(--accent-2); color: var(--text); }
+
+  /* wiki panel */
+  #wiki-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .wiki-entry {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    position: relative;
+  }
+  .wiki-entry.fresh {
+    border-color: rgba(255,200,104,0.55);
+    box-shadow: 0 0 0 1px rgba(255,200,104,0.2) inset;
+  }
+  .wiki-entry h4 {
+    margin: 0 0 4px;
+    font-size: 13.5px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    background: var(--warn);
+    color: #241a05;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .wiki-entry p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .wiki-entry .meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #5f6578;
+  }
+  footer {
+    text-align: center;
+    padding: 18px 20px 26px;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  footer a { color: var(--accent-2); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Work<span>mate</span> — your team's memory, answering in chat</h1>
+  <p>Toy demo: ask a question in the channel and watch it get answered from a live knowledge base — then post a correction and watch that knowledge base update itself, automatically, in real time.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="chan">#eng-questions</span>
+    </div>
+    <div class="suggestions" id="suggestions"></div>
+    <div id="feed"></div>
+    <div id="composer">
+      <input id="input" type="text" placeholder="Ask Workmate anything about the company…" />
+      <button id="send">Send</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <span class="dot g" style="background:var(--accent)"></span>
+      <span class="chan">Company Wiki — auto-synced</span>
+    </div>
+    <div id="wiki-body"></div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by OpenTag (YC S26). Not affiliated with OpenTag.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- synthetic "company knowledge base" ----------------------------
+  var kb = [
+    {
+      id: "deploy-process",
+      title: "Deploy process",
+      body: "Deploys to prod run via the `release` GitHub Action after two approvals. Merges to main auto-deploy to staging; prod pushes are manual and require the on-call lead to click 'promote'.",
+      updated: "Synced from #eng-questions · 14 days ago",
+      tags: ["deploy", "release", "ci", "promote", "staging", "prod", "production", "ship", "deploying"]
+    },
+    {
+      id: "oncall-rotation",
+      title: "On-call rotation",
+      body: "On-call rotates weekly, Monday 10am handoff. Current rotation: Priya → Devon → Marcus → Lina. Escalation after 15 minutes of no ack goes to the eng-leads channel.",
+      updated: "Synced from #eng-questions · 6 days ago",
+      tags: ["oncall", "on-call", "rotation", "escalation", "pager", "incident"]
+    },
+    {
+      id: "pto-policy",
+      title: "PTO policy",
+      body: "Unlimited PTO, but the team norm is to take at least 3 weeks a year and give 1 week notice for anything longer than 3 days. Approvals go through your manager in the #time-off channel.",
+      updated: "Synced from #people-ops · 29 days ago",
+      tags: ["pto", "vacation", "time off", "leave", "holiday"]
+    },
+    {
+      id: "api-rate-limits",
+      title: "Public API rate limits",
+      body: "Free tier: 60 requests/min. Pro tier: 600 requests/min, burst to 1200 for 10s. Enterprise is negotiated per contract. Limits are enforced per API key, not per IP.",
+      updated: "Synced from #api-team · 3 days ago",
+      tags: ["rate limit", "api", "throttle", "quota", "requests"]
+    },
+    {
+      id: "vendor-access",
+      title: "Vendor / third-party access",
+      body: "New vendor tools need a security review ticket before any company data touches them. Security reviews currently take about 5 business days.",
+      updated: "Synced from #security · 21 days ago",
+      tags: ["vendor", "security review", "third party", "tool access", "procurement"]
+    }
+  ];
+
+  var pendingUpdateTopic = null; // set when the bot can't find an answer
+
+  function findAnswer(question) {
+    var q = question.toLowerCase();
+    var best = null, bestScore = 0;
+    kb.forEach(function(entry){
+      var score = 0;
+      entry.tags.forEach(function(tag){
+        if (q.indexOf(tag) !== -1) score += tag.length; // longer, more specific matches win
+      });
+      if (score > bestScore) { bestScore = score; best = entry; }
+    });
+    return bestScore > 0 ? best : null;
+  }
+
+  // ---- DOM plumbing ----------------------------------------------------
+  var feed = document.getElementById("feed");
+  var wikiBody = document.getElementById("wiki-body");
+  var input = document.getElementById("input");
+  var sendBtn = document.getElementById("send");
+  var suggestionsBar = document.getElementById("suggestions");
+
+  function scrollDown(el){ el.scrollTop = el.scrollHeight; }
+
+  function addMessage(role, html, citesArr) {
+    var wrap = document.createElement("div");
+    wrap.className = "msg";
+    var avatar = document.createElement("div");
+    avatar.className = "avatar " + (role === "bot" ? "bot" : "user");
+    avatar.textContent = role === "bot" ? "WM" : "YOU";
+    var bwrap = document.createElement("div");
+    bwrap.className = "bubble-wrap";
+    var who = document.createElement("div");
+    who.className = "who";
+    who.innerHTML = role === "bot" ? "Workmate <small>AI coworker</small>" : "You";
+    var bubble = document.createElement("div");
+    bubble.className = "bubble" + (role === "bot" ? " bot" : "");
+    bubble.innerHTML = html;
+    bwrap.appendChild(who);
+    bwrap.appendChild(bubble);
+    if (citesArr && citesArr.length) {
+      var cites = document.createElement("div");
+      cites.className = "cites";
+      citesArr.forEach(function(c){
+        var span = document.createElement("span");
+        span.className = "cite";
+        span.textContent = "📄 " + c;
+        cites.appendChild(span);
+      });
+      bubble.appendChild(cites);
+    }
+    wrap.appendChild(avatar);
+    wrap.appendChild(bwrap);
+    feed.appendChild(wrap);
+    scrollDown(feed);
+    return wrap;
+  }
+
+  function addTyping() {
+    var wrap = document.createElement("div");
+    wrap.className = "msg";
+    wrap.id = "typing-row";
+    var avatar = document.createElement("div");
+    avatar.className = "avatar bot";
+    avatar.textContent = "WM";
+    var bwrap = document.createElement("div");
+    bwrap.className = "bubble-wrap";
+    var bubble = document.createElement("div");
+    bubble.className = "bubble bot";
+    bubble.innerHTML = '<span class="typing"><span></span><span></span><span></span></span>';
+    bwrap.appendChild(bubble);
+    wrap.appendChild(avatar);
+    wrap.appendChild(bwrap);
+    feed.appendChild(wrap);
+    scrollDown(feed);
+  }
+
+  function removeTyping() {
+    var t = document.getElementById("typing-row");
+    if (t) t.remove();
+  }
+
+  function renderWiki() {
+    wikiBody.innerHTML = "";
+    kb.forEach(function(entry){
+      var card = document.createElement("div");
+      card.className = "wiki-entry" + (entry._fresh ? " fresh" : "");
+      card.id = "wiki-" + entry.id;
+      card.innerHTML =
+        "<h4>" + entry.title + (entry._fresh ? '<span class="badge">just updated</span>' : "") + "</h4>" +
+        "<p>" + entry.body + "</p>" +
+        "<div class='meta'>" + entry.updated + "</div>";
+      wikiBody.appendChild(card);
+    });
+  }
+
+  function flashWikiUpdate(id) {
+    kb.forEach(function(e){ e._fresh = (e.id === id); });
+    renderWiki();
+    var card = document.getElementById("wiki-" + id);
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(function(){
+      kb.forEach(function(e){ e._fresh = false; });
+      renderWiki();
+    }, 4000);
+  }
+
+  // ---- conversation flow ----------------------------------------------
+  function handleQuestion(text) {
+    addMessage("user", escapeHtml(text));
+    input.value = "";
+    sendBtn.disabled = true;
+    addTyping();
+
+    setTimeout(function(){
+      removeTyping();
+      var match = findAnswer(text);
+      if (match) {
+        addMessage("bot", match.body, [match.title]);
+        pendingUpdateTopic = null;
+      } else {
+        addMessage(
+          "bot",
+          "I don't have anything on that in the wiki yet. If you tell me the answer right here, I'll write it up and keep it current for the next person who asks."
+        );
+        pendingUpdateTopic = text;
+      }
+      sendBtn.disabled = false;
+    }, 700 + Math.random() * 500);
+  }
+
+  function handleTeach(text) {
+    addMessage("user", escapeHtml(text));
+    input.value = "";
+    sendBtn.disabled = true;
+    addTyping();
+
+    setTimeout(function(){
+      removeTyping();
+      var newEntry = {
+        id: "new-" + Date.now(),
+        title: titleFromQuestion(pendingUpdateTopic),
+        body: text,
+        updated: "Synced from #eng-questions · just now",
+        tags: tokenize(pendingUpdateTopic)
+      };
+      kb.unshift(newEntry);
+      addMessage(
+        "bot",
+        "Got it — I've written that into the wiki as a new page so it's there next time anyone asks. No one needs to go update a doc by hand.",
+        [newEntry.title]
+      );
+      flashWikiUpdate(newEntry.id);
+      pendingUpdateTopic = null;
+      sendBtn.disabled = false;
+    }, 700 + Math.random() * 400);
+  }
+
+  function titleFromQuestion(q) {
+    var t = q.replace(/[?.!]+$/, "").trim();
+    t = t.charAt(0).toUpperCase() + t.slice(1);
+    if (t.length > 46) t = t.slice(0, 46) + "…";
+    return t;
+  }
+
+  function tokenize(q) {
+    return q.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter(function(w){ return w.length > 3; });
+  }
+
+  function escapeHtml(s) {
+    var div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function submit() {
+    var text = input.value.trim();
+    if (!text) return;
+    if (pendingUpdateTopic) {
+      handleTeach(text);
+    } else {
+      handleQuestion(text);
+    }
+  }
+
+  sendBtn.addEventListener("click", submit);
+  input.addEventListener("keydown", function(e){
+    if (e.key === "Enter") submit();
+  });
+
+  // ---- suggestion chips --------------------------------------------------
+  var sampleQuestions = [
+    "What's our deploy process?",
+    "Who's on-call this week?",
+    "What are the API rate limits?",
+    "How do I get a new vendor approved?",
+    "What's the design review cadence?"
+  ];
+  sampleQuestions.forEach(function(q){
+    var btn = document.createElement("button");
+    btn.className = "sugg";
+    btn.textContent = q;
+    btn.addEventListener("click", function(){
+      input.value = q;
+      submit();
+    });
+    suggestionsBar.appendChild(btn);
+  });
+
+  // ---- seed conversation --------------------------------------------------
+  renderWiki();
+  addMessage("bot", "Hey — I'm Workmate. Ask me anything about the company below, or try a suggestion chip. If I don't know something, teach me and I'll keep the wiki current for everyone else.");
+
+})();
+</script>
+
+</body>
+</html>

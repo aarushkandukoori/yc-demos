@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steadview Clinical — AI Note &amp; Outcomes Demo</title>
+<style>
+  :root{
+    --bg:#f6f7f9;
+    --panel:#ffffff;
+    --border:#e2e5ea;
+    --text:#1c2230;
+    --muted:#5b6474;
+    --accent:#3f5bd9;
+    --accent-dark:#2d41a8;
+    --accent-soft:#eaedfb;
+    --good:#1f9d6b;
+    --mild:#e0a721;
+    --mod:#e07a2c;
+    --severe:#d14b4b;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    line-height:1.45;
+  }
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:18px 32px;
+    background:var(--panel);
+    border-bottom:1px solid var(--border);
+    position:sticky;
+    top:0;
+    z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{
+    width:30px;height:30px;border-radius:8px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+    display:flex;align-items:center;justify-content:center;
+    color:white;font-weight:700;font-size:14px;
+  }
+  .brand .name{font-weight:700;font-size:17px;letter-spacing:-0.01em;}
+  .brand .tag{font-size:12px;color:var(--muted);margin-left:8px;}
+  nav{display:flex;gap:6px;}
+  nav button{
+    border:none;background:transparent;padding:9px 16px;
+    border-radius:8px;font-size:14px;font-weight:600;color:var(--muted);
+    cursor:pointer;transition:all .15s;
+  }
+  nav button.active{background:var(--accent-soft);color:var(--accent-dark);}
+  nav button:hover{background:#f0f1f5;}
+  main{max-width:1180px;margin:0 auto;padding:28px 32px 60px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start;}
+  .panel{
+    background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:20px;
+  }
+  .panel h3{margin:0 0 14px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;}
+  select, textarea{
+    width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;
+    font-size:14px;font-family:inherit;color:var(--text);background:#fbfbfc;
+  }
+  textarea{resize:vertical;min-height:160px;margin-top:4px;}
+  .patient-card{margin-top:16px;padding:14px;background:#fafbfd;border:1px solid var(--border);border-radius:10px;}
+  .patient-card .pname{font-weight:700;font-size:15px;}
+  .patient-card .pmeta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .sparkline-wrap{margin-top:14px;}
+  .sparkline-wrap .lbl{font-size:12px;color:var(--muted);margin-bottom:4px;}
+  button.primary{
+    margin-top:16px;width:100%;background:var(--accent);color:white;border:none;
+    padding:12px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;
+    transition:background .15s;
+  }
+  button.primary:hover{background:var(--accent-dark);}
+  .output{margin-top:0;}
+  .placeholder{
+    display:flex;align-items:center;justify-content:center;min-height:300px;
+    color:var(--muted);font-size:14px;border:1px dashed var(--border);border-radius:var(--radius);
+    background:var(--panel);
+  }
+  .note-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px;}
+  .note-card h2{margin:0 0 4px;font-size:18px;}
+  .note-sub{font-size:12px;color:var(--muted);margin-bottom:16px;}
+  .note-section{margin-bottom:14px;}
+  .note-section .k{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--accent-dark);text-transform:uppercase;margin-bottom:4px;}
+  .note-section .v{font-size:14px;}
+  .index-row{display:flex;gap:16px;align-items:center;margin:18px 0;padding:14px;border-radius:10px;background:#fafbfd;border:1px solid var(--border);}
+  .index-badge{
+    width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:18px;color:white;flex-shrink:0;
+  }
+  .index-text .band{font-weight:700;font-size:14px;}
+  .index-text .note{font-size:12px;color:var(--muted);margin-top:2px;}
+  .risk-flag{
+    margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;
+  }
+  .risk-flag.ok{background:#eaf7f1;color:var(--good);}
+  .risk-flag.warn{background:#fdeeee;color:var(--severe);}
+  .disclaimer{font-size:11px;color:var(--muted);margin-top:14px;font-style:italic;}
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+  .stat .num{font-size:24px;font-weight:800;}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
+  .chart-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
+  svg{width:100%;display:block;}
+  .axis-label{font-size:10px;fill:var(--muted);}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:8px;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  footer{
+    text-align:center;padding:22px;font-size:12px;color:var(--muted);
+    border-top:1px solid var(--border);background:var(--panel);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark">SV</div>
+    <div class="name">Steadview Clinical</div>
+    <div class="tag">one network, every session measured</div>
+  </div>
+  <nav>
+    <button class="active" data-view="console">Clinician Console</button>
+    <button data-view="network">Network Outcomes</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- CLINICIAN CONSOLE -->
+  <div class="view active" id="view-console">
+    <div class="grid">
+      <div class="panel">
+        <h3>Session</h3>
+        <label for="patientSelect">Patient</label>
+        <select id="patientSelect"></select>
+        <div class="patient-card" id="patientCard"></div>
+
+        <div style="margin-top:16px;">
+          <label for="transcript">Session transcript (editable)</label>
+          <textarea id="transcript"></textarea>
+        </div>
+        <button class="primary" id="generateBtn">Generate clinical note</button>
+
+        <div class="sparkline-wrap">
+          <div class="lbl">Symptom index — last sessions</div>
+          <svg id="patientSparkline" viewBox="0 0 280 70" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+
+      <div class="output" id="outputArea">
+        <div class="placeholder">Select a patient, then generate a note to see the AI draft and updated outcome score.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NETWORK OUTCOMES -->
+  <div class="view" id="view-network">
+    <div class="stat-row">
+      <div class="stat"><div class="num" id="statSites">6</div><div class="lbl">Affiliated practices</div></div>
+      <div class="stat"><div class="num" id="statPatients">1,284</div><div class="lbl">Active patients tracked</div></div>
+      <div class="stat"><div class="num" id="statTurnaround">38s</div><div class="lbl">Avg. AI note turnaround</div></div>
+      <div class="stat"><div class="num" id="statAvgIndex">—</div><div class="lbl">Network avg. symptom index</div></div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="panel">
+        <h3>Network symptom index — 8 week trend</h3>
+        <svg id="networkTrend" viewBox="0 0 560 220" preserveAspectRatio="none"></svg>
+        <div class="legend"><span><span class="dot" style="background:var(--accent);"></span>network average</span></div>
+      </div>
+      <div class="panel">
+        <h3>Average index by site</h3>
+        <svg id="siteBars" viewBox="0 0 300 220" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Allia Health (YC S26). Not affiliated with Allia Health.
+</footer>
+
+<script>
+/* ---------- synthetic data ---------- */
+
+const patients = [
+  {
+    id: "p1", name: "J. Alvarez", age: 34, clinician: "Dr. Chen",
+    history: [11, 14, 13, 9],
+    transcript: "I've been having a really hard time sleeping, maybe three or four hours a night. During the day I feel exhausted and I don't have energy for anything. I used to like painting but I haven't touched my brushes in weeks, nothing really interests me anymore. My appetite has been off too, I forget to eat."
+  },
+  {
+    id: "p2", name: "M. Okafor", age: 27, clinician: "Dr. Patel",
+    history: [18, 16, 15],
+    transcript: "Work has been overwhelming, I feel anxious basically all the time, my heart races before meetings and I get this panic feeling I can't shake. I'm also still pretty down most days, sometimes it feels hopeless, like nothing I do matters. I've been more irritable with my partner too."
+  },
+  {
+    id: "p3", name: "R. Nguyen", age: 45, clinician: "Dr. Chen",
+    history: [6, 5, 7, 4, 5],
+    transcript: "Honestly this week was better. I slept okay, got through my to-do list, went for a run twice. Still a bit distracted at work and some days I feel a little low in the afternoon, but nothing like before. Appetite is normal."
+  }
+];
+
+const sites = [
+  { name: "Riverbend", avg: 8.4 },
+  { name: "Harborview", avg: 11.2 },
+  { name: "Clearfield", avg: 9.9 },
+  { name: "Northgate", avg: 13.1 },
+  { name: "Oakline", avg: 7.6 },
+  { name: "Summit", avg: 10.3 }
+];
+
+const networkTrendData = [12.8, 12.1, 12.4, 11.6, 11.0, 10.5, 10.8, 10.1];
+
+/* ---------- symptom keyword model ---------- */
+
+const KEYWORDS = {
+  sleep:        { terms: ["sleep", "insomnia", "awake", "can't sleep", "sleeping"], weight: 1 },
+  mood:         { terms: ["sad", "down", "depressed", "low", "hopeless", "cry"], weight: 1 },
+  anxiety:      { terms: ["anxious", "anxiety", "worry", "panic", "nervous", "racing"], weight: 1 },
+  anhedonia:    { terms: ["no interest", "don't enjoy", "nothing interests", "haven't touched", "don't have energy", "no energy"], weight: 1 },
+  appetite:     { terms: ["appetite", "eating", "forget to eat", "weight"], weight: 1 },
+  concentration:{ terms: ["distracted", "can't focus", "concentrate", "focus"], weight: 1 },
+  irritability: { terms: ["irritable", "irritated", "snapping", "short-tempered"], weight: 1 },
+  risk:         { terms: ["hopeless", "worthless", "give up", "end it", "no point"], weight: 0 } // flag only
+};
+
+function analyzeTranscript(text) {
+  const lower = text.toLowerCase();
+  const hits = {};
+  let score = 0;
+  for (const [category, def] of Object.entries(KEYWORDS)) {
+    const found = def.terms.some(t => lower.includes(t));
+    hits[category] = found;
+    if (found && category !== "risk") score += 4; // demo-only scaling
+  }
+  score = Math.min(27, score);
+  return { hits, score };
+}
+
+function bandForScore(score) {
+  if (score <= 4) return { label: "Minimal", color: "var(--good)" };
+  if (score <= 9) return { label: "Mild", color: "var(--mild)" };
+  if (score <= 14) return { label: "Moderate", color: "var(--mod)" };
+  if (score <= 19) return { label: "Moderately severe", color: "var(--mod)" };
+  return { label: "Severe", color: "var(--severe)" };
+}
+
+function buildNote(patient, analysis) {
+  const present = Object.entries(analysis.hits)
+    .filter(([k, v]) => v && k !== "risk")
+    .map(([k]) => k);
+
+  const behaviorList = present.length
+    ? present.join(", ")
+    : "stable mood and functioning, no acute symptom themes identified";
+
+  const interventions = [];
+  if (analysis.hits.sleep) interventions.push("sleep hygiene psychoeducation");
+  if (analysis.hits.mood || analysis.hits.anhedonia) interventions.push("behavioral activation");
+  if (analysis.hits.anxiety) interventions.push("diaphragmatic breathing and cognitive restructuring");
+  if (analysis.hits.concentration) interventions.push("attention and task-pacing strategies");
+  if (interventions.length === 0) interventions.push("supportive reflection and strengths-based reinforcement");
+
+  const response = present.length > 2
+    ? "Client engaged actively and demonstrated fair insight into symptom patterns; some ambivalence about behavior change noted."
+    : "Client engaged well, demonstrated good insight, and reported mild-to-no distress during session.";
+
+  const plan = analysis.hits.risk
+    ? "Safety plan reviewed collaboratively; client denied acute intent; follow-up scheduled in 1 week; demo heuristic flag only, not a clinical risk determination."
+    : "Continue weekly sessions; reassess symptom index at next visit; no safety concerns identified.";
+
+  return {
+    behavior: `Client presented for scheduled session and reported ${behaviorList}.`,
+    intervention: `Clinician utilized ${interventions.join(", ")}.`,
+    response,
+    plan,
+    riskFlagged: analysis.hits.risk
+  };
+}
+
+/* ---------- SVG chart helpers ---------- */
+
+function sparkline(svgEl, values, w, h) {
+  svgEl.innerHTML = "";
+  if (values.length < 2) return;
+  const max = 27, min = 0;
+  const stepX = w / (values.length - 1);
+  const pts = values.map((v, i) => {
+    const x = i * stepX;
+    const y = h - ((v - min) / (max - min)) * h;
+    return [x, y];
+  });
+  const path = pts.map(p => p.join(",")).join(" ");
+  const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  poly.setAttribute("points", path);
+  poly.setAttribute("fill", "none");
+  poly.setAttribute("stroke", "#3f5bd9");
+  poly.setAttribute("stroke-width", "2.5");
+  poly.setAttribute("stroke-linecap", "round");
+  poly.setAttribute("stroke-linejoin", "round");
+  svgEl.appendChild(poly);
+  pts.forEach(([x, y], i) => {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", i === pts.length - 1 ? 4 : 2.5);
+    c.setAttribute("fill", i === pts.length - 1 ? "#2d41a8" : "#9aa7ef");
+    svgEl.appendChild(c);
+  });
+}
+
+function lineChart(svgEl, values, w, h, labelEvery) {
+  svgEl.innerHTML = "";
+  const max = Math.max(...values) + 2, min = Math.max(0, Math.min(...values) - 2);
+  const padL = 30, padB = 20, padT = 10, padR = 10;
+  const iw = w - padL - padR, ih = h - padT - padB;
+  const stepX = iw / (values.length - 1);
+  const pts = values.map((v, i) => [padL + i * stepX, padT + ih - ((v - min) / (max - min)) * ih]);
+
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + (ih / 4) * g;
+    const gridLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    gridLine.setAttribute("x1", padL); gridLine.setAttribute("x2", w - padR);
+    gridLine.setAttribute("y1", y); gridLine.setAttribute("y2", y);
+    gridLine.setAttribute("stroke", "#eef0f4"); gridLine.setAttribute("stroke-width", "1");
+    svgEl.appendChild(gridLine);
+    const val = (max - (g / 4) * (max - min)).toFixed(0);
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("x", 4); txt.setAttribute("y", y + 3);
+    txt.setAttribute("class", "axis-label");
+    txt.textContent = val;
+    svgEl.appendChild(txt);
+  }
+
+  const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  poly.setAttribute("points", pts.map(p => p.join(",")).join(" "));
+  poly.setAttribute("fill", "none");
+  poly.setAttribute("stroke", "#3f5bd9");
+  poly.setAttribute("stroke-width", "2.5");
+  svgEl.appendChild(poly);
+
+  pts.forEach(([x, y], i) => {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 3);
+    c.setAttribute("fill", "#2d41a8");
+    svgEl.appendChild(c);
+    if (i % labelEvery === 0 || i === pts.length - 1) {
+      const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      lbl.setAttribute("x", x); lbl.setAttribute("y", h - 4);
+      lbl.setAttribute("class", "axis-label");
+      lbl.setAttribute("text-anchor", "middle");
+      lbl.textContent = "wk" + (i + 1);
+      svgEl.appendChild(lbl);
+    }
+  });
+}
+
+function barChart(svgEl, data, w, h) {
+  svgEl.innerHTML = "";
+  const padL = 70, padB = 20, padT = 10, padR = 10;
+  const iw = w - padL - padR, ih = h - padT - padB;
+  const max = Math.max(...data.map(d => d.avg)) + 2;
+  const barH = ih / data.length - 8;
+
+  data.forEach((d, i) => {
+    const y = padT + i * (ih / data.length) + 4;
+    const barW = (d.avg / max) * iw;
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", padL); rect.setAttribute("y", y);
+    rect.setAttribute("width", barW); rect.setAttribute("height", barH);
+    rect.setAttribute("rx", 4);
+    rect.setAttribute("fill", d.avg > 11 ? "#e07a2c" : "#3f5bd9");
+    svgEl.appendChild(rect);
+
+    const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    lbl.setAttribute("x", padL - 8); lbl.setAttribute("y", y + barH / 2 + 4);
+    lbl.setAttribute("class", "axis-label");
+    lbl.setAttribute("text-anchor", "end");
+    lbl.textContent = d.name;
+    svgEl.appendChild(lbl);
+
+    const val = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    val.setAttribute("x", padL + barW + 6); val.setAttribute("y", y + barH / 2 + 4);
+    val.setAttribute("class", "axis-label");
+    val.textContent = d.avg.toFixed(1);
+    svgEl.appendChild(val);
+  });
+}
+
+/* ---------- app state & rendering ---------- */
+
+let currentPatientId = patients[0].id;
+
+function getPatient(id) { return patients.find(p => p.id === id); }
+
+function renderPatientSelect() {
+  const sel = document.getElementById("patientSelect");
+  sel.innerHTML = patients.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+  sel.value = currentPatientId;
+}
+
+function renderPatientCard() {
+  const p = getPatient(currentPatientId);
+  document.getElementById("patientCard").innerHTML = `
+    <div class="pname">${p.name}</div>
+    <div class="pmeta">Age ${p.age} · ${p.clinician}</div>
+    <div class="pmeta">Sessions on file: ${p.history.length}</div>
+  `;
+  document.getElementById("transcript").value = p.transcript;
+  sparkline(document.getElementById("patientSparkline"), p.history, 280, 55);
+  document.getElementById("outputArea").innerHTML =
+    '<div class="placeholder">Click "Generate clinical note" to run the AI draft on this transcript.</div>';
+}
+
+function renderOutput(patient, analysis, note) {
+  const band = bandForScore(analysis.score);
+  document.getElementById("outputArea").innerHTML = `
+    <div class="note-card">
+      <h2>AI-drafted clinical note</h2>
+      <div class="note-sub">${patient.name} · BIRP format · generated in 0.4s (demo)</div>
+
+      <div class="index-row">
+        <div class="index-badge" style="background:${band.color};">${analysis.score}</div>
+        <div class="index-text">
+          <div class="band" style="color:${band.color};">${band.label}</div>
+          <div class="note">Demo symptom index (0–27 scale) — not a validated clinical instrument</div>
+        </div>
+      </div>
+
+      <div class="note-section"><div class="k">Behavior</div><div class="v">${note.behavior}</div></div>
+      <div class="note-section"><div class="k">Intervention</div><div class="v">${note.intervention}</div></div>
+      <div class="note-section"><div class="k">Response</div><div class="v">${note.response}</div></div>
+      <div class="note-section"><div class="k">Plan</div><div class="v">${note.plan}</div></div>
+
+      <div class="risk-flag ${note.riskFlagged ? "warn" : "ok"}">
+        ${note.riskFlagged ? "⚠ Risk language detected — flagged for clinician review" : "✓ No risk language detected in transcript"}
+      </div>
+      <div class="disclaimer">Synthetic demo output. Keyword heuristics only — not a real clinical NLP model and not for clinical use.</div>
+    </div>
+  `;
+}
+
+document.getElementById("patientSelect").addEventListener("change", (e) => {
+  currentPatientId = e.target.value;
+  renderPatientCard();
+});
+
+document.getElementById("generateBtn").addEventListener("click", () => {
+  const patient = getPatient(currentPatientId);
+  const text = document.getElementById("transcript").value;
+  const analysis = analyzeTranscript(text);
+  const note = buildNote(patient, analysis);
+  renderOutput(patient, analysis, note);
+
+  patient.history.push(analysis.score);
+  if (patient.history.length > 8) patient.history.shift();
+  sparkline(document.getElementById("patientSparkline"), patient.history, 280, 55);
+
+  networkTrendData.push(Number((networkTrendData[networkTrendData.length - 1] * 0.9 + analysis.score * 0.1).toFixed(1)));
+  if (networkTrendData.length > 8) networkTrendData.shift();
+  renderNetworkView();
+});
+
+/* ---------- nav ---------- */
+
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    document.getElementById("view-" + btn.dataset.view).classList.add("active");
+    if (btn.dataset.view === "network") renderNetworkView();
+  });
+});
+
+function renderNetworkView() {
+  lineChart(document.getElementById("networkTrend"), networkTrendData, 560, 220, 1);
+  barChart(document.getElementById("siteBars"), sites, 300, 220);
+  const avg = (networkTrendData.reduce((a, b) => a + b, 0) / networkTrendData.length).toFixed(1);
+  document.getElementById("statAvgIndex").textContent = avg;
+}
+
+/* ---------- init ---------- */
+
+renderPatientSelect();
+renderPatientCard();
+renderNetworkView();
+</script>
+
+</body>
+</html>
