@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScrapSort — Magnetic Separation Demo</title>
+<style>
+  :root{
+    --bg:#15120f;
+    --panel:#1f1a15;
+    --panel-2:#262019;
+    --copper:#c8773a;
+    --copper-light:#e3975c;
+    --teal:#4fb0a1;
+    --text:#f1e9df;
+    --dim:#a89a89;
+    --reject:#7a4a3a;
+    --accept:#4fb0a1;
+    --border:#3a2f25;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:radial-gradient(ellipse at top, #231c16 0%, var(--bg) 70%);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 16px 0;
+  }
+  header{
+    max-width:920px;
+    text-align:center;
+    margin-bottom:22px;
+  }
+  header .tag{
+    display:inline-block;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--copper-light);
+    border:1px solid var(--border);
+    padding:4px 10px;
+    border-radius:20px;
+    margin-bottom:14px;
+  }
+  h1{
+    font-size:32px;
+    margin:0 0 10px;
+    letter-spacing:-0.01em;
+  }
+  h1 span{color:var(--copper-light);}
+  header p{
+    color:var(--dim);
+    font-size:15px;
+    line-height:1.55;
+    max-width:680px;
+    margin:0 auto;
+  }
+  .stage{
+    width:100%;
+    max-width:1020px;
+    display:grid;
+    grid-template-columns:1.15fr 1fr;
+    gap:22px;
+    margin-top:24px;
+  }
+  @media (max-width:860px){ .stage{grid-template-columns:1fr;} }
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+  }
+  .panel h2{
+    margin:0 0 4px;
+    font-size:16px;
+    letter-spacing:.02em;
+  }
+  .panel .sub{
+    color:var(--dim);
+    font-size:12.5px;
+    margin-bottom:14px;
+  }
+  canvas{
+    width:100%;
+    display:block;
+    border-radius:10px;
+    background:#0f0c09;
+    border:1px solid var(--border);
+  }
+  .controls{
+    margin-top:14px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .row label{
+    font-size:12.5px;
+    color:var(--dim);
+    min-width:122px;
+  }
+  input[type=range]{
+    flex:1;
+    accent-color:var(--copper);
+  }
+  .valbadge{
+    font-size:12.5px;
+    font-weight:600;
+    min-width:48px;
+    text-align:right;
+    color:var(--copper-light);
+  }
+  .btnrow{
+    display:flex;
+    gap:10px;
+    margin-top:8px;
+  }
+  button{
+    font-family:inherit;
+    font-size:13.5px;
+    font-weight:600;
+    padding:10px 16px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    cursor:pointer;
+    background:var(--panel-2);
+    color:var(--text);
+    transition:transform .08s ease, border-color .15s ease;
+  }
+  button:hover{border-color:var(--copper);}
+  button:active{transform:scale(.97);}
+  button.primary{
+    background:linear-gradient(180deg,var(--copper-light),var(--copper));
+    color:#1a1309;
+    border:none;
+  }
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .legend{
+    display:flex;
+    gap:16px;
+    margin-top:10px;
+    font-size:11.5px;
+    color:var(--dim);
+  }
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  .stats{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:16px;
+  }
+  .stat{
+    background:#161210;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 12px;
+  }
+  .stat .k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;}
+  .stat .v{font-size:19px;font-weight:700;margin-top:2px;}
+  .stat .v.accept{color:var(--accept);}
+  .stat .v.reject{color:var(--reject);}
+
+  /* output card */
+  .magnet-card{
+    display:flex;
+    flex-direction:column;
+    height:100%;
+  }
+  .spec-list{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    margin-top:6px;
+  }
+  .spec{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    border-bottom:1px dashed var(--border);
+    padding-bottom:8px;
+  }
+  .spec .label{font-size:12.5px;color:var(--dim);}
+  .spec .value{font-size:16px;font-weight:700;color:var(--copper-light);}
+  .grade-hero{
+    text-align:center;
+    margin:14px 0 18px;
+    padding:18px;
+    border-radius:10px;
+    background:#161210;
+    border:1px solid var(--border);
+  }
+  .grade-hero .gname{
+    font-size:38px;
+    font-weight:800;
+    letter-spacing:-0.02em;
+    color:var(--copper-light);
+  }
+  .grade-hero .gdesc{
+    font-size:12px;
+    color:var(--dim);
+    margin-top:4px;
+  }
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:11.5px;
+    font-weight:700;
+    padding:6px 12px;
+    border-radius:20px;
+    margin-top:14px;
+  }
+  .badge.pass{background:rgba(79,176,161,.15); color:var(--teal); border:1px solid rgba(79,176,161,.4);}
+  .badge.fail{background:rgba(122,74,58,.2); color:#e08a6a; border:1px solid rgba(122,74,58,.5);}
+  .placeholder{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    color:var(--dim);
+    font-size:13px;
+    padding:30px 10px;
+  }
+  footer{
+    width:100%;
+    text-align:center;
+    color:var(--dim);
+    font-size:11.5px;
+    padding:36px 10px 22px;
+    border-top:1px solid var(--border);
+    margin-top:36px;
+  }
+  footer a{color:var(--copper-light);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tag">toy process simulator</div>
+  <h1>ScrapSort: watch a magnet <span>sort scrap by grade</span></h1>
+  <p>
+    Drop a batch of shredded, mixed-purity metal into the separation column.
+    Dial the field strength up or down and watch how a magnetic field alone
+    splits high rare-earth-content fragments from low-grade junk — the same
+    core trick that turns a pile of e-waste and dead motors into feedstock
+    for a brand-new permanent magnet. Everything below is simulated with
+    synthetic data, entirely in your browser.
+  </p>
+</header>
+
+<div class="stage">
+
+  <div class="panel">
+    <h2>Separation column</h2>
+    <div class="sub">Synthetic scrap batch · purity values are randomly generated on each run</div>
+    <canvas id="sortCanvas" width="560" height="380"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--accept)"></span>accepted (high purity)</span>
+      <span><span class="dot" style="background:var(--reject)"></span>rejected (low purity)</span>
+      <span><span class="dot" style="background:#cfa876"></span>falling scrap</span>
+    </div>
+
+    <div class="controls">
+      <div class="row">
+        <label for="field">Field strength</label>
+        <input type="range" id="field" min="0" max="100" value="55">
+        <span class="valbadge" id="fieldVal">55%</span>
+      </div>
+      <div class="row">
+        <label for="batchSize">Batch size</label>
+        <input type="range" id="batchSize" min="20" max="120" value="60">
+        <span class="valbadge" id="batchVal">60</span>
+      </div>
+      <div class="btnrow">
+        <button class="primary" id="runBtn">Drop batch</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="k">Yield (accepted)</div><div class="v accept" id="yieldStat">—</div></div>
+      <div class="stat"><div class="k">Avg. purity accepted</div><div class="v" id="purityStat">—</div></div>
+      <div class="stat"><div class="k">Rejected</div><div class="v reject" id="rejectStat">—</div></div>
+      <div class="stat"><div class="k">Throughput time</div><div class="v" id="timeStat">—</div></div>
+    </div>
+  </div>
+
+  <div class="panel magnet-card">
+    <h2>Resulting magnet</h2>
+    <div class="sub">Sintered from whatever your sort accepted</div>
+    <div id="magnetOutput" style="flex:1; display:flex; flex-direction:column;">
+      <div class="placeholder">Drop a batch and sinter the accepted material to see what grade of magnet it produces.</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Mass Magnetics (YC S26). Not affiliated with Mass Magnetics.
+</footer>
+
+<script>
+(function(){
+  const canvas = document.getElementById('sortCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const fieldSlider = document.getElementById('field');
+  const fieldVal = document.getElementById('fieldVal');
+  const batchSlider = document.getElementById('batchSize');
+  const batchVal = document.getElementById('batchVal');
+  const runBtn = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const yieldStat = document.getElementById('yieldStat');
+  const purityStat = document.getElementById('purityStat');
+  const rejectStat = document.getElementById('rejectStat');
+  const timeStat = document.getElementById('timeStat');
+  const magnetOutput = document.getElementById('magnetOutput');
+
+  fieldSlider.addEventListener('input', () => fieldVal.textContent = fieldSlider.value + '%');
+  batchSlider.addEventListener('input', () => batchVal.textContent = batchSlider.value);
+
+  // magnet geometry: a horizontal "field bar" partway down the column that deflects particles
+  const magnetY = H * 0.42;
+  const chuteSplitX = W * 0.62; // divider between accept (right) and reject (left) bins at bottom
+  const binTopY = H * 0.82;
+
+  let particles = [];
+  let running = false;
+  let startTime = null;
+  let accepted = 0, rejected = 0, acceptedPuritySum = 0;
+  let settled = 0;
+  let batchTotal = 0;
+  let rafId = null;
+
+  function resetSim(){
+    particles = [];
+    running = false;
+    accepted = 0; rejected = 0; acceptedPuritySum = 0; settled = 0; batchTotal = 0;
+    yieldStat.textContent = '—';
+    purityStat.textContent = '—';
+    rejectStat.textContent = '—';
+    timeStat.textContent = '—';
+    magnetOutput.innerHTML = '<div class="placeholder">Drop a batch and sinter the accepted material to see what grade of magnet it produces.</div>';
+    draw();
+  }
+
+  function spawnBatch(){
+    const n = parseInt(batchSlider.value, 10);
+    batchTotal = n;
+    particles = [];
+    for(let i=0;i<n;i++){
+      // purity: bimodal-ish distribution so sorting has something real to separate
+      let base = Math.random();
+      let purity = base < 0.55
+        ? 55 + Math.random()*45   // decent-to-high purity cluster (magnets, motors)
+        : Math.random()*45;       // junk / low rare-earth cluster
+      particles.push({
+        x: W*0.15 + Math.random()*W*0.4,
+        y: -Math.random()*200 - 10,
+        vy: 1.4 + Math.random()*0.8,
+        vx: 0,
+        purity: Math.round(purity),
+        r: 4.5 + (purity/100)*2.5,
+        settled:false,
+        color: null
+      });
+    }
+    accepted = 0; rejected = 0; acceptedPuritySum = 0; settled = 0;
+    startTime = performance.now();
+  }
+
+  function purityColor(p){
+    // copper-ish tones for raw/falling scrap, fixed in draw() for bins
+    const t = p/100;
+    const r = Math.round(160 + t*60);
+    const g = Math.round(110 + t*70);
+    const b = Math.round(70 + t*40);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function step(){
+    const field = parseInt(fieldSlider.value,10)/100; // 0..1
+    const threshold = 100 - field*85; // higher field -> lower purity threshold needed to pull... see below
+    // Actual separation rule: a particle gets deflected toward "accept" chute
+    // if its purity * field exceeds a fixed pull requirement, with some noise.
+    const pullRequirement = 42;
+
+    let allSettled = true;
+    for(const p of particles){
+      if(p.settled){ continue; }
+      allSettled = false;
+      if(p.y < magnetY){
+        p.y += p.vy;
+      } else if (p.y < binTopY) {
+        // inside field zone: compute deflection once purity crosses pull strength
+        const pull = p.purity * field + (Math.random()*6-3);
+        const target = pull > pullRequirement ? (chuteSplitX + 70) : (chuteSplitX - 140);
+        p.vx += (target - p.x) * 0.0022;
+        p.vx *= 0.98;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy = Math.min(p.vy + 0.03, 3.2);
+      } else {
+        p.y = binTopY;
+        p.settled = true;
+        settled++;
+        const isAccept = p.x >= chuteSplitX;
+        if(isAccept){ accepted++; acceptedPuritySum += p.purity; p.color = 'var(--accept)'; }
+        else { rejected++; p.color = 'var(--reject)'; }
+      }
+    }
+
+    draw();
+
+    if(!allSettled){
+      rafId = requestAnimationFrame(step);
+    } else {
+      running = false;
+      runBtn.disabled = false;
+      finishRun();
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // chute walls
+    ctx.strokeStyle = '#3a2f25';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(chuteSplitX, magnetY);
+    ctx.lineTo(chuteSplitX, binTopY);
+    ctx.stroke();
+
+    // magnet field bar
+    const field = parseInt(fieldSlider.value,10)/100;
+    ctx.fillStyle = `rgba(200,119,58,${0.15+field*0.35})`;
+    ctx.fillRect(0, magnetY-6, W, 12);
+    ctx.fillStyle = '#e3975c';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('magnetic field zone', 10, magnetY-12);
+
+    // bin labels
+    ctx.fillStyle = '#7a4a3a';
+    ctx.fillRect(10, binTopY+6, chuteSplitX-20, 8);
+    ctx.fillStyle = '#4fb0a1';
+    ctx.fillRect(chuteSplitX+10, binTopY+6, W-chuteSplitX-20, 8);
+    ctx.fillStyle = '#a89a89';
+    ctx.fillText('reject bin', 10, binTopY+28);
+    ctx.fillText('accept bin', chuteSplitX+10, binTopY+28);
+
+    for(const p of particles){
+      ctx.beginPath();
+      ctx.arc(p.x, Math.min(p.y, binTopY-2), p.r, 0, Math.PI*2);
+      ctx.fillStyle = p.settled ? (p.x >= chuteSplitX ? '#4fb0a1' : '#7a4a3a') : purityColor(p.purity);
+      ctx.fill();
+    }
+  }
+
+  function finishRun(){
+    const total = batchTotal;
+    const yieldPct = total ? Math.round((accepted/total)*100) : 0;
+    const avgPurity = accepted ? Math.round(acceptedPuritySum/accepted) : 0;
+    const elapsed = ((performance.now()-startTime)/1000).toFixed(1);
+
+    yieldStat.textContent = yieldPct + '%';
+    purityStat.textContent = avgPurity + '%';
+    rejectStat.textContent = rejected + ' pcs';
+    timeStat.textContent = elapsed + 's';
+
+    renderMagnetOutput(accepted, avgPurity, total);
+  }
+
+  function renderMagnetOutput(acceptedCount, avgPurity, total){
+    if(acceptedCount < 3){
+      magnetOutput.innerHTML = '<div class="placeholder">Not enough high-grade material survived that sort. Lower the field strength a little so more borderline fragments get pulled into the accept bin, then try again.</div>';
+      return;
+    }
+
+    // toy mapping from accepted purity -> magnet performance numbers
+    const grade = avgPurity >= 88 ? 'N52' : avgPurity >= 78 ? 'N48' : avgPurity >= 66 ? 'N42' : avgPurity >= 50 ? 'N35' : 'N28';
+    const mgoe = (avgPurity*0.52).toFixed(1); // energy product, synthetic scaling
+    const pullForce = Math.round(avgPurity*4.1 + acceptedCount*0.6); // lbs, synthetic
+    const residualScrapPct = Math.round((total-acceptedCount)/total*100);
+    const dfarsPass = avgPurity >= 60; // toy compliance rule: needs a clean enough feed to stay domestic-process viable
+
+    magnetOutput.innerHTML = `
+      <div class="grade-hero">
+        <div class="gname">${grade}</div>
+        <div class="gdesc">sintered from ${acceptedCount} of ${total} accepted fragments</div>
+      </div>
+      <div class="spec-list">
+        <div class="spec"><span class="label">Energy product</span><span class="value">${mgoe} MGOe</span></div>
+        <div class="spec"><span class="label">Estimated pull force</span><span class="value">${pullForce} lbs</span></div>
+        <div class="spec"><span class="label">Feed purity used</span><span class="value">${avgPurity}%</span></div>
+        <div class="spec"><span class="label">Scrap left on the floor</span><span class="value">${residualScrapPct}%</span></div>
+      </div>
+      <div style="text-align:center;">
+        <div class="badge ${dfarsPass ? 'pass' : 'fail'}">
+          ${dfarsPass ? '✓ domestic feedstock viable' : '✗ feed too impure for this process'}
+        </div>
+      </div>
+    `;
+  }
+
+  runBtn.addEventListener('click', () => {
+    if(running) return;
+    running = true;
+    runBtn.disabled = true;
+    magnetOutput.innerHTML = '<div class="placeholder">Sorting in progress…</div>';
+    yieldStat.textContent = '—';
+    purityStat.textContent = '—';
+    rejectStat.textContent = '—';
+    timeStat.textContent = '—';
+    spawnBatch();
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(step);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    cancelAnimationFrame(rafId);
+    resetSim();
+  });
+
+  resetSim();
+})();
+</script>
+
+</body>
+</html>

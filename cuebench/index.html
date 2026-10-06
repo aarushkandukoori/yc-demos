@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Measurement Budget — a toy RL environment</title>
+<style>
+  :root{
+    --bg:#0b1018;
+    --panel:#121a28;
+    --panel2:#0e1522;
+    --line:#223148;
+    --text:#dce6f2;
+    --muted:#7f93ac;
+    --accent:#4fd1c5;
+    --accent2:#f6ad55;
+    --danger:#f56565;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 800px at 80% -10%, #16233a 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.5;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:28px 20px 60px;}
+  header h1{
+    font-size:26px; margin:0 0 6px; letter-spacing:-0.01em;
+  }
+  header p.tag{
+    margin:0 0 18px; color:var(--muted); font-size:15px; max-width:720px;
+  }
+  .badge{
+    display:inline-block; font-size:11px; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--accent); background:rgba(79,209,197,0.1); border:1px solid rgba(79,209,197,0.35);
+    padding:3px 8px; border-radius:999px; margin-bottom:12px;
+  }
+  .card{
+    background:linear-gradient(180deg, var(--panel), var(--panel2));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 20px; margin-bottom:18px;
+  }
+  .card h2{font-size:15px; margin:0 0 4px; color:var(--text);}
+  .card .sub{color:var(--muted); font-size:13px; margin:0 0 14px;}
+  .grid{
+    display:grid; grid-template-columns: 1.15fr 0.85fr; gap:18px;
+  }
+  @media (max-width: 760px){ .grid{grid-template-columns:1fr;} }
+  canvas{display:block; width:100%; border-radius:8px; background:#0a0f18; border:1px solid var(--line);}
+  .controls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0 4px;}
+  button{
+    background:#17233a; border:1px solid var(--line); color:var(--text);
+    padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  button:hover{border-color:var(--accent); background:#1a2b47;}
+  button.primary{background:var(--accent); color:#06201c; border-color:var(--accent); font-weight:600;}
+  button.primary:hover{background:#5fe0d4;}
+  button:disabled{opacity:0.45; cursor:not-allowed;}
+  .slider-row{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted);}
+  input[type=range]{width:140px;}
+  .timeline-wrap{margin-top:14px;}
+  .timeline-label{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:4px;}
+  #timeline{height:54px; cursor:crosshair;}
+  .stats{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:4px;}
+  .stat{
+    background:#0d1420; border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+  }
+  .stat .k{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;}
+  .stat .v{font-size:20px; font-weight:600; margin-top:2px;}
+  .v.good{color:var(--accent);}
+  .v.warn{color:var(--accent2);}
+  .legend{display:flex; gap:16px; font-size:12px; color:var(--muted); margin-top:10px; flex-wrap:wrap;}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+  .explain{font-size:13px; color:var(--muted);}
+  .explain b{color:var(--text);}
+  #chartCanvas{height:140px;}
+  footer{
+    margin-top:30px; padding-top:16px; border-top:1px solid var(--line);
+    font-size:12px; color:var(--muted); text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="badge">toy RL environment</span>
+    <h1>Measurement Budget</h1>
+    <p class="tag">A chaotic double pendulum traces a path you can't fully see. You get a handful of
+      measurements to spend on when to look. An agent in the background searches, by trial and reward,
+      for the measurement schedule that reconstructs the path best — the same loop behind training a
+      model to decide where to spend a limited "look" in a scientific-reasoning task.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Pendulum tip path</h2>
+      <p class="sub">Gray dashed = true path (hidden from the agent). Colored solid = reconstruction from your measurements only.</p>
+      <canvas id="plotCanvas" width="600" height="420"></canvas>
+      <div class="legend">
+        <span><span class="dot" style="background:#5b6b82;"></span> true path (ground truth)</span>
+        <span><span class="dot" style="background:#4fd1c5;"></span> reconstruction</span>
+        <span><span class="dot" style="background:#f6ad55;"></span> measured point</span>
+      </div>
+
+      <div class="timeline-wrap">
+        <div class="timeline-label"><span>t = 0 (start, always known)</span><span>t = T (end, always known)</span></div>
+        <canvas id="timeline" width="760" height="54"></canvas>
+        <div class="slider-row" style="margin-top:8px;">
+          <label for="budget">Measurement budget</label>
+          <input type="range" id="budget" min="3" max="18" value="8">
+          <span id="budgetLabel">8</span> extra looks
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="newPendulum">↻ New pendulum</button>
+        <button id="clearMeasurements">Clear my measurements</button>
+        <button id="trainBtn" class="primary">▶ Train RL agent</button>
+        <button id="loadPolicy" disabled>Load agent's policy</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Score</h2>
+      <p class="sub">Reward rises as your reconstruction gets closer to the true path, using the same number of looks.</p>
+      <div class="stats">
+        <div class="stat"><div class="k">Looks used</div><div class="v" id="usedStat">2 / 2</div></div>
+        <div class="stat"><div class="k">Reconstruction error</div><div class="v" id="rmseStat">—</div></div>
+        <div class="stat"><div class="k">Your reward</div><div class="v good" id="rewardStat">—</div></div>
+        <div class="stat"><div class="k">Agent's best reward</div><div class="v warn" id="agentStat">not trained yet</div></div>
+      </div>
+
+      <h2 style="margin-top:18px;">Agent training progress</h2>
+      <p class="sub">Each episode the agent tweaks one measurement time, keeps it if the reward improves, and occasionally keeps worse moves early on to keep exploring.</p>
+      <canvas id="chartCanvas" width="400" height="140"></canvas>
+
+      <div class="explain" style="margin-top:14px;">
+        <p><b>Why this matters:</b> the hard part of a lot of real scientific and engineering work isn't
+        computing an answer once you have data — it's deciding where to spend a scarce, expensive
+        measurement (a wet-lab assay, a profiler trace, a wall-clock-expensive simulation step) so the
+        answer you reconstruct is actually trustworthy. This toy swaps "measurement" for points on a
+        pendulum's path, but the search loop — propose, score, keep what works, repeat — is the same
+        shape as RL post-training on a task with a sparse, expensive reward.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Independent demo built by Aarush Kandukoori, inspired by CueBench (YC S26). Not affiliated with CueBench.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- double pendulum simulation ----------
+  const N = 200;            // timeline samples
+  const SUBSTEPS = 3;
+  const DT = 0.02;
+  const g = 9.81, l1 = 1, l2 = 1, m1 = 1, m2 = 1;
+
+  function deriv(s){
+    const [th1, w1, th2, w2] = s;
+    const delta = th1 - th2;
+    const den = 2*m1 + m2 - m2*Math.cos(2*delta);
+    const den1 = l1*den, den2 = l2*den;
+    const num1 = -g*(2*m1+m2)*Math.sin(th1) - m2*g*Math.sin(th1-2*th2)
+                 - 2*Math.sin(delta)*m2*(w2*w2*l2 + w1*w1*l1*Math.cos(delta));
+    const num2 = 2*Math.sin(delta)*(w1*w1*l1*(m1+m2) + g*(m1+m2)*Math.cos(th1) + w2*w2*l2*m2*Math.cos(delta));
+    return [w1, num1/den1, w2, num2/den2];
+  }
+  function rk4Step(s, dt){
+    const k1 = deriv(s);
+    const s2 = s.map((v,i)=>v+k1[i]*dt/2);
+    const k2 = deriv(s2);
+    const s3 = s.map((v,i)=>v+k2[i]*dt/2);
+    const k3 = deriv(s3);
+    const s4 = s.map((v,i)=>v+k3[i]*dt);
+    const k4 = deriv(s4);
+    return s.map((v,i)=>v + (dt/6)*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+  }
+
+  let truePath = []; // array of {x,y} for pendulum tip, length N
+
+  function simulate(){
+    const th1 = 2.0 + Math.random()*0.5;
+    const th2 = 2.0 + Math.random()*0.5;
+    let state = [th1, 0, th2, 0];
+    const pts = [];
+    for(let i=0;i<N;i++){
+      for(let k=0;k<SUBSTEPS;k++) state = rk4Step(state, DT);
+      const x1 = l1*Math.sin(state[0]), y1 = l1*Math.cos(state[0]);
+      const x2 = x1 + l2*Math.sin(state[2]), y2 = y1 + l2*Math.cos(state[2]);
+      pts.push({x:x2, y:y2});
+    }
+    return pts;
+  }
+
+  // ---------- cubic spline reconstruction ----------
+  function naturalCubicSpline(xs, ys){
+    const n = xs.length;
+    if(n === 1) return ()=>ys[0];
+    if(n === 2) return (q)=> ys[0] + (ys[1]-ys[0])*(q-xs[0])/(xs[1]-xs[0]);
+    const h = []; for(let i=0;i<n-1;i++) h.push(xs[i+1]-xs[i]);
+    const alpha = new Array(n).fill(0);
+    for(let i=1;i<n-1;i++) alpha[i] = 3*((ys[i+1]-ys[i])/h[i] - (ys[i]-ys[i-1])/h[i-1]);
+    const l = new Array(n), mu = new Array(n), z = new Array(n);
+    l[0]=1; mu[0]=0; z[0]=0;
+    for(let i=1;i<n-1;i++){
+      l[i] = 2*(xs[i+1]-xs[i-1]) - h[i-1]*mu[i-1];
+      mu[i] = h[i]/l[i];
+      z[i] = (alpha[i]-h[i-1]*z[i-1])/l[i];
+    }
+    l[n-1]=1; z[n-1]=0;
+    const c = new Array(n).fill(0), b = new Array(n).fill(0), d = new Array(n).fill(0);
+    for(let j=n-2;j>=0;j--){
+      c[j] = z[j]-mu[j]*c[j+1];
+      b[j] = (ys[j+1]-ys[j])/h[j] - h[j]*(c[j+1]+2*c[j])/3;
+      d[j] = (c[j+1]-c[j])/(3*h[j]);
+    }
+    return function(q){
+      let i = 0;
+      if(q <= xs[0]) i = 0;
+      else if(q >= xs[n-1]) i = n-2;
+      else for(let k=0;k<n-1;k++) if(q>=xs[k] && q<=xs[k+1]){ i=k; break; }
+      const dx = q - xs[i];
+      return ys[i] + b[i]*dx + c[i]*dx*dx + d[i]*dx*dx*dx;
+    };
+  }
+
+  function reconstruct(indices){
+    const sorted = Array.from(new Set(indices)).sort((a,b)=>a-b);
+    const xs = sorted.map(i=>truePath[i].x);
+    const ys = sorted.map(i=>truePath[i].y);
+    const fx = naturalCubicSpline(sorted, xs);
+    const fy = naturalCubicSpline(sorted, ys);
+    const out = [];
+    for(let i=0;i<N;i++) out.push({x:fx(i), y:fy(i)});
+    return out;
+  }
+
+  function rmse(recon){
+    let sum = 0;
+    for(let i=0;i<N;i++){
+      const dx = recon[i].x-truePath[i].x, dy = recon[i].y-truePath[i].y;
+      sum += dx*dx+dy*dy;
+    }
+    return Math.sqrt(sum/N);
+  }
+  function rewardFromRmse(e){
+    return Math.max(0, Math.min(100, 100 - e*130));
+  }
+
+  // ---------- state ----------
+  let measured = new Set([0, N-1]);
+  let budget = 8;
+
+  function usedCount(){ return measured.size - 2; }
+
+  function randomExtraIndices(k){
+    const set = new Set();
+    while(set.size < k){
+      set.add(1 + Math.floor(Math.random()*(N-2)));
+    }
+    return set;
+  }
+
+  // ---------- rendering ----------
+  const plotCanvas = document.getElementById('plotCanvas');
+  const pctx = plotCanvas.getContext('2d');
+  const timeline = document.getElementById('timeline');
+  const tctx = timeline.getContext('2d');
+  const chartCanvas = document.getElementById('chartCanvas');
+  const cctx = chartCanvas.getContext('2d');
+
+  function toCanvas(p, w, h){
+    const scale = Math.min(w, h) / (2*(l1+l2)) * 0.85;
+    return { x: w/2 + p.x*scale, y: h*0.12 + p.y*scale };
+  }
+
+  function drawPlot(){
+    const w = plotCanvas.width, h = plotCanvas.height;
+    pctx.clearRect(0,0,w,h);
+    // true path
+    pctx.beginPath();
+    pctx.setLineDash([3,4]);
+    pctx.strokeStyle = '#5b6b82';
+    pctx.lineWidth = 1.5;
+    truePath.forEach((p,i)=>{
+      const c = toCanvas(p,w,h);
+      if(i===0) pctx.moveTo(c.x,c.y); else pctx.lineTo(c.x,c.y);
+    });
+    pctx.stroke();
+    pctx.setLineDash([]);
+
+    // reconstruction
+    const recon = reconstruct(Array.from(measured));
+    pctx.beginPath();
+    pctx.strokeStyle = '#4fd1c5';
+    pctx.lineWidth = 2.2;
+    recon.forEach((p,i)=>{
+      const c = toCanvas(p,w,h);
+      if(i===0) pctx.moveTo(c.x,c.y); else pctx.lineTo(c.x,c.y);
+    });
+    pctx.stroke();
+
+    // measured points
+    measured.forEach(i=>{
+      const c = toCanvas(truePath[i], w, h);
+      pctx.beginPath();
+      pctx.fillStyle = (i===0||i===N-1) ? '#9fb3c8' : '#f6ad55';
+      pctx.arc(c.x, c.y, 4.2, 0, Math.PI*2);
+      pctx.fill();
+    });
+
+    const e = rmse(recon);
+    document.getElementById('rmseStat').textContent = e.toFixed(3);
+    document.getElementById('rewardStat').textContent = rewardFromRmse(e).toFixed(1);
+    document.getElementById('usedStat').textContent = usedCount() + ' / ' + budget;
+  }
+
+  function drawTimeline(){
+    const w = timeline.width, h = timeline.height;
+    tctx.clearRect(0,0,w,h);
+    tctx.strokeStyle = '#223148';
+    tctx.beginPath();
+    tctx.moveTo(0,h/2); tctx.lineTo(w,h/2);
+    tctx.stroke();
+    for(let i=0;i<N;i++){
+      const x = (i/(N-1))*w;
+      const isMeasured = measured.has(i);
+      const isForced = (i===0||i===N-1);
+      tctx.beginPath();
+      tctx.strokeStyle = isForced ? '#9fb3c8' : (isMeasured ? '#f6ad55' : '#2c3b52');
+      tctx.lineWidth = isMeasured || isForced ? 2.4 : 1;
+      const top = isMeasured || isForced ? h*0.18 : h*0.4;
+      const bot = isMeasured || isForced ? h*0.82 : h*0.6;
+      tctx.moveTo(x, top); tctx.lineTo(x, bot);
+      tctx.stroke();
+    }
+  }
+
+  function drawChart(history){
+    const w = chartCanvas.width, h = chartCanvas.height;
+    cctx.clearRect(0,0,w,h);
+    cctx.strokeStyle = '#223148';
+    cctx.beginPath(); cctx.moveTo(0,h-1); cctx.lineTo(w,h-1); cctx.stroke();
+    if(history.length < 2) return;
+    cctx.beginPath();
+    cctx.strokeStyle = '#4fd1c5';
+    cctx.lineWidth = 2;
+    history.forEach((r,i)=>{
+      const x = (i/(history.length-1))*w;
+      const y = h - (r/100)*h;
+      if(i===0) cctx.moveTo(x,y); else cctx.lineTo(x,y);
+    });
+    cctx.stroke();
+  }
+
+  function render(){
+    drawPlot();
+    drawTimeline();
+  }
+
+  // ---------- interaction ----------
+  timeline.addEventListener('click', (ev)=>{
+    const rect = timeline.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const idx = Math.round((x/rect.width)*(N-1));
+    if(idx<=0 || idx>=N-1) return;
+    if(measured.has(idx)){
+      measured.delete(idx);
+    } else {
+      if(usedCount() >= budget) return;
+      measured.add(idx);
+    }
+    render();
+  });
+
+  document.getElementById('budget').addEventListener('input', (ev)=>{
+    budget = parseInt(ev.target.value, 10);
+    document.getElementById('budgetLabel').textContent = budget;
+    while(usedCount() > budget){
+      const extras = Array.from(measured).filter(i=>i!==0 && i!==N-1);
+      measured.delete(extras[extras.length-1]);
+    }
+    render();
+  });
+
+  document.getElementById('clearMeasurements').addEventListener('click', ()=>{
+    measured = new Set([0, N-1]);
+    render();
+  });
+
+  document.getElementById('newPendulum').addEventListener('click', ()=>{
+    truePath = simulate();
+    measured = new Set([0, N-1]);
+    document.getElementById('agentStat').textContent = 'not trained yet';
+    document.getElementById('loadPolicy').disabled = true;
+    drawChart([]);
+    render();
+  });
+
+  // ---------- RL-style training (simulated annealing search) ----------
+  let agentBestIndices = null;
+  const trainBtn = document.getElementById('trainBtn');
+  const loadPolicyBtn = document.getElementById('loadPolicy');
+
+  function evalSet(extraIndices){
+    const full = [0, N-1, ...extraIndices];
+    const recon = reconstruct(full);
+    return rewardFromRmse(rmse(recon));
+  }
+
+  function train(){
+    trainBtn.disabled = true;
+    const episodes = 240;
+    const T0 = 18, decay = 0.985;
+    let current = Array.from(randomExtraIndices(budget));
+    let currentScore = evalSet(current);
+    let best = current.slice();
+    let bestScore = currentScore;
+    const history = [];
+    let ep = 0;
+
+    function step(){
+      const batch = 4;
+      for(let b=0; b<batch && ep<episodes; b++, ep++){
+        const temp = T0 * Math.pow(decay, ep);
+        const candidate = current.slice();
+        const pos = Math.floor(Math.random()*candidate.length);
+        let newVal;
+        do { newVal = 1 + Math.floor(Math.random()*(N-2)); } while(candidate.includes(newVal));
+        candidate[pos] = newVal;
+        const score = evalSet(candidate);
+        if(score > currentScore || Math.random() < Math.exp((score-currentScore)/Math.max(temp,0.01))){
+          current = candidate;
+          currentScore = score;
+        }
+        if(currentScore > bestScore){
+          best = current.slice();
+          bestScore = currentScore;
+        }
+        history.push(bestScore);
+      }
+      drawChart(history);
+      document.getElementById('agentStat').textContent = bestScore.toFixed(1);
+      if(ep < episodes){
+        setTimeout(step, 30);
+      } else {
+        agentBestIndices = best.slice();
+        loadPolicyBtn.disabled = false;
+        trainBtn.disabled = false;
+      }
+    }
+    step();
+  }
+
+  trainBtn.addEventListener('click', train);
+  loadPolicyBtn.addEventListener('click', ()=>{
+    if(!agentBestIndices) return;
+    measured = new Set([0, N-1, ...agentBestIndices]);
+    render();
+  });
+
+  // ---------- init ----------
+  truePath = simulate();
+  drawChart([]);
+  render();
+})();
+</script>
+</body>
+</html>

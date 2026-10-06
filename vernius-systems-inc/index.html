@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Seeker Lock — Interactive Radar Seeker Demo</title>
+<style>
+  :root {
+    --bg: #07090c;
+    --panel: #0d1218;
+    --line: #1c2a33;
+    --accent: #5ee6c4;
+    --accent-dim: #2e6b5c;
+    --warn: #e6b85e;
+    --danger: #e65e5e;
+    --text: #cfe8e4;
+    --muted: #6d8a89;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 50% 0%, #0b1420 0%, #05070a 70%);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  header {
+    padding: 28px 32px 10px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 1.7rem;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  header p {
+    margin: 8px auto 0;
+    max-width: 640px;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+  .layout {
+    display: flex;
+    gap: 22px;
+    max-width: 1080px;
+    margin: 20px auto 10px;
+    padding: 0 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .scope-wrap {
+    position: relative;
+    width: 560px;
+    flex: 0 0 auto;
+  }
+  canvas {
+    background: #050a0c;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    display: block;
+    cursor: crosshair;
+    box-shadow: 0 0 40px rgba(94,230,196,0.06) inset;
+  }
+  .scope-caption {
+    margin-top: 8px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .panel {
+    width: 300px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    flex: 0 0 auto;
+    height: fit-content;
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 0.95rem;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    padding: 5px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+  .stat-row span:last-child {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .meter {
+    margin-top: 14px;
+  }
+  .meter-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .meter-bar {
+    height: 10px;
+    background: #06100f;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .meter-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+    transition: width 0.12s linear;
+  }
+  .status {
+    margin-top: 16px;
+    font-size: 0.85rem;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #0a1512;
+    border: 1px solid var(--line);
+    min-height: 40px;
+    line-height: 1.4;
+  }
+  .status.locked { border-color: var(--accent); color: var(--accent); }
+  .status.intercept { border-color: var(--danger); color: var(--danger); }
+  .controls {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+  }
+  button {
+    flex: 1;
+    background: #11201d;
+    border: 1px solid var(--accent-dim);
+    color: var(--accent);
+    padding: 9px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+  }
+  button:hover { background: #163028; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .legend {
+    margin-top: 14px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .explainer {
+    max-width: 900px;
+    margin: 28px auto 10px;
+    padding: 0 24px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.6;
+    text-align: center;
+  }
+  footer {
+    text-align: center;
+    margin: 30px 0 24px;
+    font-size: 0.75rem;
+    color: #4d6362;
+    padding: 0 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SEEKER LOCK — toy radar seeker</h1>
+  <p>A simplified model of the core idea behind a low-cost radar seeker: detect clutter on a noisy scope, designate a contact, and watch an onboard tracking loop hold lock through maneuvers until simulated intercept. Everything here runs client-side with synthetic targets — no real sensor data.</p>
+</header>
+
+<div class="layout">
+  <div class="scope-wrap">
+    <canvas id="scope" width="560" height="560"></canvas>
+    <div class="scope-caption">Click a contact to designate it as the seeker's target.</div>
+  </div>
+
+  <div class="panel">
+    <h2>SEEKER STATUS</h2>
+    <div class="stat-row"><span>Mode</span><span id="modeOut">SEARCH</span></div>
+    <div class="stat-row"><span>Target ID</span><span id="idOut">—</span></div>
+    <div class="stat-row"><span>Range</span><span id="rangeOut">—</span></div>
+    <div class="stat-row"><span>Closing speed</span><span id="speedOut">—</span></div>
+    <div class="stat-row"><span>Track quality</span><span id="qualOut">—</span></div>
+
+    <div class="meter">
+      <div class="meter-label"><span>LOCK CONFIDENCE</span><span id="lockPct">0%</span></div>
+      <div class="meter-bar"><div class="meter-fill" id="lockFill"></div></div>
+    </div>
+
+    <div class="status" id="statusBox">Scanning sector. 5 contacts detected amid clutter. Click one to designate.</div>
+
+    <div class="controls">
+      <button id="rescanBtn">New scenario</button>
+      <button id="dropBtn" disabled>Drop lock</button>
+    </div>
+
+    <div class="legend">
+      <div><span class="dot" style="background:#e6b85e"></span>unresolved contact / clutter</div>
+      <div><span class="dot" style="background:#5ee6c4"></span>designated / locked target</div>
+      <div><span class="dot" style="background:#e65e5e"></span>seeker (center, closing)</div>
+    </div>
+  </div>
+</div>
+
+<div class="explainer">
+  The real engineering problem a radar seeker solves is distinguishing one real,
+  maneuvering target from clutter and decoys, then holding a stable track as geometry
+  changes fast — all on a processor cheap enough to put on every interceptor. This demo
+  caricatures that loop: a scoring function favors contacts with consistent radial motion,
+  a simple proportional-navigation tracker keeps a reticle converging on the designated
+  target, and lock confidence decays if the target jukes hard enough to fall outside the
+  tracking gate.
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Vernius Systems, Inc. (YC S26). Not affiliated with Vernius Systems, Inc..</footer>
+
+<script>
+(function() {
+  const canvas = document.getElementById('scope');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+  const maxR = W / 2 - 18;
+
+  const modeOut = document.getElementById('modeOut');
+  const idOut = document.getElementById('idOut');
+  const rangeOut = document.getElementById('rangeOut');
+  const speedOut = document.getElementById('speedOut');
+  const qualOut = document.getElementById('qualOut');
+  const lockPct = document.getElementById('lockPct');
+  const lockFill = document.getElementById('lockFill');
+  const statusBox = document.getElementById('statusBox');
+  const rescanBtn = document.getElementById('rescanBtn');
+  const dropBtn = document.getElementById('dropBtn');
+
+  let contacts = [];
+  let sweep = 0;
+  let selected = null;
+  let lockConf = 0;
+  let intercepted = false;
+  let tick = 0;
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  function spawnScenario() {
+    contacts = [];
+    intercepted = false;
+    selected = null;
+    lockConf = 0;
+    dropBtn.disabled = true;
+    statusBox.className = 'status';
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const ang = rand(0, Math.PI * 2);
+      const r = rand(0.35, 0.95) * maxR;
+      contacts.push({
+        id: 'K' + (100 + Math.floor(Math.random() * 900)),
+        ang: ang,
+        r: r,
+        // angular drift = jinking / clutter wobble, radial speed = closing rate
+        angVel: rand(-0.01, 0.01),
+        radialSpeed: rand(0.25, 0.85), // px/frame inbound
+        jitter: rand(0.3, 1.0), // how erratic -> lowers achievable lock quality
+        real: i === Math.floor(Math.random() * n) || Math.random() < 0.4
+      });
+    }
+    // guarantee at least one "clean" real target
+    contacts[Math.floor(Math.random() * contacts.length)].jitter = rand(0.1, 0.25);
+    statusBox.textContent = contacts.length + ' contacts detected amid clutter. Click one to designate.';
+    modeOut.textContent = 'SEARCH';
+    idOut.textContent = '—';
+    rangeOut.textContent = '—';
+    speedOut.textContent = '—';
+    qualOut.textContent = '—';
+  }
+
+  function toXY(ang, r) {
+    return [cx + Math.cos(ang) * r, cy + Math.sin(ang) * r];
+  }
+
+  function drawScope() {
+    ctx.clearRect(0, 0, W, H);
+
+    // rings
+    ctx.strokeStyle = 'rgba(94,230,196,0.12)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 4; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (maxR / 4) * i, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy);
+    ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR);
+    ctx.stroke();
+
+    // sweep
+    sweep += 0.02;
+    const grad = ctx.createConicGradient ? ctx.createConicGradient(sweep, cx, cy) : null;
+    if (grad) {
+      grad.addColorStop(0, 'rgba(94,230,196,0.28)');
+      grad.addColorStop(0.06, 'rgba(94,230,196,0.0)');
+      grad.addColorStop(1, 'rgba(94,230,196,0.0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // seeker (center)
+    ctx.fillStyle = '#e65e5e';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // contacts
+    contacts.forEach(c => {
+      const [x, y] = toXY(c.ang, c.r);
+      const isSel = c === selected;
+      ctx.beginPath();
+      ctx.arc(x, y, isSel ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = isSel ? '#5ee6c4' : '#e6b85e';
+      ctx.fill();
+      if (isSel) {
+        ctx.strokeStyle = 'rgba(94,230,196,0.8)';
+        ctx.lineWidth = 1.5;
+        const gateR = 16 + (1 - lockConf) * 24;
+        ctx.beginPath();
+        ctx.arc(x, y, gateR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#6d8a89';
+      ctx.font = '10px system-ui';
+      ctx.fillText(c.id, x + 9, y - 9);
+    });
+
+    if (intercepted && selected) {
+      const [x, y] = toXY(selected.ang, selected.r);
+      ctx.strokeStyle = '#e65e5e';
+      ctx.lineWidth = 2;
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(a) * 18, y + Math.sin(a) * 18);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function step() {
+    tick++;
+    contacts.forEach(c => {
+      if (intercepted && c === selected) return;
+      c.ang += c.angVel + (Math.sin(tick * 0.03 + c.ang) * 0.004 * c.jitter);
+      c.r -= c.radialSpeed * 0.9;
+      if (c.r < 12) c.r = maxR * rand(0.85, 0.98); // recycle off the far edge
+    });
+
+    if (selected && !intercepted) {
+      // track quality: how well the proportional-nav loop can predict motion
+      // lower jitter -> easier to hold lock; confidence rises/falls each tick
+      const targetConf = Math.max(0.15, 1 - selected.jitter);
+      lockConf += (targetConf - lockConf) * 0.06 + rand(-0.015, 0.015);
+      lockConf = Math.max(0, Math.min(1, lockConf));
+
+      const range = selected.r;
+      const closing = selected.radialSpeed * 0.9 * 60; // px/sec-ish synthetic unit
+      rangeOut.textContent = Math.round((range / maxR) * 4200) + ' m';
+      speedOut.textContent = Math.round(closing * 3) + ' m/s';
+      qualOut.textContent = lockConf > 0.75 ? 'STABLE' : lockConf > 0.4 ? 'DEGRADED' : 'MARGINAL';
+
+      lockPct.textContent = Math.round(lockConf * 100) + '%';
+      lockFill.style.width = (lockConf * 100) + '%';
+
+      if (lockConf > 0.6) {
+        modeOut.textContent = 'TRACK (LOCKED)';
+        statusBox.className = 'status locked';
+        statusBox.textContent = 'Lock held on ' + selected.id + '. Proportional-nav loop converging — closing range.';
+      } else {
+        modeOut.textContent = 'TRACK (ACQUIRING)';
+        statusBox.className = 'status';
+        statusBox.textContent = 'Attempting to stabilize track on ' + selected.id + '. Jitter is fighting the tracking gate.';
+      }
+
+      if (selected.r < 60 && lockConf > 0.5) {
+        intercepted = true;
+        modeOut.textContent = 'INTERCEPT';
+        statusBox.className = 'status intercept';
+        statusBox.textContent = 'Simulated intercept on ' + selected.id + ' at closing range. Lock held through final approach.';
+        dropBtn.disabled = true;
+      } else if (selected.r < 60 && lockConf <= 0.5) {
+        // missed due to broken lock
+        statusBox.className = 'status';
+        statusBox.textContent = selected.id + ' passed minimum range with degraded lock — track was lost before intercept.';
+        selected = null;
+        lockConf = 0;
+        modeOut.textContent = 'SEARCH';
+        dropBtn.disabled = true;
+      }
+    }
+  }
+
+  function pickContact(mx, my) {
+    let best = null, bestD = 22;
+    contacts.forEach(c => {
+      const [x, y] = toXY(c.ang, c.r);
+      const d = Math.hypot(mx - x, my - y);
+      if (d < bestD) { bestD = d; best = c; }
+    });
+    return best;
+  }
+
+  canvas.addEventListener('click', (e) => {
+    if (intercepted) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const my = (e.clientY - rect.top) * (H / rect.height);
+    const picked = pickContact(mx, my);
+    if (picked) {
+      selected = picked;
+      lockConf = 0.1;
+      idOut.textContent = picked.id;
+      dropBtn.disabled = false;
+      statusBox.className = 'status';
+      statusBox.textContent = 'Designated ' + picked.id + '. Spinning up tracking loop...';
+      modeOut.textContent = 'TRACK (ACQUIRING)';
+    }
+  });
+
+  dropBtn.addEventListener('click', () => {
+    selected = null;
+    lockConf = 0;
+    intercepted = false;
+    modeOut.textContent = 'SEARCH';
+    idOut.textContent = '—';
+    rangeOut.textContent = '—';
+    speedOut.textContent = '—';
+    qualOut.textContent = '—';
+    lockPct.textContent = '0%';
+    lockFill.style.width = '0%';
+    dropBtn.disabled = true;
+    statusBox.className = 'status';
+    statusBox.textContent = 'Lock dropped. Click a contact to re-designate.';
+  });
+
+  rescanBtn.addEventListener('click', spawnScenario);
+
+  spawnScenario();
+  function loop() {
+    step();
+    drawScope();
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+</script>
+
+</body>
+</html>
