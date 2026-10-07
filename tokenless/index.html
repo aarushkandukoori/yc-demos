@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RewardScope — catch the exploit before training does</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121823; --panel2:#0f141d; --line:#20293a;
+    --text:#e7edf5; --dim:#8a97ab; --accent:#4fd1c5; --warn:#f0a35c;
+    --bad:#f26d6d; --good:#64d88a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'SF Mono',Consolas,Menlo,monospace;
+    padding:32px 24px 90px;
+  }
+  .wrap{max-width:1000px; margin:0 auto;}
+  h1{font-size:22px; margin:0 0 4px;}
+  .sub{color:var(--dim); font-size:14px; margin-bottom:28px; line-height:1.5;}
+  .sub b{color:var(--accent);}
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:18px 20px; margin-bottom:18px;
+  }
+  .panel h2{font-size:14px; margin:0 0 12px; color:var(--accent); letter-spacing:.03em; text-transform:uppercase;}
+  .row{display:flex; gap:18px; flex-wrap:wrap;}
+  .col{flex:1; min-width:280px;}
+  .grid{
+    display:grid; grid-template-columns:repeat(6,1fr); gap:5px; margin-bottom:10px;
+  }
+  .cell{
+    aspect-ratio:1; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:600; border:1px solid var(--line); transition:background .15s, transform .15s;
+    background:var(--panel2); color:var(--dim);
+  }
+  .cell.dirty{background:#3a2a1a; color:var(--warn); border-color:#5a4020;}
+  .cell.clean{background:#113329; color:var(--good); border-color:#1e5a44;}
+  .cell.active{transform:scale(1.12); box-shadow:0 0 0 2px var(--accent);}
+  .stats{display:flex; gap:22px; font-size:13px; margin-bottom:10px; flex-wrap:wrap;}
+  .stat{color:var(--dim);}
+  .stat b{color:var(--text); font-size:16px; display:block;}
+  .stat.reward b{color:var(--warn);}
+  .stat.task b{color:var(--good);}
+  button{
+    background:var(--accent); color:#06201c; border:none; border-radius:6px;
+    padding:9px 16px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;
+    margin:3px 6px 3px 0;
+  }
+  button.secondary{background:var(--panel2); color:var(--text); border:1px solid var(--line);}
+  button.danger{background:var(--bad); color:#210808;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .log{
+    background:#000; border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    height:200px; overflow-y:auto; font-size:12px; line-height:1.65; color:#9fb0c3;
+  }
+  .log .r{color:var(--warn);}
+  .log .t{color:var(--dim);}
+  .log .h{color:var(--bad); font-weight:700;}
+  .flag{
+    border:1px solid #5a2a2a; background:#1f1012; border-radius:8px; padding:14px 16px;
+    margin-top:12px; display:none;
+  }
+  .flag.show{display:block;}
+  .flag .title{color:var(--bad); font-weight:700; font-size:13px; margin-bottom:6px;}
+  .flag p{font-size:13px; color:var(--text); line-height:1.6; margin:6px 0;}
+  .diff{font-size:12.5px; border-radius:6px; overflow:hidden; margin:10px 0; border:1px solid var(--line);}
+  .diff div{padding:7px 12px; white-space:pre;}
+  .diff .minus{background:#2a1212; color:#f08d8d; text-decoration:line-through; opacity:.85;}
+  .diff .plus{background:#102a1a; color:#8de6ad;}
+  .pill{
+    display:inline-block; font-size:11px; padding:3px 9px; border-radius:20px; font-weight:700;
+    letter-spacing:.03em;
+  }
+  .pill.on{background:#113329; color:var(--good);}
+  .pill.off{background:var(--panel2); color:var(--dim);}
+  footer{
+    position:fixed; bottom:0; left:0; right:0; background:#070a0e; border-top:1px solid var(--line);
+    text-align:center; font-size:12px; color:var(--dim); padding:10px;
+  }
+  .verdict{font-size:13px; margin-top:8px; padding:8px 10px; border-radius:6px; background:var(--panel2);}
+  .verdict.bad{color:var(--bad);}
+  .verdict.good{color:var(--good);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RewardScope</h1>
+  <p class="sub">A toy cleaning-robot environment with a reward function that looks reasonable and isn't.
+  Run a policy, watch what the <b>reward signal</b> says versus what the <b>world</b> actually looks like,
+  then audit the trajectory to find the mismatch and patch the reward function yourself.</p>
+
+  <div class="panel">
+    <h2>1 &middot; Environment</h2>
+    <div class="row">
+      <div class="col">
+        <div class="grid" id="grid"></div>
+        <div class="stats">
+          <div class="stat reward">reward<b id="rewardVal">0</b></div>
+          <div class="stat task">tiles actually clean<b id="taskVal">0 / 24</b></div>
+          <div class="stat"><span id="patchPill" class="pill off">reward v1 (naive)</span></div>
+        </div>
+        <div>
+          <button id="btnHonest">run honest policy</button>
+          <button id="btnHack" class="danger">run reward-hacking policy</button>
+          <button id="btnReset" class="secondary">reset grid</button>
+        </div>
+      </div>
+      <div class="col">
+        <h2 style="margin-top:0">Trajectory log</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>2 &middot; Audit</h2>
+    <p class="sub" style="margin-bottom:10px">Run a policy above, then audit its trajectory. The auditor looks for reward
+    collected without matching progress on the actual task state &mdash; the signature of reward hacking.</p>
+    <button id="btnAudit">audit trajectory</button>
+    <div class="flag" id="flag">
+      <div class="title">⚠ reward hack detected</div>
+      <p id="flagBody"></p>
+      <p><b>Suggested fix</b> &mdash; reward only net reduction in global dirty-tile count, not per-action
+      clean() transitions:</p>
+      <div class="diff">
+        <div class="minus">- reward += 1  // every time clean() flips a tile dirty→clean</div>
+        <div class="plus">+ reward += max(0, dirtyCountBefore - dirtyCountAfter)  // net progress only</div>
+      </div>
+      <button id="btnPatch">apply patched reward function</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>3 &middot; Re-run with patched reward</h2>
+    <p class="sub" style="margin-bottom:10px">Same hacking policy, same actions, patched reward function. See whether the
+    exploit still pays.</p>
+    <button id="btnHackPatched" class="secondary" disabled>run reward-hacking policy (patched)</button>
+    <div class="verdict" id="verdict" style="display:none"></div>
+  </div>
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Tokenless (YC S26). Not affiliated with Tokenless.</footer>
+
+<script>
+const N = 24; // 6x6 grid
+let dirty = [];
+let reward = 0;
+let patched = false;
+let lastTrajectory = null;
+
+const gridEl = document.getElementById('grid');
+const logEl = document.getElementById('log');
+const rewardEl = document.getElementById('rewardVal');
+const taskEl = document.getElementById('taskVal');
+const patchPill = document.getElementById('patchPill');
+
+function initGrid(){
+  dirty = Array.from({length:N}, (_,i)=> i % 3 !== 0); // ~2/3 start dirty
+  reward = 0;
+  rewardEl.textContent = '0';
+  renderGrid();
+  renderTask();
+  logEl.innerHTML = '';
+}
+
+function renderGrid(active=-1){
+  gridEl.innerHTML = '';
+  dirty.forEach((d,i)=>{
+    const c = document.createElement('div');
+    c.className = 'cell ' + (d ? 'dirty' : 'clean') + (i===active ? ' active' : '');
+    c.textContent = d ? '●' : '✓';
+    gridEl.appendChild(c);
+  });
+}
+
+function renderTask(){
+  const clean = dirty.filter(d=>!d).length;
+  taskEl.textContent = clean + ' / ' + N;
+}
+
+function log(msg, cls=''){
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// action: clean(i) -> if dirty, becomes clean. action: stir(i) -> becomes dirty (meant for mixing cleaning fluid, side effect: re-dirties the tile)
+function doClean(i, trajectory){
+  const before = dirty.filter(d=>d).length;
+  const wasDirty = dirty[i];
+  if (wasDirty) dirty[i] = false;
+  const after = dirty.filter(d=>d).length;
+  let gained;
+  if (!patched){
+    gained = wasDirty ? 1 : 0; // v1: reward per transition, regardless of whether tile was net-new
+  } else {
+    gained = Math.max(0, before - after); // v2: net global progress only
+  }
+  reward += gained;
+  trajectory.push({action:'clean', tile:i, wasDirty, gained});
+  renderGrid(i);
+  renderTask();
+  rewardEl.textContent = reward;
+  log(`clean(${i})  dirty→${wasDirty}  reward +${gained}  [total ${reward}]`, gained>0?'r':'t');
+}
+
+function doStir(i, trajectory){
+  const before = dirty.filter(d=>d).length;
+  dirty[i] = true;
+  const after = dirty.filter(d=>d).length;
+  let gained = 0;
+  if (patched){
+    gained = Math.max(0, before - after); // will be 0 or negative-clamped; stir never pays in v2
+  }
+  trajectory.push({action:'stir', tile:i, gained});
+  renderGrid(i);
+  renderTask();
+  log(`stir(${i})  (meant for mixing solution — re-dirties tile as a side effect)`, 't');
+}
+
+function runHonest(){
+  initGrid();
+  const trajectory = [];
+  let i = 0;
+  const steps = [];
+  dirty.forEach((d,idx)=>{ if(d) steps.push(idx); });
+  function step(){
+    if (i >= steps.length){
+      log('--- honest policy done ---');
+      lastTrajectory = {trajectory, policy:'honest'};
+      return;
+    }
+    doClean(steps[i], trajectory);
+    i++;
+    setTimeout(step, 180);
+  }
+  log('>>> running honest policy: visit every dirty tile once, clean it, move on.');
+  step();
+}
+
+function runHack(onPatched=false){
+  initGrid();
+  patched = onPatched;
+  patchPill.textContent = onPatched ? 'reward v2 (patched)' : 'reward v1 (naive)';
+  patchPill.className = 'pill ' + (onPatched ? 'on' : 'off');
+  const trajectory = [];
+  const farmTile = 2; // picks one dirty-capable tile and farms it instead of covering the grid
+  let cycles = 0;
+  const maxCycles = 10;
+  log(`>>> running reward-hacking policy: found that stir(${farmTile}) then clean(${farmTile}) ` +
+      (onPatched ? 'used to' : 'can') + ' farm reward on repeat instead of covering the grid.');
+  function step(){
+    if (cycles >= maxCycles){
+      log('--- hacking policy done ---');
+      lastTrajectory = {trajectory, policy:'hack', patched:onPatched};
+      return;
+    }
+    if (cycles === 0){
+      doClean(farmTile, trajectory);
+    } else {
+      doStir(farmTile, trajectory);
+      setTimeout(()=>doClean(farmTile, trajectory), 160);
+    }
+    cycles++;
+    setTimeout(step, 340);
+  }
+  step();
+}
+
+document.getElementById('btnHonest').onclick = ()=>{ patched=false; patchPill.textContent='reward v1 (naive)'; patchPill.className='pill off'; runHonest(); };
+document.getElementById('btnHack').onclick = ()=> runHack(false);
+document.getElementById('btnHackPatched').onclick = ()=> runHack(true);
+document.getElementById('btnReset').onclick = initGrid;
+
+document.getElementById('btnAudit').onclick = ()=>{
+  const flag = document.getElementById('flag');
+  const body = document.getElementById('flagBody');
+  if (!lastTrajectory || lastTrajectory.policy !== 'hack' || lastTrajectory.patched){
+    body.textContent = 'No naive-reward hacking trajectory to audit yet. Click "run reward-hacking policy" above first, then audit it.';
+    flag.classList.add('show');
+    document.getElementById('btnPatch').style.display = 'none';
+    return;
+  }
+  document.getElementById('btnPatch').style.display = 'inline-block';
+  const traj = lastTrajectory.trajectory;
+  const cleanEvents = traj.filter(t=>t.action==='clean');
+  const totalReward = cleanEvents.reduce((a,t)=>a+t.gained,0);
+  const uniqueTilesTouched = new Set(cleanEvents.map(t=>t.tile)).size;
+  const repeatCleans = cleanEvents.length - uniqueTilesTouched;
+  const finalCleanCount = dirty.filter(d=>!d).length;
+  body.textContent = `${cleanEvents.length} clean() actions were logged, but only ${uniqueTilesTouched} unique ` +
+    `tile(s) were ever touched — ${repeatCleans} of those clean() calls re-cleaned a tile that was only dirty ` +
+    `again because of a stir() right before it. Reward collected: ${totalReward}. Tiles actually clean at the end: ` +
+    `${finalCleanCount} / ${N}. The reward signal is almost entirely decoupled from task completion — the policy ` +
+    `found a stir→clean loop the reward function pays for infinitely.`;
+  flag.classList.add('show');
+};
+
+document.getElementById('btnPatch').onclick = ()=>{
+  patched = true;
+  document.getElementById('btnHackPatched').disabled = false;
+  document.getElementById('btnPatch').textContent = 'patch applied ✓';
+  document.getElementById('btnPatch').disabled = true;
+};
+
+document.getElementById('btnHackPatched').onclick = ()=>{
+  runHack(true);
+  setTimeout(()=>{
+    const v = document.getElementById('verdict');
+    const traj = lastTrajectory.trajectory;
+    const totalReward = traj.filter(t=>t.action==='clean').reduce((a,t)=>a+t.gained,0);
+    const finalCleanCount = dirty.filter(d=>!d).length;
+    v.style.display = 'block';
+    if (totalReward <= 1){
+      v.className = 'verdict good';
+      v.textContent = `Patched reward total: ${totalReward}. The stir→clean loop now nets ~0 reward, same as ` +
+        `the tile's true contribution. The exploit no longer pays — the policy would need to actually cover the ` +
+        `grid to earn more.`;
+    } else {
+      v.className = 'verdict bad';
+      v.textContent = `Patched reward total: ${totalReward}. Still leaking — tighten the patch further.`;
+    }
+  }, 10 * 500 + 300);
+};
+
+initGrid();
+</script>
+</body>
+</html>
