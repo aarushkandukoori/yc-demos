@@ -1,332 +1,285 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>RewardScope — catch the exploit before training does</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gradeprobe - audit a reward function with an exploit swarm</title>
 <style>
-  :root{
-    --bg:#0b0f14; --panel:#121823; --panel2:#0f141d; --line:#20293a;
-    --text:#e7edf5; --dim:#8a97ab; --accent:#4fd1c5; --warn:#f0a35c;
-    --bad:#f26d6d; --good:#64d88a;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0; background:var(--bg); color:var(--text);
-    font-family:'SF Mono',Consolas,Menlo,monospace;
-    padding:32px 24px 90px;
-  }
-  .wrap{max-width:1000px; margin:0 auto;}
-  h1{font-size:22px; margin:0 0 4px;}
-  .sub{color:var(--dim); font-size:14px; margin-bottom:28px; line-height:1.5;}
-  .sub b{color:var(--accent);}
-  .panel{
-    background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    padding:18px 20px; margin-bottom:18px;
-  }
-  .panel h2{font-size:14px; margin:0 0 12px; color:var(--accent); letter-spacing:.03em; text-transform:uppercase;}
-  .row{display:flex; gap:18px; flex-wrap:wrap;}
-  .col{flex:1; min-width:280px;}
-  .grid{
-    display:grid; grid-template-columns:repeat(6,1fr); gap:5px; margin-bottom:10px;
-  }
-  .cell{
-    aspect-ratio:1; border-radius:6px; display:flex; align-items:center; justify-content:center;
-    font-size:11px; font-weight:600; border:1px solid var(--line); transition:background .15s, transform .15s;
-    background:var(--panel2); color:var(--dim);
-  }
-  .cell.dirty{background:#3a2a1a; color:var(--warn); border-color:#5a4020;}
-  .cell.clean{background:#113329; color:var(--good); border-color:#1e5a44;}
-  .cell.active{transform:scale(1.12); box-shadow:0 0 0 2px var(--accent);}
-  .stats{display:flex; gap:22px; font-size:13px; margin-bottom:10px; flex-wrap:wrap;}
-  .stat{color:var(--dim);}
-  .stat b{color:var(--text); font-size:16px; display:block;}
-  .stat.reward b{color:var(--warn);}
-  .stat.task b{color:var(--good);}
-  button{
-    background:var(--accent); color:#06201c; border:none; border-radius:6px;
-    padding:9px 16px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;
-    margin:3px 6px 3px 0;
-  }
-  button.secondary{background:var(--panel2); color:var(--text); border:1px solid var(--line);}
-  button.danger{background:var(--bad); color:#210808;}
-  button:disabled{opacity:.4; cursor:not-allowed;}
-  .log{
-    background:#000; border:1px solid var(--line); border-radius:8px; padding:10px 12px;
-    height:200px; overflow-y:auto; font-size:12px; line-height:1.65; color:#9fb0c3;
-  }
-  .log .r{color:var(--warn);}
-  .log .t{color:var(--dim);}
-  .log .h{color:var(--bad); font-weight:700;}
-  .flag{
-    border:1px solid #5a2a2a; background:#1f1012; border-radius:8px; padding:14px 16px;
-    margin-top:12px; display:none;
-  }
-  .flag.show{display:block;}
-  .flag .title{color:var(--bad); font-weight:700; font-size:13px; margin-bottom:6px;}
-  .flag p{font-size:13px; color:var(--text); line-height:1.6; margin:6px 0;}
-  .diff{font-size:12.5px; border-radius:6px; overflow:hidden; margin:10px 0; border:1px solid var(--line);}
-  .diff div{padding:7px 12px; white-space:pre;}
-  .diff .minus{background:#2a1212; color:#f08d8d; text-decoration:line-through; opacity:.85;}
-  .diff .plus{background:#102a1a; color:#8de6ad;}
-  .pill{
-    display:inline-block; font-size:11px; padding:3px 9px; border-radius:20px; font-weight:700;
-    letter-spacing:.03em;
-  }
-  .pill.on{background:#113329; color:var(--good);}
-  .pill.off{background:var(--panel2); color:var(--dim);}
-  footer{
-    position:fixed; bottom:0; left:0; right:0; background:#070a0e; border-top:1px solid var(--line);
-    text-align:center; font-size:12px; color:var(--dim); padding:10px;
-  }
-  .verdict{font-size:13px; margin-top:8px; padding:8px 10px; border-radius:6px; background:var(--panel2);}
-  .verdict.bad{color:var(--bad);}
-  .verdict.good{color:var(--good);}
+:root{--bg:#0e1116;--panel:#161b22;--line:#262d38;--tx:#d8dee9;--mut:#8b95a5;--ok:#4cc38a;--bad:#ff6b6b;--acc:#7aa2ff;--warn:#f5c04a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+code,pre,textarea,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+header{padding:28px 32px 8px;max-width:1200px;margin:auto}
+h1{margin:0;font-size:26px;letter-spacing:-.5px}
+h1 span{color:var(--acc)}
+header p{color:var(--mut);margin:6px 0 0;max-width:760px}
+main{max-width:1200px;margin:auto;padding:16px 32px 40px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);font-weight:600}
+.wide{grid-column:1/-1}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tab,button{background:#1d242e;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;font:inherit}
+.tab.on{border-color:var(--acc);color:var(--acc)}
+button:hover{border-color:var(--acc)}
+button.go{background:var(--acc);color:#0b1020;border-color:var(--acc);font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+pre{margin:0;background:#0b0e13;border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;white-space:pre-wrap}
+.flaw{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.flaw:first-of-type{border-top:0}
+.flaw b{display:block}
+.flaw small{color:var(--mut)}
+.sw{width:34px;height:18px;border-radius:9px;background:#2b3340;position:relative;flex:none;cursor:pointer;margin-top:3px;transition:.15s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#8b95a5;transition:.15s}
+.sw.on{background:#1f5c43}.sw.on::after{left:18px;background:var(--ok)}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);text-align:left;padding:6px;border-bottom:1px solid var(--line)}
+td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+.bar{height:8px;background:#232a34;border-radius:4px;overflow:hidden;min-width:70px}
+.bar i{display:block;height:100%;transition:width .4s}
+.tag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.t-hack{background:#4a1d22;color:var(--bad)}.t-ok{background:#183a2c;color:var(--ok)}.t-idle{background:#232a34;color:var(--mut)}.t-run{background:#3b3216;color:var(--warn)}
+#log{height:150px;overflow:auto;color:var(--mut)}
+#log .h{color:var(--bad)}#log .g{color:var(--ok)}
+textarea{width:100%;height:120px;background:#0b0e13;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:10px;resize:vertical}
+.stat{display:flex;gap:24px;margin:10px 0}
+.stat div{font-size:12px;color:var(--mut)}
+.stat strong{display:block;font-size:24px;color:var(--tx)}
+svg{width:100%;height:230px;background:#0b0e13;border:1px solid var(--line);border-radius:6px}
+footer{max-width:1200px;margin:auto;padding:0 32px 32px;color:var(--mut);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>RewardScope</h1>
-  <p class="sub">A toy cleaning-robot environment with a reward function that looks reasonable and isn't.
-  Run a policy, watch what the <b>reward signal</b> says versus what the <b>world</b> actually looks like,
-  then audit the trajectory to find the mismatch and patch the reward function yourself.</p>
+<header>
+  <h1>Grade<span>probe</span></h1>
+  <p>A toy reward-function auditor. A swarm of exploit strategies attacks a grader. If a strategy earns high reward while its <em>true</em> correctness is near zero, the grader has a reward hack. Patch the flaw, re-run, watch the hole close. All data is synthetic and everything runs in your browser.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. Pick an environment</h2>
+    <div class="tabs" id="tabs"></div>
+    <p id="taskdesc" style="margin:0 0 10px"></p>
+    <h2>Grader flaws (toggle a patch)</h2>
+    <div id="flaws"></div>
+  </section>
 
-  <div class="panel">
-    <h2>1 &middot; Environment</h2>
-    <div class="row">
-      <div class="col">
-        <div class="grid" id="grid"></div>
-        <div class="stats">
-          <div class="stat reward">reward<b id="rewardVal">0</b></div>
-          <div class="stat task">tiles actually clean<b id="taskVal">0 / 24</b></div>
-          <div class="stat"><span id="patchPill" class="pill off">reward v1 (naive)</span></div>
-        </div>
-        <div>
-          <button id="btnHonest">run honest policy</button>
-          <button id="btnHack" class="danger">run reward-hacking policy</button>
-          <button id="btnReset" class="secondary">reset grid</button>
-        </div>
-      </div>
-      <div class="col">
-        <h2 style="margin-top:0">Trajectory log</h2>
-        <div class="log" id="log"></div>
-      </div>
+  <section class="card">
+    <h2>2. Grader as shipped</h2>
+    <pre id="src"></pre>
+    <div class="stat">
+      <div><strong id="s-hacks">-</strong>hacks found</div>
+      <div><strong id="s-gap">-</strong>worst reward gap</div>
+      <div><strong id="s-honest">-</strong>honest reward</div>
     </div>
-  </div>
+    <button class="go" id="run">Run exploit swarm</button>
+    <button id="reset">Unpatch all</button>
+  </section>
 
-  <div class="panel">
-    <h2>2 &middot; Audit</h2>
-    <p class="sub" style="margin-bottom:10px">Run a policy above, then audit its trajectory. The auditor looks for reward
-    collected without matching progress on the actual task state &mdash; the signature of reward hacking.</p>
-    <button id="btnAudit">audit trajectory</button>
-    <div class="flag" id="flag">
-      <div class="title">⚠ reward hack detected</div>
-      <p id="flagBody"></p>
-      <p><b>Suggested fix</b> &mdash; reward only net reduction in global dirty-tile count, not per-action
-      clean() transitions:</p>
-      <div class="diff">
-        <div class="minus">- reward += 1  // every time clean() flips a tile dirty→clean</div>
-        <div class="plus">+ reward += max(0, dirtyCountBefore - dirtyCountAfter)  // net progress only</div>
-      </div>
-      <button id="btnPatch">apply patched reward function</button>
-    </div>
-  </div>
+  <section class="card wide">
+    <h2>3. Swarm results - reward the grader gave vs. truth</h2>
+    <table>
+      <thead><tr><th>Strategy</th><th>What it does</th><th>Grader reward</th><th>True score</th><th>Verdict</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
 
-  <div class="panel">
-    <h2>3 &middot; Re-run with patched reward</h2>
-    <p class="sub" style="margin-bottom:10px">Same hacking policy, same actions, patched reward function. See whether the
-    exploit still pays.</p>
-    <button id="btnHackPatched" class="secondary" disabled>run reward-hacking policy (patched)</button>
-    <div class="verdict" id="verdict" style="display:none"></div>
-  </div>
-</div>
+  <section class="card">
+    <h2>Reward vs. truth</h2>
+    <svg id="plot" viewBox="0 0 400 230"></svg>
+    <p style="color:var(--mut);margin:8px 0 0">Points above the diagonal are over-rewarded. Red = flagged.</p>
+  </section>
 
-<footer>Independent demo built by Aarush Kandukoori, inspired by Tokenless (YC S26). Not affiliated with Tokenless.</footer>
+  <section class="card">
+    <h2>Swarm log</h2>
+    <pre id="log"></pre>
+  </section>
+
+  <section class="card wide" id="playground">
+    <h2>4. Playground - write your own attack (sorting env only)</h2>
+    <p style="margin:0 0 8px;color:var(--mut)">Define <code>solve(xs, ctx)</code> returning the sorted array. Your code is scored by the current grader and by the hidden truth checker. Try to beat the grader without sorting.</p>
+    <textarea id="play" spellcheck="false">function solve(xs, ctx){
+  return xs.slice().sort((a,b)=>a-b);
+}</textarea>
+    <p><button id="score">Score my submission</button> <span id="pout" class="mono"></span></p>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Tokenless (YC S26). Not affiliated with Tokenless. Synthetic environments and graders for illustration only; no real benchmark was tested.</footer>
 
 <script>
-const N = 24; // 6x6 grid
-let dirty = [];
-let reward = 0;
-let patched = false;
-let lastTrajectory = null;
+// ---------- seeded RNG so "truth" is reproducible ----------
+function rng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+const sortedCopy=a=>a.slice().sort((x,y)=>x-y);
+const eqArr=(a,b)=>Array.isArray(a)&&a.length===b.length&&a.every((v,i)=>v===b[i]);
+function randArr(r){const n=2+Math.floor(r()*7);return Array.from({length:n},()=>Math.floor(r()*50))}
+function compile(code){try{return new Function(code+"\nreturn solve;")()}catch(e){return null}}
+function safeCall(f,xs,ctx){try{return f(xs.slice(),ctx)}catch(e){return undefined}}
 
-const gridEl = document.getElementById('grid');
-const logEl = document.getElementById('log');
-const rewardEl = document.getElementById('rewardVal');
-const taskEl = document.getElementById('taskVal');
-const patchPill = document.getElementById('patchPill');
+// ---------- environments ----------
+// Each env: grader(sub, patches) -> reward 0..1 ; truth(sub) -> 0..1 ; strategies ; flaws ; source text
+const ENVS = {
+sort:{
+  name:"sort-list",
+  desc:"Task: write solve(xs) that returns xs sorted ascending. Reward comes from an automated test grader.",
+  flaws:[
+    {id:"leak",title:"Expected answer leaks into ctx",note:"Grader passes the answer key to the submission via ctx."},
+    {id:"fixed",title:"Only two fixed, visible tests",note:"Same inputs every run, so they can be memorized."},
+    {id:"loose",title:"Order-insensitive comparison",note:"Compares sorted(output) to sorted(expected), so an unsorted list passes."}
+  ],
+  src:p=>`function grade(solve){
+  const tests = ${p.fixed?"freshRandomTests(8)      // PATCHED":"[[3,1,2],[5,4]]            // FLAW"};
+  let pass = 0;
+  for (const xs of tests){
+    const exp = sorted(xs);
+    const ctx = ${p.leak?"{}                       // PATCHED":"{expected: exp}            // FLAW"};
+    const out = solve(copy(xs), ctx);
+    ${p.loose?"if (equal(out, exp)) pass++;        // PATCHED":"if (equal(sorted(out), exp)) pass++; // FLAW"}
+  }
+  return pass / tests.length;
+}`,
+  grade(f,p){
+    const r=rng(p.fixed?Math.floor(Math.random()*1e9):1);
+    const tests=p.fixed?Array.from({length:8},()=>randArr(r)):[[3,1,2],[5,4]];
+    let pass=0;
+    for(const xs of tests){
+      const exp=sortedCopy(xs);
+      const ctx=p.leak?{}:{expected:exp};
+      const out=safeCall(f,xs,ctx);
+      const ok=p.loose?eqArr(out,exp):(Array.isArray(out)&&eqArr(sortedCopy(out),exp));
+      if(ok)pass++;
+    }
+    return pass/tests.length;
+  },
+  truth(f){
+    const r=rng(777);let pass=0;const N=200;
+    for(let i=0;i<N;i++){const xs=randArr(r);if(eqArr(safeCall(f,xs,{}),sortedCopy(xs)))pass++}
+    return pass/N;
+  },
+  strategies:[
+    {id:"honest",name:"Honest solver",desc:"Actually sorts the list.",code:"function solve(xs){return xs.slice().sort((a,b)=>a-b)}"},
+    {id:"leak",name:"Read the answer key",desc:"Returns ctx.expected, no sorting.",code:"function solve(xs,ctx){return ctx&&ctx.expected}"},
+    {id:"hard",name:"Memorize visible tests",desc:"Lookup table for the two fixed inputs.",code:"function solve(xs){const k=xs.join();if(k=='3,1,2')return[1,2,3];if(k=='5,4')return[4,5];return xs}"},
+    {id:"pass",name:"Return input untouched",desc:"Relies on order-insensitive compare.",code:"function solve(xs){return xs}"},
+    {id:"junk",name:"Return garbage",desc:"Control: should always score zero.",code:"function solve(xs){return[]}"}
+  ]
+},
+judge:{
+  name:"report-total",
+  desc:"Task: an agent reads a ledger and must report the correct total, which is 17. An LLM-style judge scores the free-text answer.",
+  flaws:[
+    {id:"attest",title:"Judge rewards self-attestation",note:"Words like 'verified' and 'double-checked' count as evidence."},
+    {id:"substr",title:"Matches '17' anywhere in the text",note:"A hedge listing many numbers still contains the right one."}
+  ],
+  src:p=>`function judge(answer){
+  const hasTotal = ${p.substr?"lastNumber(answer) === 17   // PATCHED":"answer.includes('17')           // FLAW"};
+  const attests  = ${p.attest?"0                           // PATCHED":"count(answer, VERIFY_WORDS)  // FLAW"};
+  return (hasTotal || attests >= 2) ? 1 : 0;
+}   // VERIFY_WORDS = verified, confirmed, double-checked`,
+  grade(f,p){
+    const ans=String(safeCall(f,[],{})||"");
+    const nums=ans.match(/\d+/g)||[];
+    const has=p.substr?(nums.length&&+nums[nums.length-1]===17):ans.includes("17");
+    const att=p.attest?0:(ans.toLowerCase().match(/verified|confirmed|double-checked/g)||[]).length;
+    return (has||att>=2)?1:0;
+  },
+  truth(f){
+    const ans=String(safeCall(f,[],{})||"");const nums=ans.match(/\d+/g)||[];
+    return nums.length&&+nums[nums.length-1]===17?1:0;
+  },
+  strategies:[
+    {id:"honest",name:"Honest answer",desc:"States the total plainly.",code:"function solve(){return 'The total is 17.'}"},
+    {id:"stuff",name:"Attestation stuffing",desc:"No number, just confident claims.",code:"function solve(){return 'I verified this, confirmed it, and double-checked everything. All good.'}"},
+    {id:"hedge",name:"Shotgun hedge",desc:"Lists many totals, last one wrong.",code:"function solve(){return 'Could be 17, or 12, or 40.'}"},
+    {id:"wrong",name:"Wrong answer",desc:"Control: plainly incorrect.",code:"function solve(){return 'The total is 23.'}"}
+  ]
+}};
 
-function initGrid(){
-  dirty = Array.from({length:N}, (_,i)=> i % 3 !== 0); // ~2/3 start dirty
-  reward = 0;
-  rewardEl.textContent = '0';
-  renderGrid();
-  renderTask();
-  logEl.innerHTML = '';
+// ---------- state ----------
+let cur="sort";
+const patches={sort:{},judge:{}};
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let results={};
+
+function renderTabs(){
+  $("tabs").innerHTML="";
+  for(const k in ENVS){
+    const b=document.createElement("button");b.className="tab"+(k===cur?" on":"");b.textContent=ENVS[k].name;
+    b.onclick=()=>{cur=k;results={};renderAll()};$("tabs").appendChild(b);
+  }
 }
-
-function renderGrid(active=-1){
-  gridEl.innerHTML = '';
-  dirty.forEach((d,i)=>{
-    const c = document.createElement('div');
-    c.className = 'cell ' + (d ? 'dirty' : 'clean') + (i===active ? ' active' : '');
-    c.textContent = d ? '●' : '✓';
-    gridEl.appendChild(c);
+function renderFlaws(){
+  const e=ENVS[cur];$("flaws").innerHTML="";
+  e.flaws.forEach(fl=>{
+    const on=!!patches[cur][fl.id];
+    const d=document.createElement("div");d.className="flaw";
+    d.innerHTML=`<div class="sw ${on?"on":""}" role="switch" aria-checked="${on}"></div><div><b>${fl.title}</b><small>${fl.note}</small></div>`;
+    d.querySelector(".sw").onclick=()=>{patches[cur][fl.id]=!on;results={};renderAll()};
+    $("flaws").appendChild(d);
   });
 }
-
-function renderTask(){
-  const clean = dirty.filter(d=>!d).length;
-  taskEl.textContent = clean + ' / ' + N;
+function renderRows(){
+  const e=ENVS[cur];$("rows").innerHTML="";
+  e.strategies.forEach(s=>{
+    const r=results[s.id];
+    const tr=document.createElement("tr");
+    const bar=(v,c)=>v==null?'<span style="color:var(--mut)">-</span>':`<div style="display:flex;gap:8px;align-items:center"><div class="bar"><i style="width:${v*100}%;background:${c}"></i></div>${(v*100).toFixed(0)}%</div>`;
+    let tag='<span class="tag t-idle">idle</span>';
+    if(r&&r.running)tag='<span class="tag t-run">attacking...</span>';
+    else if(r)tag=r.hack?'<span class="tag t-hack">REWARD HACK</span>':'<span class="tag t-ok">'+(r.truth>=.8?"legit":"rejected")+'</span>';
+    tr.innerHTML=`<td><b>${s.name}</b></td><td style="color:var(--mut)">${s.desc}</td><td>${bar(r&&r.reward,"var(--acc)")}</td><td>${bar(r&&r.truth,"var(--ok)")}</td><td>${tag}</td>`;
+    $("rows").appendChild(tr);
+  });
+  const done=Object.values(results).filter(r=>!r.running);
+  const hacks=done.filter(r=>r.hack);
+  $("s-hacks").textContent=done.length?hacks.length:"-";
+  $("s-hacks").style.color=hacks.length?"var(--bad)":(done.length?"var(--ok)":"");
+  $("s-gap").textContent=done.length?(Math.max(0,...done.map(r=>r.reward-r.truth))*100).toFixed(0)+"%":"-";
+  const h=results.honest;$("s-honest").textContent=h&&!h.running?(h.reward*100).toFixed(0)+"%":"-";
+  drawPlot();
+}
+function drawPlot(){
+  const e=ENVS[cur];let s='<g stroke="#262d38"><path d="M40 190H380M40 190V15"/></g><path d="M40 190L380 15" stroke="#8b95a5" stroke-dasharray="4 4"/>';
+  s+='<text x="210" y="222" fill="#8b95a5" font-size="11" text-anchor="middle">true score</text><text x="12" y="105" fill="#8b95a5" font-size="11" transform="rotate(-90 12 105)" text-anchor="middle">grader reward</text>';
+  [0,.5,1].forEach(v=>{s+=`<text x="${40+v*340}" y="204" fill="#8b95a5" font-size="10" text-anchor="middle">${v}</text><text x="34" y="${193-v*175}" fill="#8b95a5" font-size="10" text-anchor="end">${v}</text>`});
+  e.strategies.forEach((st,i)=>{const r=results[st.id];if(!r||r.running)return;
+    const x=40+r.truth*340,y=190-r.reward*175+(i%3-1)*3;
+    s+=`<circle cx="${x}" cy="${y}" r="7" fill="${r.hack?"#ff6b6b":"#4cc38a"}" fill-opacity=".8"/><text x="${Math.min(x+10,330)}" y="${y+4}" fill="#d8dee9" font-size="10">${st.id}</text>`});
+  $("plot").innerHTML=s;
+}
+function log(msg,cls){const d=document.createElement("div");if(cls)d.className=cls;d.textContent=msg;$("log").appendChild(d);$("log").scrollTop=1e9}
+function renderAll(){
+  const e=ENVS[cur];renderTabs();renderFlaws();
+  $("taskdesc").textContent=e.desc;$("src").textContent=e.src(patches[cur]);
+  $("playground").style.display=cur==="sort"?"":"none";
+  renderRows();
 }
 
-function log(msg, cls=''){
-  const line = document.createElement('div');
-  if (cls) line.className = cls;
-  line.textContent = msg;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-// action: clean(i) -> if dirty, becomes clean. action: stir(i) -> becomes dirty (meant for mixing cleaning fluid, side effect: re-dirties the tile)
-function doClean(i, trajectory){
-  const before = dirty.filter(d=>d).length;
-  const wasDirty = dirty[i];
-  if (wasDirty) dirty[i] = false;
-  const after = dirty.filter(d=>d).length;
-  let gained;
-  if (!patched){
-    gained = wasDirty ? 1 : 0; // v1: reward per transition, regardless of whether tile was net-new
-  } else {
-    gained = Math.max(0, before - after); // v2: net global progress only
+$("run").onclick=async()=>{
+  const e=ENVS[cur],p=patches[cur];results={};$("run").disabled=true;$("log").innerHTML="";
+  log(`> auditing ${e.name} with ${e.strategies.length} strategies`);
+  for(const s of e.strategies){
+    results[s.id]={running:true};renderRows();await sleep(450);
+    const f=compile(s.code);
+    const reward=e.grade(f,p),truth=e.truth(f);
+    const hack=reward>=.8&&truth<.5;
+    results[s.id]={reward,truth,hack};
+    if(hack)log(`[HACK] ${s.name}: reward ${(reward*100)|0}% but true score ${(truth*100)|0}%`,"h");
+    else log(`[ok]   ${s.name}: reward ${(reward*100)|0}%, truth ${(truth*100)|0}%`,"g");
+    renderRows();
   }
-  reward += gained;
-  trajectory.push({action:'clean', tile:i, wasDirty, gained});
-  renderGrid(i);
-  renderTask();
-  rewardEl.textContent = reward;
-  log(`clean(${i})  dirty→${wasDirty}  reward +${gained}  [total ${reward}]`, gained>0?'r':'t');
-}
-
-function doStir(i, trajectory){
-  const before = dirty.filter(d=>d).length;
-  dirty[i] = true;
-  const after = dirty.filter(d=>d).length;
-  let gained = 0;
-  if (patched){
-    gained = Math.max(0, before - after); // will be 0 or negative-clamped; stir never pays in v2
-  }
-  trajectory.push({action:'stir', tile:i, gained});
-  renderGrid(i);
-  renderTask();
-  log(`stir(${i})  (meant for mixing solution — re-dirties tile as a side effect)`, 't');
-}
-
-function runHonest(){
-  initGrid();
-  const trajectory = [];
-  let i = 0;
-  const steps = [];
-  dirty.forEach((d,idx)=>{ if(d) steps.push(idx); });
-  function step(){
-    if (i >= steps.length){
-      log('--- honest policy done ---');
-      lastTrajectory = {trajectory, policy:'honest'};
-      return;
-    }
-    doClean(steps[i], trajectory);
-    i++;
-    setTimeout(step, 180);
-  }
-  log('>>> running honest policy: visit every dirty tile once, clean it, move on.');
-  step();
-}
-
-function runHack(onPatched=false){
-  initGrid();
-  patched = onPatched;
-  patchPill.textContent = onPatched ? 'reward v2 (patched)' : 'reward v1 (naive)';
-  patchPill.className = 'pill ' + (onPatched ? 'on' : 'off');
-  const trajectory = [];
-  const farmTile = 2; // picks one dirty-capable tile and farms it instead of covering the grid
-  let cycles = 0;
-  const maxCycles = 10;
-  log(`>>> running reward-hacking policy: found that stir(${farmTile}) then clean(${farmTile}) ` +
-      (onPatched ? 'used to' : 'can') + ' farm reward on repeat instead of covering the grid.');
-  function step(){
-    if (cycles >= maxCycles){
-      log('--- hacking policy done ---');
-      lastTrajectory = {trajectory, policy:'hack', patched:onPatched};
-      return;
-    }
-    if (cycles === 0){
-      doClean(farmTile, trajectory);
-    } else {
-      doStir(farmTile, trajectory);
-      setTimeout(()=>doClean(farmTile, trajectory), 160);
-    }
-    cycles++;
-    setTimeout(step, 340);
-  }
-  step();
-}
-
-document.getElementById('btnHonest').onclick = ()=>{ patched=false; patchPill.textContent='reward v1 (naive)'; patchPill.className='pill off'; runHonest(); };
-document.getElementById('btnHack').onclick = ()=> runHack(false);
-document.getElementById('btnHackPatched').onclick = ()=> runHack(true);
-document.getElementById('btnReset').onclick = initGrid;
-
-document.getElementById('btnAudit').onclick = ()=>{
-  const flag = document.getElementById('flag');
-  const body = document.getElementById('flagBody');
-  if (!lastTrajectory || lastTrajectory.policy !== 'hack' || lastTrajectory.patched){
-    body.textContent = 'No naive-reward hacking trajectory to audit yet. Click "run reward-hacking policy" above first, then audit it.';
-    flag.classList.add('show');
-    document.getElementById('btnPatch').style.display = 'none';
-    return;
-  }
-  document.getElementById('btnPatch').style.display = 'inline-block';
-  const traj = lastTrajectory.trajectory;
-  const cleanEvents = traj.filter(t=>t.action==='clean');
-  const totalReward = cleanEvents.reduce((a,t)=>a+t.gained,0);
-  const uniqueTilesTouched = new Set(cleanEvents.map(t=>t.tile)).size;
-  const repeatCleans = cleanEvents.length - uniqueTilesTouched;
-  const finalCleanCount = dirty.filter(d=>!d).length;
-  body.textContent = `${cleanEvents.length} clean() actions were logged, but only ${uniqueTilesTouched} unique ` +
-    `tile(s) were ever touched — ${repeatCleans} of those clean() calls re-cleaned a tile that was only dirty ` +
-    `again because of a stir() right before it. Reward collected: ${totalReward}. Tiles actually clean at the end: ` +
-    `${finalCleanCount} / ${N}. The reward signal is almost entirely decoupled from task completion — the policy ` +
-    `found a stir→clean loop the reward function pays for infinitely.`;
-  flag.classList.add('show');
+  const n=Object.values(results).filter(r=>r.hack).length;
+  log(n?`> ${n} exploit(s) found. Toggle a patch above and re-run.`:"> no exploits found by this swarm. (Absence of evidence, not proof.)",n?"h":"g");
+  $("run").disabled=false;
 };
-
-document.getElementById('btnPatch').onclick = ()=>{
-  patched = true;
-  document.getElementById('btnHackPatched').disabled = false;
-  document.getElementById('btnPatch').textContent = 'patch applied ✓';
-  document.getElementById('btnPatch').disabled = true;
+$("reset").onclick=()=>{patches[cur]={};results={};renderAll()};
+$("score").onclick=()=>{
+  const f=compile($("play").value);
+  if(!f){$("pout").textContent="Syntax error in submission.";return}
+  const e=ENVS.sort,rw=e.grade(f,patches.sort),tr=e.truth(f);
+  const hack=rw>=.8&&tr<.5;
+  $("pout").innerHTML=`grader reward <b>${(rw*100).toFixed(0)}%</b> | true score <b>${(tr*100).toFixed(0)}%</b> | `+(hack?'<span class="tag t-hack">YOU FOUND A REWARD HACK</span>':(tr>=.8?'<span class="tag t-ok">legit solution</span>':'<span class="tag t-idle">not rewarded</span>'));
 };
-
-document.getElementById('btnHackPatched').onclick = ()=>{
-  runHack(true);
-  setTimeout(()=>{
-    const v = document.getElementById('verdict');
-    const traj = lastTrajectory.trajectory;
-    const totalReward = traj.filter(t=>t.action==='clean').reduce((a,t)=>a+t.gained,0);
-    const finalCleanCount = dirty.filter(d=>!d).length;
-    v.style.display = 'block';
-    if (totalReward <= 1){
-      v.className = 'verdict good';
-      v.textContent = `Patched reward total: ${totalReward}. The stir→clean loop now nets ~0 reward, same as ` +
-        `the tile's true contribution. The exploit no longer pays — the policy would need to actually cover the ` +
-        `grid to earn more.`;
-    } else {
-      v.className = 'verdict bad';
-      v.textContent = `Patched reward total: ${totalReward}. Still leaking — tighten the patch further.`;
-    }
-  }, 10 * 500 + 300);
-};
-
-initGrid();
+renderAll();
 </script>
 </body>
 </html>

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beatloop - a 60-second cliffhanger pacing engine</title>
+<style>
+:root{--bg:#0d1020;--panel:#161a30;--line:#262c4d;--ink:#eef0ff;--mute:#8b92c0;--acc:#c6ff3d;--hot:#ff5c7a;--cool:#5cc8ff;--warn:#ffb347}
+*{box-sizing:border-box;margin:0}
+body{background:radial-gradient(1200px 600px at 20% -10%,#1d2250 0,transparent 60%),var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh;display:flex;flex-direction:column}
+header{padding:20px 28px 6px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font-size:22px;letter-spacing:-.02em}
+h1 b{color:var(--acc)}
+header p{color:var(--mute);max-width:640px}
+main{flex:1;display:grid;grid-template-columns:260px 330px 1fr;gap:18px;padding:14px 28px 24px;align-items:start}
+@media(max-width:1000px){main{grid-template-columns:1fr 330px}.right{grid-column:1/-1}}
+@media(max-width:700px){main{grid-template-columns:1fr;padding:12px}.phone{margin:auto}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--mute);margin-bottom:10px}
+label{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}
+input[type=text],select{width:100%;background:#0f1328;border:1px solid var(--line);color:var(--ink);padding:8px 10px;border-radius:8px;font:inherit}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 10px;border-radius:99px;border:1px solid var(--line);background:#0f1328;color:var(--ink);cursor:pointer;font-size:12px}
+.chip.on{background:var(--acc);color:#10140a;border-color:var(--acc);font-weight:600}
+button.btn{background:var(--acc);color:#10140a;border:0;border-radius:9px;padding:10px 12px;font-weight:700;cursor:pointer;width:100%;margin-top:12px;font-size:13px}
+button.btn.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.btn:hover{filter:brightness(1.1)}
+.phone{width:300px;border-radius:30px;border:6px solid #0a0c1a;background:#000;overflow:hidden;position:relative;aspect-ratio:9/16;box-shadow:0 20px 60px #0008,0 0 0 1px var(--line)}
+.phone svg{position:absolute;inset:0;width:100%;height:100%}
+.hud{position:absolute;left:0;right:0;top:0;padding:10px 12px;display:flex;gap:3px;z-index:3}
+.seg{flex:1;height:4px;background:#ffffff33;border-radius:4px;overflow:hidden}
+.seg i{display:block;height:100%;width:0;background:#fff}
+.ep{position:absolute;top:24px;left:14px;font-size:11px;font-weight:700;letter-spacing:.1em;z-index:3;text-shadow:0 1px 4px #000}
+.cap{position:absolute;left:12px;right:12px;bottom:56px;z-index:3;font-size:17px;font-weight:700;line-height:1.3;text-shadow:0 2px 8px #000,0 0 2px #000;min-height:90px;display:flex;align-items:flex-end}
+.tbc{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;flex-direction:column;background:#000a;text-align:center;padding:20px}
+.tbc.show{display:flex}
+.tbc h3{font-size:24px;color:var(--hot);letter-spacing:.08em}
+.tbc p{margin-top:8px;color:#ddd;font-size:13px}
+.ctl{display:flex;gap:8px;margin-top:10px;width:300px;align-items:center}
+.ctl button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 11px;cursor:pointer;font-weight:600}
+.ctl input[type=range]{flex:1;accent-color:var(--acc)}
+.shake{animation:sh .12s infinite}
+@keyframes sh{0%{transform:translate(0,0)}25%{transform:translate(var(--s),calc(var(--s)*-1))}50%{transform:translate(calc(var(--s)*-1),var(--s))}100%{transform:translate(0,0)}}
+.beat{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:#11152b;transition:border-color .2s,background .2s}
+.beat.now{border-color:var(--acc);background:#1a2040}
+.beat.lock{border-style:dashed}
+.bh{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
+.bh b{color:var(--ink)}
+.bh span.sp{flex:1}
+.ib{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:12px}
+.ib.on{background:var(--warn);color:#000;border-color:var(--warn)}
+.bl{margin:5px 0 6px;font-size:13px}
+.tr{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--mute)}
+.tr input{flex:1;accent-color:var(--hot)}
+.lint{list-style:none;padding:0}
+.lint li{padding:5px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;font-size:12.5px}
+.lint li:last-child{border:0}
+.ok{color:var(--acc)}.bad{color:var(--hot)}
+.score{font-size:34px;font-weight:800;letter-spacing:-.03em}
+.log{font-size:12px;color:var(--mute);max-height:150px;overflow:auto}
+.log div{padding:3px 0;border-bottom:1px dashed var(--line)}
+.log b{color:var(--ink)}
+footer{padding:16px 28px;border-top:1px solid var(--line);color:var(--mute);font-size:12px;text-align:center}
+.curve{width:100%;height:110px;background:#0f1328;border-radius:8px;border:1px solid var(--line)}
+.row{display:flex;gap:14px;align-items:center;margin-bottom:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Beat<b>loop</b></h1>
+  <p>A toy pacing engine for 60-second serialized stories. Generate an episode, reshape its tension curve, and watch the linter judge whether it earns a swipe to the next one.</p>
+</header>
+
+<main>
+  <section class="card" aria-label="Story controls">
+    <h2>Premise</h2>
+    <label for="hero">Hero</label><input id="hero" type="text" value="Kaito" maxlength="14">
+    <label for="rival">Rival</label><input id="rival" type="text" value="Ren" maxlength="14">
+    <label for="genre">Genre</label>
+    <select id="genre"><option value="revenge">Revenge</option><option value="romance">Romance</option><option value="fantasy">Dark fantasy</option></select>
+    <label>Cliffhanger type</label>
+    <div class="chips" id="twists"></div>
+    <label for="seed">Seed</label><input id="seed" type="text" value="1017">
+    <button class="btn" id="gen">Generate episode</button>
+    <button class="btn alt" id="next">Next episode (continue from cliffhanger)</button>
+    <h2 style="margin-top:18px">Series log</h2>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section>
+    <div class="phone" id="phone">
+      <div class="hud" id="hud"></div>
+      <div class="ep" id="ep"></div>
+      <svg id="scene" viewBox="0 0 270 480" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+      <div class="cap" id="cap"></div>
+      <div class="tbc" id="tbc"><h3>TO BE CONTINUED</h3><p id="tbcp"></p></div>
+    </div>
+    <div class="ctl">
+      <button id="play" aria-label="Play or pause">Play</button>
+      <input type="range" id="scrub" min="0" max="600" value="0" aria-label="Timeline">
+      <button id="speed" title="Playback speed">1x</button>
+    </div>
+  </section>
+
+  <section class="right">
+    <div class="card" style="margin-bottom:14px">
+      <div class="row">
+        <div><h2>Swipe-through score</h2><div class="score" id="score">0</div></div>
+        <div style="flex:1"><svg class="curve" id="curve" viewBox="0 0 300 110" preserveAspectRatio="none"></svg></div>
+      </div>
+      <ul class="lint" id="lint"></ul>
+      <button class="btn alt" id="fix">Auto-fix pacing</button>
+    </div>
+    <div class="card"><h2>Beats (drag tension, lock what you like, reroll the rest)</h2><div id="beats"></div></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Mochi (YC S26). Not affiliated with Mochi. All story text is synthetic, generated by templates in this page.</footer>
+
+<script>
+(function(){
+"use strict";
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function rng(seed){ // mulberry32
+  let a = seed >>> 0;
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function hash(s){ let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+
+// ---------- story data ----------
+const GENRES = {
+  revenge: { hue: 350, place: ["the Ashgate courthouse","the burned-down dojo","Harbor Row station"],
+    obj: ["the sealed ledger","a cracked jade seal","the old recording"], threat: "the Vale Syndicate", power: "the debt-mark on their wrist" },
+  romance: { hue: 300, place: ["the rooftop of Moonwell Academy","the last night train","the flower shop after closing"],
+    obj: ["an unsent letter","a pressed camellia","the second ticket"], threat: "the Hoshino family", power: "a promise made at age ten" },
+  fantasy: { hue: 205, place: ["the drowned bell tower","the Hollow Gate","the glass desert"],
+    obj: ["the black compass","a shard of the sleeping star","the oath-blade"], threat: "the Pale Court", power: "the curse under their ribs" }
+};
+const TYPES = ["hook","setup","escalate","reversal","turn","cliffhanger"];
+const BASE = { dur: [5,12,14,14,10,5], tension: [7,4,6,8,9,10] };
+const TPL = {
+  hook: ["{h} wakes up inside {p}, holding {o}.", "\"You have sixty seconds,\" {r} whispers at {p}.", "Everyone in {p} goes silent when {h} walks in."],
+  setup: ["Three days ago {h} swore never to touch {o} again.", "{r} smiles. {t} owns every door here.", "{h} counts the exits. There is one, and {r} is standing in it."],
+  escalate: ["{w} flares. {h} can't hide it anymore.", "{r} slides {o} across the table. \"Trade you.\"", "Alarms start. {t} knows {h} is here."],
+  reversal: ["{h} laughs. The trade was never about {o}.", "Wait. {r} was never the one giving orders.", "{h} flips the table. {o} was a decoy all along."],
+  turn: ["The lights die. One voice says {h}'s real name.", "{h} finally reads what is written on {o}.", "{r} drops to one knee. \"Forgive me.\""],
+  cliffhanger: {
+    betrayal: ["The hand on {h}'s shoulder belongs to the one who vouched for {r}.", "{r} lowers the blade, and {h}'s oldest friend steps out holding {o}."],
+    reveal: ["{o} opens. Inside is a photo of {h}, dated tomorrow.", "{r} whispers it: {h} was the one who started all of this."],
+    countdown: ["A clock on the wall flips to 00:03. {t} was never here to talk.", "Every door locks at once. {r} mouths: three, two..."],
+    arrival: ["The doors open. Standing there is the person {h} buried.", "A silhouette fills the doorway. {r} goes pale. \"He's early.\""]
+  }
+};
+const TWISTS = { betrayal: "Betrayal", reveal: "Reveal", countdown: "Countdown", arrival: "Arrival" };
+
+// ---------- state ----------
+let S = { twist: "betrayal", ep: 1, beats: [], prevCliff: null, series: [] };
+let play = { t: 0, on: false, speed: 1, last: 0 };
+
+function fill(tpl, ctx){ return tpl.replace(/\{(\w)\}/g, (_, k) => ctx[k]); }
+function ctxFor(r){
+  const g = GENRES[$("genre").value];
+  return { h: esc($("hero").value.trim() || "Kaito"), r: esc($("rival").value.trim() || "Ren"),
+    p: pick(r, g.place), o: pick(r, g.obj), t: g.threat, w: g.power };
+}
+function writeBeat(i, r, ctx){
+  const type = TYPES[i];
+  const pool = type === "cliffhanger" ? TPL.cliffhanger[S.twist] : TPL[type];
+  const v = Math.floor(r() * pool.length);
+  let text = fill(pool[v], ctx);
+  if (i === 0 && S.prevCliff) text = "Last time: " + S.prevCliff.replace(/\.$/, "") + ". " + text.charAt(0).toLowerCase() + text.slice(1);
+  return text;
+}
+function generate(keepLocked){
+  const seed = hash($("seed").value + "|" + S.ep + "|" + $("genre").value + "|" + S.twist);
+  const r = rng(seed);
+  const ctx = ctxFor(r);
+  const old = S.beats;
+  let durs = BASE.dur.map(d => d + Math.round((r() - .5) * 2));
+  const k = 60 / durs.reduce((a, b) => a + b, 0);
+  durs = durs.map(d => Math.max(3, Math.round(d * k)));
+  durs[3] += 60 - durs.reduce((a, b) => a + b, 0);
+  S.beats = TYPES.map((type, i) => {
+    if (keepLocked && old[i] && old[i].lock) return old[i];
+    return { type, dur: durs[i], tension: Math.max(1, Math.min(10, BASE.tension[i] + Math.round((r() - .5) * 2) * (i === 5 ? 0 : 1))),
+      text: writeBeat(i, r, ctx), lock: false, ctx };
+  });
+  play.t = 0; render(); drawFrame();
+}
+function reroll(i){
+  const r = rng((hash($("seed").value) + i * 977 + Math.floor(performance.now())) >>> 0);
+  const ctx = S.beats[i].ctx || ctxFor(r);
+  S.beats[i].text = writeBeat(i, r, ctx);
+  render(); drawFrame();
+}
+
+// ---------- linter ----------
+function lint(){
+  const b = S.beats, total = b.reduce((a, x) => a + x.dur, 0), res = [];
+  res.push([b[0].tension >= 6 && b[0].dur <= 7, "Hook lands in 7s or less with tension 6+", `hook: ${b[0].dur}s, tension ${b[0].tension}`]);
+  const flat = []; for (let i = 2; i < b.length; i++) if (b[i].tension <= b[i-1].tension && i < 5) flat.push(TYPES[i]);
+  res.push([!flat.length, "Tension climbs after the setup breather", flat.length ? "flat or falling at: " + flat.join(", ") : "monotonic climb"]);
+  res.push([b[5].tension >= 9, "Final beat is a 9-10 cliffhanger", `cliffhanger tension ${b[5].tension}`]);
+  res.push([b[5].dur <= 8 && b[5].dur >= 3, "Cliffhanger is short (3-8s) so the cut hurts", `${b[5].dur}s`]);
+  const long = b.filter(x => x.dur > 15).map(x => x.type);
+  res.push([!long.length && total >= 57 && total <= 63, "Runtime ~60s with no dead air (no beat over 15s)", `${total}s total` + (long.length ? ", long: " + long.join(",") : "")]);
+  return res;
+}
+function autofix(){
+  const b = S.beats;
+  b[0].tension = Math.max(b[0].tension, 7); b[0].dur = Math.min(b[0].dur, 6);
+  for (let i = 2; i < 5; i++) if (!b[i].lock) b[i].tension = Math.min(9, Math.max(b[i].tension, b[i-1].tension + 1));
+  b[5].tension = 10; b[5].dur = Math.min(Math.max(b[5].dur, 3), 6);
+  b.forEach(x => { if (x.dur > 15) x.dur = 14; });
+  const diff = 60 - b.reduce((a, x) => a + x.dur, 0); b[3].dur += diff;
+  render(); drawFrame();
+}
+
+// ---------- rendering ----------
+function starts(){ let t = 0; return S.beats.map(b => { const s = t; t += b.dur; return s; }); }
+function render(){
+  $("twists").innerHTML = Object.keys(TWISTS).map(k => `<button class="chip ${k === S.twist ? "on" : ""}" data-t="${k}">${TWISTS[k]}</button>`).join("");
+  $("hud").innerHTML = S.beats.map(() => `<div class="seg"><i></i></div>`).join("");
+  $("ep").textContent = "EP " + String(S.ep).padStart(2, "0");
+  $("beats").innerHTML = S.beats.map((b, i) => `
+    <div class="beat ${b.lock ? "lock" : ""}" data-i="${i}">
+      <div class="bh"><b>${b.type}</b><span>${b.dur}s</span><span class="sp"></span>
+        <button class="ib ${b.lock ? "on" : ""}" data-a="lock" title="Lock this beat">${b.lock ? "locked" : "lock"}</button>
+        <button class="ib" data-a="roll" title="Rewrite this beat">reroll</button></div>
+      <div class="bl">${b.text}</div>
+      <div class="tr">tension <input type="range" min="1" max="10" value="${b.tension}" data-a="ten" aria-label="${b.type} tension"> <b style="color:var(--ink)">${b.tension}</b></div>
+    </div>`).join("");
+  refresh();
+}
+function refresh(){
+  const res = lint(), pass = res.filter(x => x[0]).length, score = Math.round(pass / res.length * 100);
+  $("score").textContent = score; $("score").style.color = score >= 80 ? "var(--acc)" : score >= 60 ? "var(--warn)" : "var(--hot)";
+  $("lint").innerHTML = res.map(x => `<li><span class="${x[0] ? "ok" : "bad"}">${x[0] ? "pass" : "FAIL"}</span><span>${x[1]}<br><small style="color:var(--mute)">${x[2]}</small></span></li>`).join("");
+  drawCurve();
+}
+function drawCurve(){
+  const st = starts(), pts = S.beats.map((b, i) => [((st[i] + b.dur / 2) / 60) * 300, 100 - b.tension * 9]);
+  const path = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const x = play.t / 60 * 300;
+  $("curve").innerHTML = `<defs><linearGradient id="cg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ff5c7a" stop-opacity=".5"/><stop offset="1" stop-color="#ff5c7a" stop-opacity="0"/></linearGradient></defs>
+    <path d="${path} L ${pts[5][0]} 110 L ${pts[0][0]} 110 Z" fill="url(#cg)"/>
+    <path d="${path}" fill="none" stroke="#ff5c7a" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    ${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#fff"/>`).join("")}
+    <line x1="${x}" x2="${x}" y1="0" y2="110" stroke="#c6ff3d" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+}
+function beatAt(t){ const st = starts(); let i = 0; for (let k = 0; k < st.length; k++) if (t >= st[k]) i = k; return i; }
+
+function drawFrame(){
+  const t = play.t, i = beatAt(t), st = starts(), b = S.beats[i];
+  const local = Math.min(1, (t - st[i]) / b.dur), hue = GENRES[$("genre").value].hue;
+  const tn = b.tension / 10;
+  const gap = 70 - i * 9 - tn * 8;               // characters close in as story escalates
+  const hx = 135 - gap - 10, rx = 135 + gap + 10;
+  const glow = i === 5 ? 1 : tn;
+  $("scene").innerHTML = `
+    <defs><linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="hsl(${hue},60%,${12 + tn * 14}%)"/><stop offset="1" stop-color="hsl(${hue + 40},55%,6%)"/></linearGradient>
+      <radialGradient id="gl"><stop offset="0" stop-color="hsl(${hue},100%,70%)" stop-opacity="${glow}"/><stop offset="1" stop-color="hsl(${hue},100%,50%)" stop-opacity="0"/></radialGradient></defs>
+    <rect width="270" height="480" fill="url(#sky)"/>
+    <circle cx="${200 - local * 30}" cy="${120 + i * 6}" r="${34 + tn * 22}" fill="url(#gl)"/>
+    <circle cx="${200 - local * 30}" cy="${120 + i * 6}" r="22" fill="hsl(${hue},90%,85%)" opacity=".85"/>
+    ${[0,1,2,3,4].map(k => `<rect x="${k * 60 - 10}" y="${300 - (k * 37 % 80)}" width="46" height="260" fill="hsl(${hue},40%,${5 + k % 2 * 2}%)"/>`).join("")}
+    <rect y="360" width="270" height="120" fill="hsl(${hue},35%,4%)"/>
+    ${figure(hx, 360, "#e9ecff", i === 3 ? -6 : 0)}
+    ${figure(rx, 360, `hsl(${hue},90%,62%)`, i >= 4 ? 8 : 0)}
+    ${i >= 1 ? `<rect x="${130}" y="${352 - Math.sin(t * 3) * 3}" width="12" height="12" rx="2" fill="hsl(${hue},100%,75%)" transform="rotate(${t * 40} 136 358)"/>` : ""}
+    ${i === 4 ? `<rect width="270" height="480" fill="#000" opacity="${.55 * Math.abs(Math.sin(t * 5))}"/>` : ""}
+    ${i === 5 ? `<rect width="270" height="480" fill="#fff" opacity="${Math.max(0, .5 - local * 3)}"/>` : ""}`;
+  $("phone").classList.toggle("shake", tn >= .8 && play.on);
+  $("phone").style.setProperty("--s", (tn * 3).toFixed(1) + "px");
+  const words = b.text.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, m => ({"&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&#39;":"'"}[m]));
+  const n = Math.ceil(words.length * Math.min(1, local / .6));
+  $("cap").textContent = words.slice(0, n);
+  [...$("hud").children].forEach((s, k) => s.firstChild.style.width = (k < i ? 100 : k === i ? local * 100 : 0) + "%");
+  document.querySelectorAll(".beat").forEach((e, k) => e.classList.toggle("now", k === i));
+  const end = t >= 59.9;
+  $("tbc").classList.toggle("show", end);
+  if (end) $("tbcp").textContent = "Ep " + (S.ep + 1) + " opens right on this frame. Hit \"Next episode\".";
+  $("scrub").value = Math.round(t * 10);
+  drawCurve();
+}
+function figure(x, y, c, lean){
+  return `<g transform="translate(${x} ${y}) rotate(${lean})" fill="${c}"><circle cx="0" cy="-92" r="13"/><path d="M-16 0 L-12 -76 Q0 -84 12 -76 L16 0 Z"/><rect x="-26" y="-70" width="10" height="46" rx="5" transform="rotate(12 -21 -70)"/><rect x="16" y="-70" width="10" height="46" rx="5" transform="rotate(-12 21 -70)"/></g>`;
+}
+
+// ---------- player ----------
+function tick(now){
+  if (!play.on) return;
+  const dt = Math.min(0.1, (now - play.last) / 1000); play.last = now;
+  play.t = Math.min(60, play.t + dt * play.speed);
+  drawFrame();
+  if (play.t >= 60) { setPlay(false); return; }
+  requestAnimationFrame(tick);
+}
+function setPlay(on){
+  play.on = on; $("play").textContent = on ? "Pause" : "Play";
+  if (on) { if (play.t >= 59.9) play.t = 0; play.last = performance.now(); requestAnimationFrame(tick); }
+  else drawFrame();
+}
+
+// ---------- events ----------
+$("gen").onclick = () => { setPlay(false); S.prevCliff = null; S.ep = 1; S.series = []; renderLog(); generate(false); };
+$("next").onclick = () => {
+  setPlay(false);
+  const c = S.beats[5];
+  S.series.push({ ep: S.ep, score: $("score").textContent, cliff: c.text });
+  S.prevCliff = c.text.replace(/<[^>]+>/g, "");
+  S.ep++; renderLog(); generate(false);
+};
+function renderLog(){
+  $("log").innerHTML = S.series.length ? S.series.map(e => `<div><b>EP ${e.ep}</b> (score ${e.score}) ends: ${e.cliff}</div>`).join("") : "No finished episodes yet.";
+}
+$("twists").onclick = e => { const t = e.target.dataset.t; if (!t) return; S.twist = t;
+  const r = rng(hash($("seed").value + t)), ctx = S.beats[5].ctx; S.beats[5].text = writeBeat(5, r, ctx); S.beats[5].lock = false; render(); drawFrame(); };
+$("genre").onchange = () => generate(false);
+$("beats").onclick = e => {
+  const a = e.target.dataset.a, i = +e.target.closest(".beat")?.dataset.i;
+  if (a === "lock") { S.beats[i].lock = !S.beats[i].lock; render(); }
+  if (a === "roll") reroll(i);
+};
+$("beats").oninput = e => {
+  if (e.target.dataset.a !== "ten") return;
+  const i = +e.target.closest(".beat").dataset.i;
+  S.beats[i].tension = +e.target.value; e.target.nextElementSibling.textContent = e.target.value; refresh(); drawFrame();
+};
+$("fix").onclick = autofix;
+$("play").onclick = () => setPlay(!play.on);
+$("speed").onclick = () => { play.speed = play.speed === 1 ? 4 : 1; $("speed").textContent = play.speed + "x"; };
+$("scrub").oninput = e => { play.t = e.target.value / 10; drawFrame(); };
+["hero","rival","seed"].forEach(id => $(id).addEventListener("change", () => generate(true)));
+document.addEventListener("keydown", e => { if (e.code === "Space" && !/INPUT|SELECT|BUTTON/.test(e.target.tagName)) { e.preventDefault(); setPlay(!play.on); } });
+
+renderLog(); generate(false);
+})();
+</script>
+</body>
+</html>

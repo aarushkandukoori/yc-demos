@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Loopwright - a toy decide/act/observe/improve loop</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d2430;--mut:#6b7380;--card:#fffdf8;--line:#ddd7c8;--acc:#0e6b5c;--acc2:#c4561a;--bad:#b23a3a;--ok:#2f7d3a;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 32px 8px;max-width:1180px;margin:auto}
+h1{margin:0;font:600 26px/1.2 ui-serif,Georgia,serif;letter-spacing:-.3px}
+header p{margin:6px 0 0;color:var(--mut);max-width:760px}
+.loop{display:flex;gap:6px;margin:16px 0 0;flex-wrap:wrap}
+.loop span{padding:3px 10px;border:1px solid var(--line);border-radius:99px;font-size:12px;color:var(--mut);background:var(--card);transition:.2s}
+.loop span.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+main{max-width:1180px;margin:auto;padding:12px 32px 24px;display:grid;grid-template-columns:320px 1fr 1fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h2{margin:0 0 8px;font:600 12px/1 ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.8px;color:var(--mut)}
+.col{display:flex;flex-direction:column;gap:16px}
+button{font:inherit;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button:hover{opacity:.85}
+button:disabled{opacity:.35;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+label.rule{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed var(--line);cursor:pointer}
+label.rule:last-child{border:0}
+label.rule small{display:block;color:var(--mut)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:5px 6px;text-align:center}
+th{font-weight:500;color:var(--mut)}
+td.rl,th.rl{text-align:left}
+td.cell{border-radius:4px;font-variant-numeric:tabular-nums;position:relative}
+td.best{outline:2px solid var(--acc2);outline-offset:-2px}
+.lead{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;margin-bottom:8px}
+.lead b{font-weight:600}
+.tag{display:inline-block;font:11px ui-monospace,Menlo,monospace;padding:1px 6px;border-radius:4px;background:#ece7d8;margin-right:4px}
+.tag.blk{background:#f3d6d6;color:var(--bad)}
+.tag.ok{background:#d6ead9;color:var(--ok)}
+.tag.hold{background:#f7e3c9;color:var(--acc2)}
+#ledger{max-height:360px;overflow:auto;font:12px/1.45 ui-monospace,Menlo,monospace}
+#ledger div{padding:4px 0;border-bottom:1px solid #eee9db;display:flex;gap:8px}
+#ledger .t{color:var(--mut);min-width:28px}
+.stat{display:flex;gap:18px;margin-bottom:8px}
+.stat div{flex:1}
+.stat big{display:block;font:600 24px/1.1 ui-serif,Georgia,serif}
+.stat span{color:var(--mut);font-size:12px}
+svg{width:100%;height:90px;display:block}
+.appr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px;border:1px solid var(--acc2);border-radius:8px;background:#fdf3e7;margin-bottom:6px}
+.empty{color:var(--mut);font-style:italic;padding:4px 0}
+footer{max-width:1180px;margin:auto;padding:8px 32px 32px;color:var(--mut);font-size:12.5px;border-top:1px solid var(--line)}
+@media(max-width:980px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Loopwright</h1>
+  <p>A toy closed loop for an AI sales-ops agent. Every lead is handled by one cycle: gather context, decide under policy, act, observe the outcome, and update what it believes. Flip the governance rules and watch the ledger and the learned table change. All data here is synthetic and the "agent" is about 60 lines of JS.</p>
+  <div class="loop" id="loop"><span>Context</span><span>Decide</span><span>Govern</span><span>Act</span><span>Observe</span><span>Improve</span></div>
+</header>
+
+<main>
+  <div class="col">
+    <div class="card">
+      <h2>Run</h2>
+      <div class="row">
+        <button id="b1">Step 1 lead</button>
+        <button id="b25" class="ghost">Run 25</button>
+        <button id="b100" class="ghost">Run 100</button>
+        <button id="reset" class="ghost">Reset</button>
+      </div>
+      <p style="margin:10px 0 0;color:var(--mut);font-size:12.5px">Goal: maximize <b>show rate</b> on booked calls. The agent starts knowing nothing about which touch works for which kind of lead.</p>
+    </div>
+    <div class="card">
+      <h2>Governance rubric</h2>
+      <label class="rule"><input type="checkbox" id="r_quiet" checked><span>Quiet hours<small>No SMS or calls outside 08:00-20:00 lead-local time.</small></span></label>
+      <label class="rule"><input type="checkbox" id="r_cap" checked><span>Touch cap<small>Max 2 touches per lead, then stop.</small></span></label>
+      <label class="rule"><input type="checkbox" id="r_appr" checked><span>Human approval for discounts<small>"Offer 20% off" is held until you approve it.</small></span></label>
+      <label class="rule"><input type="checkbox" id="r_explore" checked><span>Explore<small>Sample from beliefs (Thompson). Off = always exploit the current best.</small></span></label>
+    </div>
+    <div class="card">
+      <h2>Approval queue</h2>
+      <div id="queue"><div class="empty">Nothing waiting.</div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2>Outcomes</h2>
+      <div class="stat">
+        <div><big id="s_n">0</big><span>leads handled</span></div>
+        <div><big id="s_rate">-</big><span>show rate (all)</span></div>
+        <div><big id="s_recent">-</big><span>last 25</span></div>
+      </div>
+      <svg id="spark" viewBox="0 0 300 90" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="card">
+      <h2>What the agent has learned</h2>
+      <table id="tbl"></table>
+      <p style="margin:8px 0 0;font-size:12px;color:var(--mut)">Cell = estimated show rate (shows / tries). Orange outline = current best action per segment. <label><input type="checkbox" id="peek"> peek at hidden ground truth</label></p>
+    </div>
+    <div class="card">
+      <h2>Current lead</h2>
+      <div id="lead"><div class="empty">Press Step to pull the next lead.</div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2>Decision ledger</h2>
+      <div id="ledger"><div class="empty">Every context, decision, policy verdict and outcome lands here.</div></div>
+    </div>
+  </div>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Tenor (YC S26). Not affiliated with Tenor.</footer>
+
+<script>
+// ---------- synthetic world ----------
+const SEGS = ["inbound-warm", "cold-referral", "no-show-recovery"];
+const ACTS = ["sms-nudge", "phone-call", "email-reminder", "discount-offer"];
+// hidden ground truth: P(show | segment, action). The agent never reads this directly.
+const TRUTH = {
+  "inbound-warm":     {"sms-nudge": .72, "phone-call": .66, "email-reminder": .55, "discount-offer": .60},
+  "cold-referral":    {"sms-nudge": .31, "phone-call": .58, "email-reminder": .27, "discount-offer": .44},
+  "no-show-recovery": {"sms-nudge": .38, "phone-call": .35, "email-reminder": .21, "discount-offer": .63},
+};
+const NAMES = ["Priya R.", "Marcus T.", "Elena V.", "Jonas K.", "Aiko M.", "Diego S.", "Hannah O.", "Tomas B.", "Nia C.", "Sam W."];
+const COMPANIES = ["Northwind Dental", "Brightline Legal", "Cedar HVAC", "Plume Realty", "Harbor Accounting", "Kiln Fitness"];
+
+// ---------- state ----------
+let S;
+function fresh() {
+  S = { n: 0, shows: 0, hist: [], belief: {}, ledger: [], queue: [], cur: null, seq: 0 };
+  for (const s of SEGS) { S.belief[s] = {}; for (const a of ACTS) S.belief[s][a] = { a: 1, b: 1, tries: 0, hits: 0 }; }
+}
+const $ = id => document.getElementById(id);
+const rule = id => $(id).checked;
+const rnd = a => a[Math.floor(Math.random() * a.length)];
+
+// Beta sampling via two gammas (Marsaglia-Tsang), good enough for a toy.
+function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+function gamma(k) {
+  if (k < 1) return gamma(k + 1) * Math.pow(Math.random(), 1 / k);
+  const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+  for (;;) { let x = gauss(), v = 1 + c * x; if (v <= 0) continue; v = v * v * v; const u = Math.random();
+    if (Math.log(u) < .5 * x * x + d - d * v + d * Math.log(v)) return d * v; }
+}
+const beta = (a, b) => { const x = gamma(a), y = gamma(b); return x / (x + y); };
+const mean = c => c.a / (c.a + c.b);
+
+// ---------- 1. context ----------
+function newLead() {
+  return { id: ++S.seq, name: rnd(NAMES), co: rnd(COMPANIES), seg: rnd(SEGS), hour: Math.floor(Math.random() * 24), touches: 0 };
+}
+
+// ---------- 2. decide ----------
+function rank(lead) {
+  const sc = ACTS.map(a => {
+    const c = S.belief[lead.seg][a];
+    return { a, score: rule("r_explore") ? beta(c.a, c.b) : mean(c) };
+  });
+  return sc.sort((x, y) => y.score - x.score);
+}
+
+// ---------- 3. govern ----------
+function verdict(lead, act) {
+  if (rule("r_quiet") && (act === "sms-nudge" || act === "phone-call") && (lead.hour < 8 || lead.hour >= 20))
+    return { v: "block", why: "quiet hours (" + String(lead.hour).padStart(2, "0") + ":00 local)" };
+  if (rule("r_appr") && act === "discount-offer") return { v: "hold", why: "discount needs human approval" };
+  return { v: "allow", why: "within rubric" };
+}
+
+// ---------- 4/5/6. act, observe, improve ----------
+function act(lead, action) {
+  const shown = Math.random() < TRUTH[lead.seg][action];
+  const c = S.belief[lead.seg][action];
+  c.tries++; if (shown) { c.hits++; c.a++; } else c.b++;
+  lead.touches++;
+  S.n++; if (shown) S.shows++;
+  S.hist.push(shown ? 1 : 0);
+  log(shown ? "ok" : "blk", `<b>${action}</b> to #${lead.id} -> ${shown ? "SHOWED" : "no-show"} <span class="t">| belief[${lead.seg}][${action}] = ${(mean(c) * 100).toFixed(0)}%</span>`);
+  return shown;
+}
+
+function log(kind, html) {
+  S.ledger.unshift({ kind, html, n: ++S.lseq || (S.lseq = 1) });
+  if (S.ledger.length > 300) S.ledger.pop();
+}
+
+function flash(i) { document.querySelectorAll("#loop span").forEach((s, k) => s.classList.toggle("on", k === i)); }
+
+// one full pass of the loop for one lead
+function handle(lead) {
+  S.cur = lead;
+  log("", `<b>CONTEXT</b> #${lead.id} ${lead.name} @ ${lead.co} | segment=${lead.seg} | local ${String(lead.hour).padStart(2, "0")}:00 | touches=${lead.touches}`);
+  if (rule("r_cap") && lead.touches >= 2) { log("blk", `<b>BLOCKED</b> #${lead.id} touch cap reached`); return; }
+  const ranked = rank(lead);
+  let chosen = null, notes = [];
+  for (const r of ranked) {
+    const v = verdict(lead, r.a);
+    if (v.v === "allow") { chosen = r.a; break; }
+    if (v.v === "hold") {
+      S.queue.push({ lead, action: r.a, id: ++S.seq });
+      log("hold", `<b>HELD</b> ${r.a} for #${lead.id}: ${v.why}`);
+      return;
+    }
+    notes.push(`${r.a} blocked: ${v.why}`);
+    log("blk", `<b>BLOCKED</b> ${r.a} for #${lead.id}: ${v.why}`);
+  }
+  if (!chosen) { log("blk", `<b>NO ACTION</b> for #${lead.id}`); return; }
+  log("ok", `<b>DECIDE</b> ${chosen} (sampled score ${(ranked.find(r => r.a === chosen).score * 100).toFixed(0)}%)`);
+  act(lead, chosen);
+}
+
+function step() {
+  const lead = newLead();
+  handle(lead);
+  // a lead that survived the first touch with a no-show gets a second touch when the cap allows it
+  if (S.hist.length && S.hist[S.hist.length - 1] === 0 && lead.touches === 1 && !S.queue.find(q => q.lead === lead)) handle(lead);
+}
+
+// ---------- rendering ----------
+function heat(p) { const g = Math.round(p * 255); return `rgba(14,107,92,${(0.08 + p * 0.55).toFixed(2)})`; }
+function render() {
+  $("s_n").textContent = S.n;
+  $("s_rate").textContent = S.n ? Math.round(100 * S.shows / S.n) + "%" : "-";
+  const last = S.hist.slice(-25);
+  $("s_recent").textContent = last.length ? Math.round(100 * last.reduce((a, b) => a + b, 0) / last.length) + "%" : "-";
+
+  // sparkline of rolling-20 show rate
+  const pts = [];
+  for (let i = 0; i < S.hist.length; i++) {
+    const w = S.hist.slice(Math.max(0, i - 19), i + 1);
+    pts.push(w.reduce((a, b) => a + b, 0) / w.length);
+  }
+  const X = i => (pts.length < 2 ? 0 : i / (pts.length - 1) * 300);
+  const path = pts.map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + (85 - p * 80).toFixed(1)).join(" ");
+  $("spark").innerHTML = `<line x1="0" x2="300" y1="45" y2="45" stroke="#ddd7c8" stroke-dasharray="3 3"/><path d="${path}" fill="none" stroke="#0e6b5c" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+
+  // learned table
+  const peek = $("peek").checked;
+  let h = "<tr><th class='rl'>segment</th>" + ACTS.map(a => `<th>${a.replace("-", " ")}</th>`).join("") + "</tr>";
+  for (const s of SEGS) {
+    const best = ACTS.reduce((m, a) => mean(S.belief[s][a]) > mean(S.belief[s][m]) ? a : m, ACTS[0]);
+    h += `<tr><td class="rl">${s}</td>`;
+    for (const a of ACTS) {
+      const c = S.belief[s][a];
+      const txt = c.tries ? `${Math.round(mean(c) * 100)}% <small style="color:#6b7380">${c.hits}/${c.tries}</small>` : "?";
+      const tr = peek ? `<br><small style="color:#c4561a">true ${Math.round(TRUTH[s][a] * 100)}%</small>` : "";
+      h += `<td class="cell ${a === best && c.tries ? "best" : ""}" style="background:${heat(mean(c))}">${txt}${tr}</td>`;
+    }
+    h += "</tr>";
+  }
+  $("tbl").innerHTML = h;
+
+  // current lead
+  const l = S.cur;
+  $("lead").innerHTML = l ? `<div class="lead"><b>#${l.id} ${l.name}</b> - ${l.co}<br><span class="tag">${l.seg}</span><span class="tag">local ${String(l.hour).padStart(2, "0")}:00</span><span class="tag">touches ${l.touches}</span></div>` : `<div class="empty">Press Step to pull the next lead.</div>`;
+
+  // queue
+  $("queue").innerHTML = S.queue.length ? S.queue.map(q => `<div class="appr"><span><b>#${q.lead.id}</b> ${q.action}<br><small>${q.lead.seg}</small></span><span class="row"><button data-ok="${q.id}">Approve</button><button class="ghost" data-no="${q.id}">Deny</button></span></div>`).join("") : `<div class="empty">Nothing waiting.</div>`;
+
+  // ledger
+  $("ledger").innerHTML = S.ledger.length ? S.ledger.slice(0, 120).map(e => `<div><span class="t">${e.n}</span><span>${e.html}</span></div>`).join("") : `<div class="empty">Every context, decision, policy verdict and outcome lands here.</div>`;
+}
+
+async function run(k) {
+  for (let i = 0; i < k; i++) {
+    if (k === 1) { for (let f = 0; f < 6; f++) { flash(f); render(); await new Promise(r => setTimeout(r, 90)); } }
+    step();
+  }
+  flash(-1); render();
+}
+
+// ---------- wiring ----------
+$("b1").onclick = () => run(1);
+$("b25").onclick = () => run(25);
+$("b100").onclick = () => run(100);
+$("reset").onclick = () => { fresh(); flash(-1); render(); };
+$("peek").onchange = render;
+$("queue").onclick = e => {
+  const ok = e.target.dataset.ok, no = e.target.dataset.no;
+  const id = +(ok || no);
+  if (!id) return;
+  const i = S.queue.findIndex(q => q.id === id);
+  if (i < 0) return;
+  const q = S.queue.splice(i, 1)[0];
+  if (ok) { log("ok", `<b>APPROVED</b> ${q.action} for #${q.lead.id} by human reviewer`); act(q.lead, q.action); }
+  else {
+    log("blk", `<b>DENIED</b> ${q.action} for #${q.lead.id}; falling back`);
+    // penalize nothing, just fall back to best non-discount action
+    const alt = rank(q.lead).find(r => r.a !== "discount-offer" && verdict(q.lead, r.a).v === "allow");
+    if (alt) { log("ok", `<b>DECIDE</b> fallback ${alt.a}`); act(q.lead, alt.a); }
+  }
+  render();
+};
+
+fresh(); render();
+</script>
+</body>
+</html>
