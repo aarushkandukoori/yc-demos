@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quoter Lab - a maker-only market making toy</title>
+<style>
+:root{--bg:#f6f3ec;--card:#fffdf8;--ink:#1d2433;--mute:#6b7280;--line:#e4dfd2;--buy:#0f8a6a;--sell:#c2410c;--acc:#3b3bd6;--bad:#b91c1c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 8px;display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+h1{margin:0;font-size:22px;letter-spacing:-.02em}
+h1 span{color:var(--acc)}
+.sub{color:var(--mute);max-width:640px}
+main{display:grid;grid-template-columns:290px 1fr;gap:16px;padding:12px 28px 24px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+h2{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+.ctl{margin-bottom:11px}
+.ctl label{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:2px}
+.ctl label b{font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+button{font:inherit;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:8px;padding:7px 12px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button.ghost:hover{border-color:var(--ink)}
+button.warn{background:var(--sell);border-color:var(--sell)}
+.status{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;background:#e8e8fb;color:var(--acc)}
+.status.run{background:#dcf3ea;color:var(--buy)}
+.status.halt{background:#fde2e2;color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.stat small{color:var(--mute);display:block;font-size:11px}
+.stat b{font-size:18px;font-variant-numeric:tabular-nums}
+.pos{color:var(--buy)}.neg{color:var(--bad)}
+canvas{width:100%;display:block}
+#chart{height:300px}#pnl{height:170px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+@media(max-width:700px){.split{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+td,th{padding:3px 6px;text-align:right;border-bottom:1px solid var(--line)}
+th{color:var(--mute);font-weight:500}
+td:first-child,th:first-child{text-align:left}
+.bar{height:14px;border-radius:7px;background:var(--line);overflow:hidden;display:flex;margin:6px 0}
+.bar div{height:100%;transition:width .2s}
+.note{font-size:12px;color:var(--mute);margin:6px 0 0}
+.banner{display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:#fde2e2;color:var(--bad);border:1px solid #f5b5b5}
+.banner.on{display:block}
+footer{padding:14px 28px 28px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line);margin:0 28px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Quoter<span>Lab</span></h1>
+    <div class="sub">A maker-only market maker on a synthetic price feed. Tune the quotes, throw a news shock at it, and watch the max-loss halt decide whether you keep your shirt.</div>
+  </div>
+  <div>Bot: <span id="status" class="status">idle</span></div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Strategy</h2>
+    <div class="ctl"><label>Half-spread <b id="vSpread"></b></label><input id="spread" type="range" min="2" max="60" value="12"></div>
+    <div class="ctl"><label>Order size <b id="vSize"></b></label><input id="size" type="range" min="1" max="20" value="5"></div>
+    <div class="ctl"><label>Inventory skew <b id="vSkew"></b></label><input id="skew" type="range" min="0" max="30" value="8"></div>
+    <div class="ctl"><label>Max inventory <b id="vInv"></b></label><input id="inv" type="range" min="5" max="100" value="40"></div>
+    <div class="ctl"><label>Max loss (halt) <b id="vLoss"></b></label><input id="loss" type="range" min="20" max="500" value="150"></div>
+    <div class="ctl"><label>Requote every <b id="vRq"></b></label><input id="rq" type="range" min="1" max="30" value="6"></div>
+    <h2 style="margin-top:16px">Market</h2>
+    <div class="ctl"><label>Volatility <b id="vVol"></b></label><input id="vol" type="range" min="1" max="30" value="8"></div>
+    <div class="ctl"><label>Trend (drift) <b id="vDrift"></b></label><input id="drift" type="range" min="-10" max="10" value="0"></div>
+    <div class="row">
+      <button id="go">Start</button>
+      <button id="reset" class="ghost">Reset</button>
+      <button id="shock" class="warn">News shock</button>
+    </div>
+    <h2 style="margin-top:16px">Presets</h2>
+    <div class="row">
+      <button class="ghost" data-p="calm">Calm range</button>
+      <button class="ghost" data-p="trend">Trending</button>
+      <button class="ghost" data-p="toxic">Toxic flow</button>
+    </div>
+    <p class="note">Quotes are maker-only: they rest on the book and only fill when the market trades through them. Skew shifts both quotes against your inventory so you lean toward flat.</p>
+  </section>
+
+  <section>
+    <div id="banner" class="banner"></div>
+    <div class="stats">
+      <div class="stat"><small>Mid price</small><b id="sMid">-</b></div>
+      <div class="stat"><small>Inventory</small><b id="sInv">0</b></div>
+      <div class="stat"><small>Total PnL</small><b id="sPnl">0.00</b></div>
+      <div class="stat"><small>Fills</small><b id="sFills">0</b></div>
+      <div class="stat"><small>Loss budget left</small><b id="sBudget">-</b></div>
+    </div>
+    <div class="card">
+      <h2>Price and resting quotes</h2>
+      <canvas id="chart"></canvas>
+      <div class="legend"><span><i style="background:var(--ink)"></i>mid</span><span><i style="background:var(--buy)"></i>bid / buy fill</span><span><i style="background:var(--sell)"></i>ask / sell fill</span></div>
+    </div>
+    <div class="split">
+      <div class="card">
+        <h2>Equity curve</h2>
+        <canvas id="pnl"></canvas>
+        <p class="note">Dashed line is your halt level.</p>
+      </div>
+      <div class="card">
+        <h2>Where the PnL comes from</h2>
+        <div class="bar"><div id="bSpread" style="background:var(--buy)"></div><div id="bInv" style="background:var(--sell)"></div></div>
+        <table>
+          <tr><td>Spread captured</td><td id="tSpread">0.00</td></tr>
+          <tr><td>Inventory drift</td><td id="tInv">0.00</td></tr>
+          <tr><td>Total</td><td id="tTot">0.00</td></tr>
+        </table>
+        <p class="note">Spread = edge vs mid at each fill. Drift = what holding inventory did to you since.</p>
+        <h2 style="margin-top:12px">Recent fills</h2>
+        <table id="fills"><tr><th>Tick</th><th>Side</th><th>Px</th><th>Edge</th></tr></table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Arbital (YC S26). Not affiliated with Arbital. All prices and fills are synthetic and generated in your browser.</footer>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var P0=100, MAXPTS=240;
+
+// seeded RNG so a preset replays the same market if you reset
+var seed=1;
+function rnd(){seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296}
+function gauss(){var u=rnd()||1e-9,v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+
+var S; // simulation state
+function fresh(){
+  return {t:0,mid:P0,cash:0,inv:0,fills:0,spreadPnl:0,
+          bid:null,ask:null,status:"idle",running:false,
+          prices:[P0],bids:[null],asks:[null],eq:[0],marks:[],log:[],shockLeft:0,shockDir:0};
+}
+
+function cfg(){
+  return {spread:+$("spread").value/100*1, size:+$("size").value, skew:+$("skew").value/1000,
+          maxInv:+$("inv").value, maxLoss:+$("loss").value, rq:+$("rq").value,
+          vol:+$("vol").value/1000, drift:+$("drift").value/10000};
+}
+function labels(){
+  var c=cfg();
+  $("vSpread").textContent=(c.spread*100/P0*100).toFixed(0)+" bps ("+c.spread.toFixed(2)+")";
+  $("vSize").textContent=c.size+" units";
+  $("vSkew").textContent=(c.skew*100).toFixed(1)+" c / unit";
+  $("vInv").textContent="±"+c.maxInv;
+  $("vLoss").textContent="$"+c.maxLoss;
+  $("vRq").textContent=c.rq+" ticks";
+  $("vVol").textContent=(c.vol*100).toFixed(1)+"% / tick";
+  $("vDrift").textContent=(c.drift*10000).toFixed(0)+" bps / tick";
+}
+
+// Quote logic: center on the mid seen at requote time, shifted against inventory.
+function requote(c){
+  if(S.status==="halted"){S.bid=S.ask=null;return}
+  var center=S.mid-S.inv*c.skew;
+  S.bid=Math.abs(S.inv)>=c.maxInv&&S.inv>0?null:center-c.spread;
+  S.ask=Math.abs(S.inv)>=c.maxInv&&S.inv<0?null:center+c.spread;
+}
+
+function fill(side,px,c){
+  var q=c.size;
+  // never overshoot the inventory cap
+  var room=side==="buy"?c.maxInv-S.inv:c.maxInv+S.inv;
+  q=Math.min(q,Math.max(room,0));
+  if(q<=0)return;
+  var edge=side==="buy"?(S.mid-px):(px-S.mid);
+  S.cash+=side==="buy"?-px*q:px*q;
+  S.inv+=side==="buy"?q:-q;
+  S.spreadPnl+=edge*q;
+  S.fills++;
+  S.marks.push({i:S.prices.length-1,px:px,side:side});
+  S.log.unshift({t:S.t,side:side,px:px,edge:edge*q,q:q});
+  if(S.log.length>7)S.log.pop();
+  if(side==="buy")S.bid=null;else S.ask=null; // filled order is consumed until next requote
+}
+
+function step(){
+  var c=cfg();
+  // price move: gaussian + drift + optional shock decaying over a few ticks
+  var move=gauss()*c.vol*S.mid*0.2+c.drift*S.mid;
+  if(S.shockLeft>0){move+=S.shockDir*S.mid*0.012*(S.shockLeft/6);S.shockLeft--}
+  var prev=S.mid;
+  S.mid=Math.max(1,S.mid+move);
+  S.t++;
+
+  if(S.status==="running"){
+    if(S.t%c.rq===0||S.bid===null&&S.ask===null)requote(c);
+    // market trades through resting orders -> maker fill at our price
+    if(S.bid!==null&&S.mid<=S.bid)fill("buy",S.bid,c);
+    if(S.ask!==null&&S.mid>=S.ask)fill("sell",S.ask,c);
+  }
+
+  var eq=S.cash+S.inv*S.mid;
+  if(S.status==="running"&&eq<=-c.maxLoss)halt(eq);
+
+  S.prices.push(S.mid);S.bids.push(S.bid);S.asks.push(S.ask);S.eq.push(eq);
+  if(S.prices.length>MAXPTS){
+    S.prices.shift();S.bids.shift();S.asks.shift();S.eq.shift();
+    S.marks.forEach(function(m){m.i--});
+    S.marks=S.marks.filter(function(m){return m.i>=0});
+  }
+  render();
+}
+
+function halt(eq){
+  S.status="halted";S.bid=S.ask=null;
+  var b=$("banner");
+  b.className="banner on";
+  b.innerHTML="<b>Max-loss halt triggered at tick "+S.t+".</b> Quotes cancelled, bot stopped. You are still holding <b>"+S.inv+" units</b> of inventory, marked at "+S.mid.toFixed(2)+". A halt stops new risk but does not close old risk - use \"Flatten\" below to cross the spread and exit.";
+  var f=document.createElement("button");
+  f.textContent="Flatten at market";f.style.marginLeft="10px";
+  f.onclick=function(){flatten()};
+  b.appendChild(f);
+}
+
+// Taker exit: pay a slippage penalty proportional to size (this is what a halt really costs).
+function flatten(){
+  if(S.inv===0)return;
+  var slip=Math.abs(S.inv)*S.mid*0.0004;
+  S.cash+=S.inv*S.mid-slip;
+  S.inv=0;
+  $("banner").className="banner on";
+  $("banner").textContent="Flattened with taker exit. Slippage cost: $"+slip.toFixed(2)+". Reset to try a different setup.";
+  render();
+}
+
+// ---------- rendering ----------
+function fmt(n,d){return (n>=0?"":"-")+Math.abs(n).toFixed(d==null?2:d)}
+function cls(n){return n>=0?"pos":"neg"}
+
+function render(){
+  var c=cfg();
+  var eq=S.cash+S.inv*S.mid;
+  $("sMid").textContent=S.mid.toFixed(2);
+  $("sInv").textContent=S.inv;
+  $("sPnl").textContent=fmt(eq);$("sPnl").className=cls(eq);
+  $("sFills").textContent=S.fills;
+  var left=Math.max(0,c.maxLoss+eq);
+  $("sBudget").textContent="$"+left.toFixed(0);
+  $("sBudget").className=left<c.maxLoss*0.3?"neg":"";
+  var st=$("status");st.textContent=S.status;st.className="status "+(S.status==="running"?"run":S.status==="halted"?"halt":"");
+
+  var drift=eq-S.spreadPnl;
+  $("tSpread").textContent=fmt(S.spreadPnl);$("tSpread").className=cls(S.spreadPnl);
+  $("tInv").textContent=fmt(drift);$("tInv").className=cls(drift);
+  $("tTot").textContent=fmt(eq);$("tTot").className=cls(eq);
+  var a=Math.abs(S.spreadPnl),b=Math.abs(drift),tot=a+b||1;
+  $("bSpread").style.width=(a/tot*100)+"%";$("bInv").style.width=(b/tot*100)+"%";
+
+  var rows='<tr><th>Tick</th><th>Side</th><th>Px</th><th>Edge</th></tr>';
+  S.log.forEach(function(f){
+    rows+='<tr><td>'+f.t+'</td><td class="'+(f.side==="buy"?"pos":"neg")+'">'+f.side+' '+f.q+'</td><td>'+f.px.toFixed(2)+'</td><td>'+fmt(f.edge)+'</td></tr>';
+  });
+  $("fills").innerHTML=rows;
+  drawChart();drawPnl(c);
+}
+
+function setup(cv){
+  var r=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  if(cv.width!==w*r){cv.width=w*r;cv.height=h*r}
+  var g=cv.getContext("2d");g.setTransform(r,0,0,r,0,0);g.clearRect(0,0,w,h);
+  return {g:g,w:w,h:h};
+}
+
+function drawChart(){
+  var o=setup($("chart")),g=o.g,w=o.w,h=o.h,n=S.prices.length;
+  var lo=Infinity,hi=-Infinity;
+  for(var i=0;i<n;i++){
+    [S.prices[i],S.bids[i],S.asks[i]].forEach(function(v){if(v!=null){if(v<lo)lo=v;if(v>hi)hi=v}});
+  }
+  var pad=(hi-lo)*0.1||0.5;lo-=pad;hi+=pad;
+  var X=function(i){return 44+i/(MAXPTS-1)*(w-54)},Y=function(v){return h-18-(v-lo)/(hi-lo)*(h-30)};
+  g.strokeStyle="#e4dfd2";g.fillStyle="#6b7280";g.font="11px system-ui";g.lineWidth=1;
+  for(var k=0;k<5;k++){
+    var v=lo+(hi-lo)*k/4,y=Y(v);
+    g.beginPath();g.moveTo(44,y);g.lineTo(w-8,y);g.stroke();
+    g.fillText(v.toFixed(2),4,y+3);
+  }
+  function line(arr,col,dash){
+    g.strokeStyle=col;g.lineWidth=dash?1.5:2;g.setLineDash(dash||[]);g.beginPath();
+    var pen=false;
+    for(var i=0;i<n;i++){
+      if(arr[i]==null){pen=false;continue}
+      if(!pen){g.moveTo(X(i),Y(arr[i]));pen=true}else g.lineTo(X(i),Y(arr[i]));
+    }
+    g.stroke();g.setLineDash([]);
+  }
+  line(S.bids,"#0f8a6a",[4,3]);line(S.asks,"#c2410c",[4,3]);line(S.prices,"#1d2433");
+  S.marks.forEach(function(m){
+    g.fillStyle=m.side==="buy"?"#0f8a6a":"#c2410c";
+    g.beginPath();
+    var x=X(m.i),y=Y(m.px);
+    if(m.side==="buy"){g.moveTo(x,y-7);g.lineTo(x-5,y+3);g.lineTo(x+5,y+3)}
+    else{g.moveTo(x,y+7);g.lineTo(x-5,y-3);g.lineTo(x+5,y-3)}
+    g.fill();
+  });
+}
+
+function drawPnl(c){
+  var o=setup($("pnl")),g=o.g,w=o.w,h=o.h,n=S.eq.length;
+  var lo=Math.min(-c.maxLoss*1.1,Math.min.apply(null,S.eq)),hi=Math.max(c.maxLoss*0.3,Math.max.apply(null,S.eq));
+  var X=function(i){return 44+i/(MAXPTS-1)*(w-54)},Y=function(v){return h-14-(v-lo)/(hi-lo)*(h-24)};
+  g.font="11px system-ui";g.fillStyle="#6b7280";
+  g.strokeStyle="#e4dfd2";g.lineWidth=1;
+  g.beginPath();g.moveTo(44,Y(0));g.lineTo(w-8,Y(0));g.stroke();g.fillText("0",28,Y(0)+3);
+  g.strokeStyle="#b91c1c";g.setLineDash([5,4]);
+  g.beginPath();g.moveTo(44,Y(-c.maxLoss));g.lineTo(w-8,Y(-c.maxLoss));g.stroke();g.setLineDash([]);
+  g.fillStyle="#b91c1c";g.fillText("-"+c.maxLoss,4,Y(-c.maxLoss)+3);
+  g.strokeStyle="#3b3bd6";g.lineWidth=2;g.beginPath();
+  for(var i=0;i<n;i++){i?g.lineTo(X(i),Y(S.eq[i])):g.moveTo(X(i),Y(S.eq[i]))}
+  g.stroke();
+}
+
+// ---------- controls ----------
+var timer=null;
+function start(){
+  if(S.status==="halted")return;
+  S.status="running";S.running=true;requote(cfg());
+  $("go").textContent="Pause";
+  timer=setInterval(step,90);
+  render();
+}
+function pause(){
+  clearInterval(timer);timer=null;S.running=false;
+  if(S.status==="running")S.status="paused";
+  $("go").textContent="Resume";render();
+}
+$("go").onclick=function(){
+  if(timer){pause()}
+  else{if(S.status==="paused")S.status="running";start()}
+};
+function reset(){
+  clearInterval(timer);timer=null;seed=7;S=fresh();
+  $("go").textContent="Start";$("banner").className="banner";
+  render();
+}
+$("reset").onclick=reset;
+$("shock").onclick=function(){
+  S.shockDir=rnd()<0.5?-1:1;S.shockLeft=6;
+  if(!timer)step();
+};
+var PRESETS={
+  calm: {spread:14,size:5,skew:8,inv:40,loss:150,rq:6,vol:5,drift:0},
+  trend:{spread:12,size:5,skew:8,inv:40,loss:150,rq:6,vol:8,drift:4},
+  toxic:{spread:8,size:10,skew:3,inv:80,loss:200,rq:12,vol:18,drift:-3}
+};
+Array.prototype.forEach.call(document.querySelectorAll("[data-p]"),function(b){
+  b.onclick=function(){
+    var p=PRESETS[b.getAttribute("data-p")];
+    for(var k in p)$(k).value=p[k];
+    labels();reset();start();
+  };
+});
+Array.prototype.forEach.call(document.querySelectorAll("input[type=range]"),function(el){
+  el.oninput=function(){labels();if(!timer)render()};
+});
+window.addEventListener("resize",function(){render()});
+
+labels();reset();
+// warm up the chart with a quiet pre-roll so the first paint isn't empty
+for(var i=0;i<60;i++){S.mid=Math.max(1,S.mid+gauss()*0.04);S.t++;S.prices.push(S.mid);S.bids.push(null);S.asks.push(null);S.eq.push(0)}
+S.t=0;render();
+})();
+</script>
+</body>
+</html>

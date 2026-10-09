@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Benchhand - message a robot, watch it work the lab</title>
+<style>
+:root{--bg:#0f1417;--panel:#171e22;--line:#27323a;--ink:#e6edf0;--mut:#8a9aa3;--acc:#7be0b0;--warn:#f2b66b;--bad:#ef7d7d;--blue:#7bb8f2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{margin:0;font-size:18px;letter-spacing:.3px}
+header span{color:var(--mut)}
+main{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px 22px;max-width:1280px;margin:auto}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card h2{margin:0;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+#chat{height:330px;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:92%;padding:8px 10px;border-radius:8px;background:#202a30;white-space:pre-wrap}
+.msg b{display:block;font-size:11px;color:var(--mut);font-weight:600;margin-bottom:2px}
+.msg.me{align-self:flex-end;background:#1f3b34}
+.msg.bot b{color:var(--acc)}
+.msg.warn{border-left:3px solid var(--warn)}
+form{display:flex;border-top:1px solid var(--line)}
+input{flex:1;background:transparent;border:0;color:var(--ink);padding:12px;font:inherit;outline:0}
+button{background:var(--acc);color:#062014;border:0;padding:0 16px;font:inherit;font-weight:700;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+.chips{padding:10px 12px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line)}
+.chip{background:#202a30;border:1px solid var(--line);color:var(--ink);border-radius:99px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:500}
+.chip:hover{border-color:var(--acc)}
+#right{display:flex;flex-direction:column;gap:16px}
+svg{display:block;width:100%;height:auto;background:#12191d}
+.st rect{fill:#1d272d;stroke:#34444e;stroke-width:1.5;rx:8;transition:.2s}
+.st text{fill:var(--mut);font-size:11px;text-anchor:middle;pointer-events:none}
+.st{cursor:pointer}
+.st.busy rect{stroke:var(--bad);fill:#2b1d1f}
+.st.robot rect{stroke:var(--acc);fill:#1b2e28}
+.st.busy .tag{display:inline}
+.tag{display:none;fill:var(--bad)!important;font-weight:700}
+#robot{transition:none}
+#robot circle{fill:var(--acc)}
+#robot line{stroke:#062014;stroke-width:3;stroke-linecap:round}
+.path{stroke:var(--blue);stroke-dasharray:4 5;fill:none;opacity:.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+#plan{list-style:none;margin:0;padding:6px 0;max-height:250px;overflow:auto}
+#plan li{padding:6px 14px;display:flex;gap:10px;border-bottom:1px solid #1f2a30}
+#plan li .d{width:16px;text-align:center;color:var(--mut)}
+#plan li.run{background:#1b2e28}#plan li.run .d{color:var(--acc)}
+#plan li.done{color:var(--mut)}#plan li.done .d{color:var(--acc)}
+#plan li.wait .d{color:var(--warn)}
+#plan li em{margin-left:auto;color:var(--mut);font-style:normal;font-size:12px}
+#log{font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mut);height:250px;overflow:auto;padding:10px 14px}
+#log div b{color:var(--ink);font-weight:500}
+.empty{padding:14px;color:var(--mut)}
+.ctrl{padding:8px 14px;display:flex;gap:14px;align-items:center;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
+.ctrl input[type=range]{flex:0 0 120px;padding:0}
+footer{padding:18px 22px 30px;text-align:center;color:var(--mut);font-size:12px;border-top:1px solid var(--line);margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Benchhand</h1>
+  <span>Toy demo: ask a robot coworker for a protocol in plain English. It plans a route around a shared lab and works around the humans using the equipment.</span>
+</header>
+<main>
+  <section class="card">
+    <h2><span>#wetlab-requests</span><span id="status">idle</span></h2>
+    <div id="chat"></div>
+    <div class="chips" id="chips"></div>
+    <form id="f"><input id="in" autocomplete="off" placeholder="e.g. spin the samples at 4000 rpm for 10 min, then read the plate"><button id="go">Send</button></form>
+  </section>
+  <div id="right">
+    <section class="card">
+      <h2><span>Lab floor (synthetic)</span><span>click a station to mark a human using it</span></h2>
+      <svg id="map" viewBox="0 0 820 400" aria-label="lab floor map"></svg>
+      <div class="ctrl">Sim speed <input type="range" id="spd" min="1" max="6" value="3"> <span id="clock">t = 0 min</span> <span id="batt"></span></div>
+    </section>
+    <div class="grid">
+      <section class="card"><h2><span>Plan</span><span id="eta"></span></h2><ol id="plan"><li class="empty">Send a request to generate a plan.</li></ol></section>
+      <section class="card"><h2><span>Robot log</span></h2><div id="log"></div></section>
+    </div>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Neuromorphic (YC S26). Not affiliated with Neuromorphic.<br>All stations, people and data here are synthetic; no robot hardware is involved.</footer>
+
+<script>
+// ---------- lab model ----------
+const STATIONS = {
+  fridge:     {name:'4C Fridge',      x:60,  y:50,  w:120, h:70, verb:'Fetch from'},
+  bench:      {name:'Pipetting bench',x:350, y:150, w:140, h:90, verb:'Work at'},
+  centrifuge: {name:'Centrifuge',     x:620, y:40,  w:130, h:70, verb:'Load'},
+  incubator:  {name:'37C Incubator',  x:620, y:290, w:130, h:70, verb:'Load'},
+  reader:     {name:'Plate reader',   x:350, y:300, w:140, h:70, verb:'Load'},
+  stock:      {name:'Consumables',    x:60,  y:290, w:120, h:70, verb:'Restock from'},
+  waste:      {name:'Waste',          x:350, y:30,  w:100, h:60, verb:'Discard at'},
+};
+const HOME = {x:240, y:200};
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const state = {busy:{}, robot:{...HOME}, running:false, simMin:0, battery:96};
+const WHO = ['Dana','Priya','Marcus'];
+
+// ---------- map ----------
+const svg = $('map'), NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e}
+const center = k => ({x:STATIONS[k].x+STATIONS[k].w/2, y:STATIONS[k].y+STATIONS[k].h/2});
+// approach point: just below/above station so robot doesn't sit on top of it
+const dock = k => { const c=center(k), s=STATIONS[k]; return {x:c.x, y: s.y+s.h/2 > 200 ? s.y-18 : s.y+s.h+18}; };
+// walls / aisles
+for (let i=0;i<6;i++) el('line',{x1:210+i*0,y1:0,x2:210,y2:0,stroke:'none'});
+const g = {};
+for (const k in STATIONS) {
+  const s = STATIONS[k];
+  const grp = el('g',{class:'st'}); g[k]=grp;
+  el('rect',{x:s.x,y:s.y,width:s.w,height:s.h},grp);
+  const t = el('text',{x:s.x+s.w/2,y:s.y+s.h/2+4},grp); t.textContent = s.name;
+  const tg = el('text',{class:'tag',x:s.x+s.w/2,y:s.y+s.h/2+20},grp); tg.textContent='IN USE';
+  grp.addEventListener('click', () => toggleBusy(k, true));
+}
+const robot = el('g',{id:'robot'});
+el('circle',{r:13,cx:0,cy:0},robot); el('line',{x1:0,y1:0,x2:0,y2:-13},robot);
+const trail = el('polyline',{class:'path',points:''});
+svg.insertBefore(trail, robot);
+function placeRobot(){robot.setAttribute('transform',`translate(${state.robot.x},${state.robot.y})`)}
+placeRobot();
+
+// ---------- chat / log ----------
+function say(who, text, cls=''){
+  const d=document.createElement('div'); d.className='msg '+cls;
+  const b=document.createElement('b'); b.textContent=who; d.appendChild(b);
+  d.appendChild(document.createTextNode(text));
+  $('chat').appendChild(d); $('chat').scrollTop=1e9;
+}
+const bot = (t,c) => say('benchhand (robot)', t, 'bot '+(c||''));
+function log(html){const d=document.createElement('div');d.innerHTML=`<b>[t+${state.simMin.toFixed(0)}m]</b> ${html}`;$('log').appendChild(d);$('log').scrollTop=1e9}
+function setClock(){ $('clock').textContent=`t = ${state.simMin.toFixed(0)} min`; $('batt').textContent=`battery ${state.battery.toFixed(0)}%`; }
+
+// ---------- request -> plan ----------
+// Each rule: regex that detects an intent, and a builder that returns steps.
+const RULES = [
+  {re:/(restock|out of|refill|tips?\b|consumable)/i, build:()=>[
+     {st:'stock', act:'Pick up tips and 96-well plates', min:3},
+     {st:'bench', act:'Stage consumables on bench', min:2}]},
+  {re:/(fridge|retrieve|fetch|get the|pull|thaw|samples?)/i, build:()=>[
+     {st:'fridge', act:'Retrieve sample rack', min:2},
+     {st:'bench', act:'Place rack on bench', min:1}]},
+  {re:/(dilut|aliquot|pipet|prep|master ?mix|normali[sz]e)/i, build:(t)=>{
+     const m=t.match(/(\d+)\s*(?:x|fold)/i);
+     return [{st:'bench', act:`Pipette${m?' '+m[1]+'x dilution series':' 96-well plate layout'} (8-channel)`, min:12}]}},
+  {re:/(spin|centrifug|pellet)/i, build:(t)=>{
+     const rpm=(t.match(/(\d{3,5})\s*rpm/i)||[])[1]||'4000', mn=+(t.match(/(\d+)\s*min/i)||[])[1]||10;
+     return [{st:'centrifuge', act:`Balance rotor, spin at ${rpm} rpm for ${mn} min`, min:mn+3},
+             {st:'bench', act:'Return tubes to bench, check pellets', min:2}]}},
+  {re:/(incubat|grow|37)/i, build:(t)=>{
+     const mn=+(t.match(/(\d+)\s*(?:min|m\b)/i)||[])[1]||30;
+     return [{st:'incubator', act:`Load plate, incubate at 37C for ${mn} min`, min:mn+2}]}},
+  {re:/(read|absorb|plate reader|od600|fluoresc|measure)/i, build:(t)=>{
+     const w=(t.match(/(\d{3})\s*nm/i)||[])[1]||'600';
+     return [{st:'reader', act:`Read absorbance at ${w} nm`, min:6},
+             {st:'bench', act:'Return plate, export CSV to #wetlab-data', min:1}]}},
+  {re:/(discard|dispose|waste|trash|clean ?up)/i, build:()=>[
+     {st:'waste', act:'Discard used tips and tubes', min:2}]},
+];
+function plan(text){
+  // order by where the keyword first appears in the sentence, de-dupe by rule
+  const hits=[];
+  RULES.forEach(r=>{const m=text.match(r.re); if(m) hits.push({i:m.index, r})});
+  hits.sort((a,b)=>a.i-b.i);
+  let steps=[]; hits.forEach(h=>steps.push(...h.r.build(text)));
+  // collapse consecutive duplicate stations (e.g. bench, bench)
+  steps = steps.filter((s,i)=> !(i && steps[i-1].st===s.st && s.st==='bench' && /Place rack|Stage/.test(s.act) && /Pipette|Place rack|Stage/.test(steps[i-1].act) && s.act===steps[i-1].act));
+  if (steps.length) steps.push({st:'home', act:'Dock and report back', min:0});
+  return steps;
+}
+
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function target(st){return st==='home'?HOME:dock(st)}
+function estimate(steps){
+  let p={...state.robot}, t=0;
+  steps.forEach(s=>{const q=target(s.st); t+=dist(p,q)/40; t+=s.min; p=q});
+  return Math.round(t);
+}
+
+function renderPlan(steps){
+  const ol=$('plan'); ol.innerHTML='';
+  steps.forEach((s,i)=>{
+    const li=document.createElement('li'); li.id='step'+i;
+    li.innerHTML=`<span class="d">&#9675;</span><span>${s.act}<br><small style="color:var(--mut)">${s.st==='home'?'Charging dock':STATIONS[s.st].name}</small></span><em>${s.min?s.min+' min':''}</em>`;
+    ol.appendChild(li);
+  });
+  $('eta').textContent = steps.length ? `ETA ~${estimate(steps)} min` : '';
+}
+function mark(i, cls, glyph, extra){
+  const li=$('step'+i); if(!li) return;
+  li.className=cls; li.querySelector('.d').innerHTML=glyph;
+  if(extra!==undefined) li.querySelector('em').textContent=extra;
+}
+
+// ---------- humans using equipment ----------
+function toggleBusy(k, byUser){
+  if (state.busy[k]) { delete state.busy[k]; g[k].classList.remove('busy'); if(byUser) say('you',`(${STATIONS[k].name} is free now)`,'me'); log(`${STATIONS[k].name} released`); return; }
+  const who = WHO[Math.floor(Math.random()*WHO.length)];
+  state.busy[k] = who; g[k].classList.add('busy');
+  g[k].querySelector('.tag').textContent = 'IN USE: '+who;
+  if (byUser) say(who, `Heads up, I'm on the ${STATIONS[k].name} for a bit.`);
+  log(`${who} occupied <b>${STATIONS[k].name}</b>`);
+  // humans are not infinitely patient: auto-release after a while
+  clearTimeout(toggleBusy['t'+k]);
+  toggleBusy['t'+k] = setTimeout(()=>{ if(state.busy[k]===who) toggleBusy(k,false); }, 9000);
+}
+
+// ---------- execution ----------
+const speed = () => +$('spd').value;
+async function moveTo(p){
+  const d=dist(state.robot,p); if(d<1) return;
+  const from={...state.robot}, ms=d*14/speed(), t0=performance.now();
+  const pts=[`${from.x},${from.y}`];
+  await new Promise(res=>{
+    function tick(now){
+      const u=Math.min(1,(now-t0)/ms), e=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+      state.robot={x:from.x+(p.x-from.x)*e, y:from.y+(p.y-from.y)*e};
+      const dx=p.x-from.x, dy=p.y-from.y;
+      robot.setAttribute('transform',`translate(${state.robot.x},${state.robot.y}) rotate(${Math.atan2(dy,dx)*180/Math.PI+90})`);
+      trail.setAttribute('points',`${from.x},${from.y} ${state.robot.x},${state.robot.y}`);
+      state.simMin += d/40*(1/ (ms/16.67)) ; state.battery -= 0.0004*d/ (ms/16.67);
+      setClock();
+      u<1?requestAnimationFrame(tick):res();
+    }
+    requestAnimationFrame(tick);
+  });
+  trail.setAttribute('points','');
+}
+async function work(min){
+  const ms = Math.max(400, min*180/speed()), steps=20;
+  for(let i=0;i<steps;i++){ await sleep(ms/steps); state.simMin += min/steps; setClock(); }
+}
+
+async function execute(steps){
+  state.running=true; $('go').disabled=true; $('status').textContent='working';
+  for (let i=0;i<steps.length;i++){
+    const s=steps[i];
+    mark(i,'run','&#9654;');
+    const label = s.st==='home' ? 'charging dock' : STATIONS[s.st].name;
+    log(`Navigating to <b>${label}</b>`);
+    await moveTo(target(s.st));
+    if (s.st!=='home') {
+      // the shared-infrastructure part: a human may be using this
+      if (state.busy[s.st]) {
+        const who=state.busy[s.st];
+        mark(i,'wait','&#9208;','waiting');
+        bot(`${STATIONS[s.st].name} is in use by ${who}. I'll wait here rather than bump them, and I'll ping you if it takes over ~5 min.`,'warn');
+        log(`<b>BLOCKED</b> ${STATIONS[s.st].name} held by ${who}`);
+        $('status').textContent='waiting on '+who;
+        const t0=state.simMin; let pinged=false;
+        while (state.busy[s.st]) {
+          await sleep(200); state.simMin += .15*speed(); setClock();
+          if(!pinged && state.simMin-t0>5){pinged=true; bot(`Still waiting on ${STATIONS[s.st].name} (${who}). Want me to skip ahead and come back?`,'warn');}
+        }
+        bot(`${STATIONS[s.st].name} freed up after ~${Math.round(state.simMin-t0)} min. Continuing.`);
+        log(`${STATIONS[s.st].name} free, resuming`);
+        $('status').textContent='working';
+      }
+      g[s.st].classList.add('robot');
+      log(s.act);
+      mark(i,'run','&#9654;');
+      await work(s.min);
+      g[s.st].classList.remove('robot');
+      state.battery -= .5;
+    }
+    mark(i,'done','&#10003;');
+  }
+  state.running=false; $('go').disabled=false; $('status').textContent='idle';
+  bot(`Done. ${steps.length-1} steps finished in about ${Math.round(state.simMin-state.startMin)} sim-minutes. Battery at ${state.battery.toFixed(0)}%. Data (if any) is in #wetlab-data.`);
+  log('Task complete');
+}
+
+// ---------- input ----------
+function handle(text){
+  text=text.trim(); if(!text) return;
+  say('you', text, 'me');
+  if (state.running) { bot("I'm mid-protocol. Send that again when I'm back at the dock.", 'warn'); return; }
+  const steps = plan(text);
+  if (!steps.length) {
+    bot("I couldn't map that to anything I can do at these stations. I can fetch samples, pipette/dilute, centrifuge, incubate, read a plate, restock, and discard waste. Try one of the examples below.", 'warn');
+    return;
+  }
+  renderPlan(steps);
+  const lines = steps.filter(s=>s.st!=='home').map((s,i)=>`${i+1}. ${s.act}`).join('\n');
+  bot(`Got it. Here's my plan (${steps.length-1} steps, ~${estimate(steps)} min):\n${lines}`);
+  state.startMin = state.simMin;
+  log(`Request parsed into <b>${steps.length-1}</b> steps`);
+  execute(steps);
+}
+$('f').addEventListener('submit', e=>{e.preventDefault(); const v=$('in').value; $('in').value=''; handle(v)});
+
+const EXAMPLES = [
+  'Grab the samples from the fridge, dilute 10x, then read the plate at 600 nm',
+  'Spin the samples at 4000 rpm for 8 min, then discard the waste',
+  'Restock tips, then pipette a plate and incubate for 20 min',
+];
+EXAMPLES.forEach(t=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=t;b.onclick=()=>handle(t);$('chips').appendChild(b)});
+const tip=document.createElement('button');tip.type='button';tip.className='chip';tip.textContent='Simulate: someone grabs the centrifuge';tip.onclick=()=>toggleBusy('centrifuge',true);$('chips').appendChild(tip);
+
+say('system','Benchhand is online. It shares this lab with Dana, Priya and Marcus. Try an example, or click the centrifuge first and then ask for a spin.');
+setClock();
+</script>
+</body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gatehouse - a toy lawyer-in-the-loop firm pipeline</title>
+<style>
+:root{--bg:#f4f1ea;--card:#fffdf8;--ink:#1d2a26;--mute:#6b766f;--line:#ded8c9;--acc:#2f5d50;--acc2:#c9772b;--bad:#b3392f;--ok:#2f7d4f;--r:10px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 10px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px}
+h1{margin:0;font:600 24px/1.1 Georgia,"Times New Roman",serif;letter-spacing:-.3px}
+h1 span{color:var(--acc2)}
+.sub{color:var(--mute);max-width:640px;margin-top:6px}
+.stats{display:flex;gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:8px 14px;min-width:96px}
+.stat b{display:block;font:600 19px Georgia,serif}
+.stat small{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+main{display:grid;grid-template-columns:300px 1fr 360px;gap:16px;padding:10px 28px 20px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.panel h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.9px;color:var(--mute)}
+textarea,select{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit;background:#fff;color:var(--ink)}
+textarea{height:132px;resize:vertical}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:#fff;padding:7px 12px;color:var(--ink)}
+button:hover{border-color:var(--acc)}
+button.pri{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button.pri:disabled{opacity:.5;cursor:default}
+button.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+button.no{color:var(--bad);border-color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chips button{font-size:12px;padding:4px 9px;border-radius:99px}
+label{font-size:12px;color:var(--mute);display:block;margin:10px 0 4px}
+.rail{display:flex;flex-direction:column;gap:10px}
+.stage{border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;background:#fff;position:relative;transition:.25s}
+.stage .top{display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.stage .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--line);font-size:12px;margin-right:8px}
+.stage .body{color:var(--mute);margin-top:6px;font-size:13px;min-height:18px}
+.stage.run{border-color:var(--acc2);box-shadow:0 0 0 3px #c9772b22}
+.stage.done{border-color:var(--acc)}
+.stage.done .n{background:var(--acc);color:#fff}
+.stage.gate{border-color:var(--acc2);background:#fff7ec}
+.stage.gate .n{background:var(--acc2);color:#fff}
+.stage.stop{border-color:var(--bad);background:#fdf0ee}
+.stage.stop .n{background:var(--bad);color:#fff}
+.tag{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--line);color:var(--mute);font-weight:500}
+.tag.ai{background:#e3eee9;color:var(--acc)}
+.tag.law{background:#f8e5cf;color:#8a4e12}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin-top:6px;font-size:12.5px;color:var(--ink)}
+.kv i{color:var(--mute);font-style:normal}
+.flag{display:inline-block;margin:3px 4px 0 0;padding:2px 8px;border-radius:6px;font-size:12px;background:#fdf0ee;color:var(--bad)}
+.flag.info{background:#eef2ef;color:var(--acc)}
+.card{border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:10px;background:#fff}
+.card h3{margin:0 0 4px;font:600 15px Georgia,serif}
+.card .why{font-size:12.5px;color:#8a4e12;background:#fff7ec;border-left:3px solid var(--acc2);padding:5px 8px;margin:8px 0}
+.card .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+pre{white-space:pre-wrap;background:#faf7ef;border:1px dashed var(--line);border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;margin:8px 0 0;max-height:210px;overflow:auto}
+.empty{color:var(--mute);text-align:center;padding:26px 6px;font-size:13px}
+#log{max-height:150px;overflow:auto;font:12px/1.6 ui-monospace,Menlo,monospace;color:var(--mute)}
+#log div b{color:var(--ink);font-weight:600}
+.clients{font-size:12px;color:var(--mute)}
+footer{padding:14px 28px 28px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line);margin:0 28px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Gatehouse<span>.</span></h1>
+    <div class="sub">A toy firm pipeline where software runs intake, case prep and back office, and <b>every legal decision stops at a human attorney gate</b>. Paste a client message or pick a sample. Synthetic data only.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="sAcc">0</b><small>accepted</small></div>
+    <div class="stat"><b id="sRet">$0</b><small>retainers</small></div>
+    <div class="stat"><b id="sMin">0m</b><small>staff time saved</small></div>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1 &middot; Inbound</h2>
+    <textarea id="msg" placeholder="Paste a prospective client message..."></textarea>
+    <div class="chips" id="samples"></div>
+    <label for="src">Lead source</label>
+    <select id="src">
+      <option value="search|38">Search ad ($38 / lead)</option>
+      <option value="referral|0">Client referral ($0)</option>
+      <option value="directory|22">Directory listing ($22)</option>
+    </select>
+    <div style="margin-top:12px"><button class="pri" id="run">Run through pipeline</button></div>
+    <h2 style="margin-top:18px">Conflict database</h2>
+    <div class="clients" id="clients"></div>
+    <h2 style="margin-top:18px">Activity</h2>
+    <div id="log"></div>
+  </section>
+
+  <section class="panel">
+    <h2>2 &middot; Operating loop</h2>
+    <div class="rail" id="rail"></div>
+  </section>
+
+  <section class="panel">
+    <h2>3 &middot; Attorney decision queue</h2>
+    <div id="queue"><div class="empty">Nothing waiting. The software will not advance a matter past a legal judgment without you.</div></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Erinys (YC S26). Not affiliated with Erinys. All names, firms and figures above are fictional, and nothing here is legal advice.</footer>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const SAMPLES = {
+  "Eviction notice": "Hi, I'm Priya Nair in Maryland. My landlord Harbor Point Apartments gave me a 30-day eviction notice and my hearing is in 12 days. I've paid rent on time every month. Reach me at priya.n@example.com",
+  "Car accident": "My name is Marcus Hale. I was rear-ended in Virginia last month and my medical bills are $14,000. The other driver's insurer, Northline Mutual, keeps lowballing me. 555-014-2290",
+  "Contract dispute": "I'm Dana Whitfield, Texas. My LLC wants to sue Brightwell Logistics for breach of contract. They owe us $48,000 in unpaid invoices. dana@example.com",
+  "Vague message": "someone owes me money and I need a lawyer"
+};
+
+const AREAS = [
+  {k:"Landlord / tenant", re:/evict|landlord|tenant|lease|rent\b/i, fee:1500, docs:["Lease agreement","Notice received","Rent payment history","Court summons"]},
+  {k:"Personal injury", re:/accident|injur|rear-ended|medical bills|insurer|crash/i, fee:0, contingency:0.33, docs:["Police report","Medical records & bills","Insurer correspondence","Photos of scene"]},
+  {k:"Commercial dispute", re:/breach|contract|invoice|llc|unpaid|owe/i, fee:3500, docs:["Signed contract","Invoices & proof of delivery","Demand letter (if any)","Payment ledger"]},
+  {k:"Employment", re:/fired|terminat|wage|harass|employer|discriminat/i, fee:2500, docs:["Offer letter","Pay stubs","Termination notice","Written complaints"]},
+  {k:"Immigration", re:/visa|green card|asylum|immigra|uscis/i, fee:2800, docs:["Passport / I-94","Prior filings","Receipt notices","Evidence of status"]}
+];
+const STATES = {maryland:"MD",virginia:"VA",texas:"TX",california:"CA","new york":"NY",florida:"FL",pennsylvania:"PA",illinois:"IL"};
+const STAGES = [
+  ["Client acquisition","ai"],["Intake & onboarding","ai"],["Case development","ai"],["Legal workflow","law"],["Firm operations","ai"]
+];
+
+const S = { clients:["Brightwell Logistics","Cedar Row Dental","Orion Freight Co."], accepted:0, retainers:0, mins:0, matters:{}, seq:0, busy:false };
+
+function norm(s){ return s.toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\b(inc|llc|co|corp|the)\b/g,"").replace(/\s+/g," ").trim(); }
+function log(t){ const d=document.createElement("div"); d.innerHTML=t; const l=$("log"); l.prepend(d); }
+
+/* ---------- the "AI" layer: deterministic rules standing in for models ---------- */
+function parse(text){
+  const area = AREAS.find(a => a.re.test(text)) || null;
+  const nm = text.match(/(?:I'm|I am|my name is|this is)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/);
+  const email = (text.match(/[\w.+-]+@[\w-]+\.\w+/)||[])[0];
+  const phone = (text.match(/\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/)||[])[0];
+  let state = null;
+  for (const k in STATES) if (new RegExp("\\b"+k+"\\b","i").test(text)) state = STATES[k];
+  const amt = (text.match(/\$\s?([\d,]+)/)||[])[1];
+  const hear = text.match(/(?:hearing|court date|deadline|due)[^.]*?(\d+)\s*days?/i) || text.match(/(\d+)\s*days?[^.]*?(?:hearing|court|deadline)/i);
+  const adv = text.match(/(?:landlord|insurer|sue|against|from|employer)\s+((?:[A-Z][\w&']+\s?){1,3})/);
+  return {
+    area, name: nm ? nm[1] : null, email, phone, state,
+    amount: amt ? parseInt(amt.replace(/,/g,""),10) : null,
+    daysLeft: hear ? parseInt(hear[1],10) : null,
+    adverse: adv ? adv[1].trim() : null
+  };
+}
+function conflicts(adverse){
+  if (!adverse) return [];
+  const a = norm(adverse);
+  return S.clients.filter(c => { const n = norm(c); return n && a && (n.includes(a) || a.includes(n)); });
+}
+function followUps(p){
+  const q=[];
+  if(!p.area) q.push("What kind of legal problem is this (housing, injury, business, work)?");
+  if(!p.state) q.push("Which state did this happen in?");
+  if(!p.email && !p.phone) q.push("What's the best email or phone number to reach you?");
+  if(!p.name) q.push("What's your full name?");
+  if(p.area && p.area.k==="Commercial dispute" && !p.amount) q.push("Roughly how much money is at stake?");
+  if(!p.adverse) q.push("Who is the other party?");
+  return q;
+}
+function score(p){
+  let s = p.area ? 40 : 10;
+  if (p.state) s += 12; if (p.name) s += 8; if (p.email||p.phone) s += 10;
+  if (p.amount) s += Math.min(20, Math.round(p.amount/3000));
+  if (p.daysLeft!=null) s += p.daysLeft<=14 ? 10 : 4;
+  return Math.min(99, s);
+}
+function engagement(m){
+  const p=m.p, fee = p.area.contingency ? `a contingency fee of ${Math.round(p.area.contingency*100)}% of any recovery` : `a flat retainer of $${p.area.fee.toLocaleString()}`;
+  return `DRAFT - NOT SENT - pending attorney approval\n\nDear ${p.name||"Client"},\n\nThank you for contacting the firm about your ${p.area.k.toLowerCase()} matter${p.state?" in "+p.state:""}. If you choose to engage us, the terms would be ${fee}. Scope: initial evaluation and representation in this matter only.\n\nPlease gather: ${p.area.docs.join("; ")}.\n${p.daysLeft!=null?"\nTime-sensitive: a date approximately "+p.daysLeft+" days out was mentioned. We will confirm it against the court record.\n":""}\nSigned, [attorney of record]`;
+}
+
+/* ---------- rendering ---------- */
+function stageHTML(i, st){
+  const [name, who] = STAGES[i];
+  return `<div class="stage ${st.cls||""}" id="st${i}"><div class="top"><span><span class="n">${i+1}</span>${name}</span><span class="tag ${who}">${who==="law"?"attorney decides":"software"}</span></div><div class="body">${st.html||"Idle"}</div></div>`;
+}
+function renderRail(m){
+  $("rail").innerHTML = STAGES.map((_,i)=>stageHTML(i, m ? m.st[i] : {})).join("");
+}
+function kv(pairs){ return `<div class="kv">${pairs.map(([k,v])=>`<i>${k}</i><span>${v}</span>`).join("")}</div>`; }
+function refreshStats(){
+  $("sAcc").textContent = S.accepted;
+  $("sRet").textContent = "$"+S.retainers.toLocaleString();
+  $("sMin").textContent = S.mins+"m";
+  $("clients").innerHTML = S.clients.map(c=>`&bull; ${esc(c)}`).join("<br>");
+}
+function setStage(m,i,cls,html){ m.st[i]={cls,html}; if (S.view===m.id) renderRail(m); }
+
+/* ---------- the pipeline ---------- */
+async function runPipeline(text, source){
+  if (S.busy) return;
+  S.busy = true; $("run").disabled = true;
+  const [srcName, cost] = source.split("|");
+  const m = { id:++S.seq, text, st:[{},{},{},{},{}], p:parse(text) };
+  S.matters[m.id]=m; S.view=m.id; renderRail(m);
+  const p = m.p;
+  log(`<b>#${m.id}</b> inbound via ${srcName}`);
+
+  setStage(m,0,"run","Attributing lead..."); await sleep(450);
+  setStage(m,0,"done", kv([["Source",esc(srcName)],["Acq. cost","$"+cost],["Lead score",score(p)+"/100"]]));
+
+  setStage(m,1,"run","Extracting fields..."); await sleep(550);
+  const fu = followUps(p);
+  setStage(m,1,"done", kv([
+    ["Client",esc(p.name||"?")],["Area",esc(p.area?p.area.k:"unclassified")],["State",p.state||"?"],
+    ["Contact",esc(p.email||p.phone||"none")],["Adverse party",esc(p.adverse||"?")]
+  ]) + (fu.length?`<div style="margin-top:6px"><span class="flag info">${fu.length} follow-up${fu.length>1?"s":""} drafted</span></div>`:""));
+  S.mins += 18;
+
+  setStage(m,2,"run","Checking conflicts, building checklist..."); await sleep(650);
+  const hits = conflicts(p.adverse);
+  const flags = [];
+  if (hits.length) flags.push(`<span class="flag">Conflict: adverse party matches current client "${esc(hits[0])}"</span>`);
+  if (p.daysLeft!=null && p.daysLeft<=14) flags.push(`<span class="flag">Deadline in ~${p.daysLeft} days</span>`);
+  if (!p.area) flags.push(`<span class="flag">Cannot classify matter</span>`);
+  setStage(m,2,"done", (p.area?kv([["Checklist",esc(p.area.docs.join(", "))]]):"") + (flags.join("")||`<span class="flag info">No conflicts found</span>`));
+  S.mins += 35;
+
+  if (hits.length){
+    setStage(m,3,"stop","Auto-stopped: conflict of interest. Routed to attorney for a decision, no engagement draft generated.");
+    log(`<b>#${m.id}</b> hard stop: conflict with ${esc(hits[0])}`);
+  } else if (!p.area){
+    setStage(m,3,"gate","Not enough information to evaluate. Sending follow-ups first.");
+  } else {
+    setStage(m,3,"gate","Draft engagement letter ready. <b>Waiting on attorney.</b>");
+  }
+  addCard(m, hits, fu);
+  S.view=m.id; renderRail(m); refreshStats();
+  S.busy=false; $("run").disabled=false;
+}
+
+function addCard(m, hits, fu){
+  const p=m.p, q=$("queue");
+  if (q.querySelector(".empty")) q.innerHTML="";
+  const el=document.createElement("div"); el.className="card"; el.id="card"+m.id;
+  const title = `#${m.id} ${esc(p.name||"Unknown")} - ${esc(p.area?p.area.k:"Unclassified")}`;
+  let why, acts;
+  if (hits.length){
+    why = "Conflicts are an ethics call. Software can flag a match but only you can decide whether it is waivable.";
+    acts = `<button class="no" data-a="decline">Decline & refer out</button><button data-a="view">View intake</button>`;
+  } else if (!p.area){
+    why = "Accepting a matter you cannot yet scope is a professional judgment.";
+    acts = `<button data-a="info">Send follow-ups</button><button class="no" data-a="decline">Decline</button>`;
+  } else {
+    why = "Taking the matter and setting the fee are legal and business decisions that stay with the lawyer.";
+    acts = `<button class="ok" data-a="accept">Accept & send letter</button><button data-a="info">Need more info</button><button class="no" data-a="decline">Decline</button>`;
+  }
+  el.innerHTML = `<h3>${title}</h3><div style="color:var(--mute);font-size:12.5px">Score ${score(p)}/100${p.daysLeft!=null?" &middot; ~"+p.daysLeft+"d to date":""}</div>
+    <div class="why">${why}</div>
+    ${p.area&&!hits.length?`<pre>${esc(engagement(m))}</pre>`:""}
+    ${fu.length?`<pre>Follow-up draft:\n- ${esc(fu.join("\n- "))}</pre>`:""}
+    <div class="acts">${acts}</div>`;
+  q.prepend(el);
+  el.querySelector(".acts").addEventListener("click", e=>{
+    const a = e.target.dataset.a; if(!a) return;
+    if (a==="view"){ S.view=m.id; renderRail(m); return; }
+    decide(m, a, el);
+  });
+}
+
+function decide(m, a, el){
+  const p=m.p;
+  let note;
+  if (a==="accept"){
+    const ret = p.area.contingency ? 0 : p.area.fee;
+    S.accepted++; S.retainers += ret; S.mins += 55;
+    if (p.name) S.clients.push(p.name);
+    setStage(m,3,"done","Attorney accepted. Letter released to client.");
+    setStage(m,4,"done", kv([["Invoice", ret?"$"+ret.toLocaleString()+" retainer issued":"Contingency, no invoice"],["Calendar",p.daysLeft!=null?"Deadline +"+p.daysLeft+"d added":"No dates yet"],["Conflict DB","added "+esc(p.name||"client")]]));
+    note = `<b>Accepted.</b> Back office ran automatically.`;
+    log(`<b>#${m.id}</b> accepted, back office triggered`);
+  } else if (a==="decline"){
+    setStage(m,3,"stop","Attorney declined. Referral note queued for client.");
+    setStage(m,4,"", "Nothing to do");
+    note = `<b>Declined.</b> Referral email queued.`;
+    log(`<b>#${m.id}</b> declined by attorney`);
+  } else {
+    setStage(m,3,"gate","On hold. Follow-up questions sent to client.");
+    note = `<b>On hold.</b> Follow-ups sent.`;
+    log(`<b>#${m.id}</b> follow-ups sent`);
+  }
+  el.querySelector(".acts").innerHTML = `<span class="tag">${note}</span>`;
+  S.view=m.id; renderRail(m); refreshStats();
+}
+
+/* ---------- wiring ---------- */
+$("samples").innerHTML = Object.keys(SAMPLES).map(k=>`<button data-k="${k}">${k}</button>`).join("");
+$("samples").addEventListener("click", e=>{ const k=e.target.dataset.k; if(k) $("msg").value=SAMPLES[k]; });
+$("run").addEventListener("click", ()=>{
+  const t=$("msg").value.trim(); if(!t){ $("msg").focus(); return; }
+  runPipeline(t, $("src").value);
+});
+renderRail(null); refreshStats();
+log("Pick a sample, then run it. Try 'Contract dispute' to see a hard stop, then accept a matter and watch the conflict list grow.");
+</script>
+</body>
+</html>
