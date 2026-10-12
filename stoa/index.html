@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quoteboard - toy RFQ desk for GPUs</title>
+<style>
+:root{--bg:#f4f1ea;--card:#fffdf8;--ink:#1d2320;--mute:#6b736e;--line:#ddd7c9;--accent:#1f6f5c;--accent2:#d9822b;--bad:#b4442f;--good:#1f6f5c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+header{padding:22px 28px 8px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{margin:0;font-size:22px;letter-spacing:-.02em}
+header p{margin:0;color:var(--mute)}
+.tag{font-size:11px;border:1px solid var(--line);padding:2px 8px;border-radius:99px;color:var(--mute);background:var(--card)}
+main{display:grid;grid-template-columns:320px 1fr 300px;gap:16px;padding:12px 28px 24px;align-items:start}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+label{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}
+select,input[type=number]{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;color:inherit}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:7px 0;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;font:inherit}
+.seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn{width:100%;margin-top:16px;padding:11px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:600 14px inherit;cursor:pointer}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);margin-top:8px}
+.ref{margin-top:14px;padding:10px;background:#f1ede2;border-radius:8px;font-size:12px;color:var(--mute)}
+.ref b{color:var(--ink);font-size:15px}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.best td{background:#e8f2ee}
+tr.exp td,tr.dec td{color:#a3a89f}
+.pill{font-size:11px;padding:2px 7px;border-radius:99px;border:1px solid var(--line)}
+.pill.ok{color:var(--good);border-color:var(--good)}
+.pill.no{color:var(--bad);border-color:var(--bad)}
+.pill.wait{color:var(--accent2);border-color:var(--accent2)}
+.dev.neg{color:var(--good)}.dev.pos{color:var(--bad)}
+.bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:4px;width:90px}
+.bar i{display:block;height:100%;background:var(--accent2)}
+.take{padding:6px 12px;border-radius:6px;border:1px solid var(--ink);background:#fff;cursor:pointer;font:600 12px inherit}
+.take:hover{background:var(--ink);color:#fff}
+.take:disabled{opacity:.3;pointer-events:none}
+.empty{color:var(--mute);padding:30px 0;text-align:center}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{position:relative;padding:0 0 16px 26px;color:#a3a89f}
+.tl li:before{content:"";position:absolute;left:4px;top:4px;width:10px;height:10px;border-radius:50%;border:2px solid var(--line);background:var(--card)}
+.tl li:after{content:"";position:absolute;left:8px;top:16px;bottom:-2px;width:2px;background:var(--line)}
+.tl li:last-child:after{display:none}
+.tl li.done{color:var(--ink)}
+.tl li.done:before{background:var(--accent);border-color:var(--accent)}
+.tl li.cur{color:var(--ink);font-weight:600}
+.tl li.cur:before{border-color:var(--accent2);background:var(--accent2)}
+.tl small{display:block;color:var(--mute);font-weight:400;font-size:11px}
+.escrow{display:flex;justify-content:space-between;padding:10px;border-radius:8px;background:#f1ede2;margin-bottom:14px;font-size:12px}
+.escrow b{font-size:15px;display:block}
+.log{max-height:150px;overflow:auto;font-size:11px;color:var(--mute);margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+.log div{padding:1px 0}
+footer{padding:18px 28px 30px;color:var(--mute);font-size:12px;border-top:1px solid var(--line);margin:0 28px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Quoteboard</h1>
+  <span class="tag">toy RFQ desk for AI hardware</span>
+  <p>Post a request. Dealers answer with firm, expiring quotes. Accept one and the trade settles in stages while funds sit in escrow. All data is synthetic.</p>
+</header>
+
+<main>
+  <section class="card" id="rfq">
+    <h2>1 &middot; Request for quote</h2>
+    <label>Hardware</label>
+    <select id="sku"></select>
+    <label>Configuration</label>
+    <select id="cfg"></select>
+    <label>Condition</label>
+    <div class="seg" id="cond"></div>
+    <label>Quantity (GPUs)</label>
+    <input type="number" id="qty" min="8" max="2048" step="8" value="64">
+    <label>Quote window (seconds)</label>
+    <input type="number" id="ttl" min="10" max="60" step="5" value="25">
+    <div class="ref" id="ref"></div>
+    <button class="btn" id="send">Send RFQ to 7 dealers</button>
+    <button class="btn ghost" id="reset">Reset desk</button>
+  </section>
+
+  <section class="card">
+    <h2>2 &middot; Incoming quotes <span id="clock" class="mono" style="float:right;text-transform:none;letter-spacing:0"></span></h2>
+    <table>
+      <thead><tr><th>Dealer</th><th>Status</th><th>Unit price</th><th>vs ref</th><th>Lead</th><th>Valid</th><th></th></tr></thead>
+      <tbody id="quotes"><tr><td colspan="7" class="empty">No open RFQ. Configure one on the left and send it.</td></tr></tbody>
+    </table>
+    <div class="log mono" id="log"></div>
+  </section>
+
+  <section class="card">
+    <h2>3 &middot; Settlement</h2>
+    <div id="settle"><div class="empty">Accept a quote to open a trade.</div></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Stoa (YC S26). Not affiliated with Stoa.</footer>
+
+<script>
+"use strict";
+// ---------- synthetic market data ----------
+const SKUS = {
+  "H100 SXM5": {base: 24800, cfgs: ["8-GPU HGX baseboard", "Full server (2x CPU, 2TB RAM)"]},
+  "H200 SXM":  {base: 31500, cfgs: ["8-GPU HGX baseboard", "Full server (2x CPU, 2TB RAM)"]},
+  "B200":      {base: 39800, cfgs: ["8-GPU HGX baseboard", "NVL72 rack share"]},
+  "A100 80GB": {base: 8900,  cfgs: ["PCIe card", "8-GPU HGX baseboard"]}
+};
+const COND = {New: 1.0, Refurbished: 0.88, Used: 0.79};
+const CFG_MULT = {0: 1.0, 1: 1.06};
+const DEALERS = [
+  {n: "Halden Compute",   bias: -0.012, lat: [1.5, 4],  stock: 400, lead: 5,  rel: 98},
+  {n: "Ostrava Surplus",  bias: -0.030, lat: [4, 9],    stock: 160, lead: 12, rel: 91},
+  {n: "Meridian Silicon", bias: 0.004,  lat: [1, 3],    stock: 900, lead: 3,  rel: 99},
+  {n: "Kestrel Brokers",  bias: -0.022, lat: [3, 7],    stock: 96,  lead: 9,  rel: 93},
+  {n: "Pacific Rim Hw",   bias: 0.018,  lat: [2, 5],    stock: 2000,lead: 2,  rel: 97},
+  {n: "Tallow & Finch",   bias: -0.040, lat: [6, 12],   stock: 64,  lead: 16, rel: 86},
+  {n: "Northgate DC Liq", bias: -0.008, lat: [2, 6],    stock: 256, lead: 7,  rel: 95}
+];
+const STAGES = [
+  ["Trade confirmed", "Binding terms locked, funds deposited to escrow"],
+  ["Payment held", "Escrow holds 100% of notional"],
+  ["Shipped", "Carrier + serial list uploaded by dealer"],
+  ["Delivered", "Delivery signature matched to serials"],
+  ["Inspected", "Buyer attests condition against grade"],
+  ["Settled", "Escrow released to dealer"]
+];
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const fmt = n => "$" + Math.round(n).toLocaleString();
+const rnd = (a, b) => a + Math.random() * (b - a);
+let state = {cond: "New", rfq: null, quotes: [], timers: [], tick: null, trade: null, clock: 0};
+
+function logLine(t) {
+  const d = document.createElement("div");
+  d.textContent = new Date().toLocaleTimeString() + "  " + t;
+  $("log").prepend(d);
+}
+
+// Reference price drifts slowly so the "market" feels alive. Deterministic in time.
+function refPrice(sku, cond, cfgIdx) {
+  const t = Date.now() / 1000;
+  const drift = 1 + 0.006 * Math.sin(t / 37) + 0.004 * Math.sin(t / 11 + sku.length);
+  return SKUS[sku].base * COND[cond] * CFG_MULT[cfgIdx] * drift;
+}
+
+// ---------- RFQ form ----------
+function buildForm() {
+  $("sku").innerHTML = Object.keys(SKUS).map(s => `<option>${s}</option>`).join("");
+  $("cond").innerHTML = Object.keys(COND).map(c => `<button data-c="${c}" class="${c === state.cond ? "on" : ""}">${c}</button>`).join("");
+  $("cond").onclick = e => {
+    if (!e.target.dataset.c) return;
+    state.cond = e.target.dataset.c;
+    [...$("cond").children].forEach(b => b.classList.toggle("on", b.dataset.c === state.cond));
+    updateRef();
+  };
+  $("sku").onchange = () => { fillCfg(); updateRef(); };
+  $("cfg").onchange = updateRef;
+  $("qty").oninput = updateRef;
+  fillCfg();
+}
+function fillCfg() {
+  $("cfg").innerHTML = SKUS[$("sku").value].cfgs.map(c => `<option>${c}</option>`).join("");
+}
+function updateRef() {
+  const sku = $("sku").value, i = $("cfg").selectedIndex;
+  const p = refPrice(sku, state.cond, i), q = +$("qty").value || 0;
+  $("ref").innerHTML = `Reference index<br><b class="mono">${fmt(p)}</b> / GPU` +
+    `<br>Est. notional <span class="mono">${fmt(p * q)}</span>`;
+}
+
+// ---------- quote engine ----------
+// Each dealer: may decline (not enough stock or random pass), otherwise prices
+// off the reference with a personal bias, a size discount, and noise, then
+// replies after a latency drawn from its own range. Quotes expire.
+function sendRFQ() {
+  clearAll();
+  const sku = $("sku").value, cfgIdx = $("cfg").selectedIndex;
+  const qty = Math.max(8, Math.round((+$("qty").value || 8) / 8) * 8);
+  const ttl = Math.min(60, Math.max(10, +$("ttl").value || 25));
+  const ref = refPrice(sku, state.cond, cfgIdx);
+  state.rfq = {sku, cfg: $("cfg").value, cond: state.cond, qty, ttl, ref, t0: Date.now()};
+  state.quotes = DEALERS.map(d => ({dealer: d, status: "wait", price: null, at: null, exp: null, lead: null}));
+  $("send").disabled = true;
+  logLine(`RFQ out: ${qty}x ${sku} (${state.cond}, ${state.rfq.cfg}), ref ${fmt(ref)}`);
+
+  state.quotes.forEach(q => {
+    const d = q.dealer;
+    const delay = rnd(d.lat[0], d.lat[1]) * 1000 * Math.min(1, 12 / ttl + .4);
+    state.timers.push(setTimeout(() => respond(q), delay));
+  });
+  state.tick = setInterval(render, 200);
+  render();
+}
+
+function respond(q) {
+  const r = state.rfq, d = q.dealer;
+  if (!r) return;
+  const lackStock = r.qty > d.stock;
+  const passes = Math.random() < 0.12;
+  if (lackStock || passes) {
+    q.status = "dec";
+    q.note = lackStock ? "insufficient stock" : "passed";
+    logLine(`${d.n} declined (${q.note})`);
+    return;
+  }
+  const sizeDisc = Math.min(0.035, Math.log2(r.qty / 8) * 0.005);
+  const px = refPrice(r.sku, r.cond, $("cfg").selectedIndex) * (1 + d.bias - sizeDisc + rnd(-0.01, 0.015));
+  q.price = Math.round(px / 5) * 5;
+  q.lead = d.lead + Math.floor(rnd(0, 3));
+  q.at = Date.now();
+  q.exp = q.at + r.ttl * 1000;
+  q.status = "ok";
+  logLine(`${d.n} quoted ${fmt(q.price)}/GPU, firm for ${r.ttl}s`);
+}
+
+function liveQuotes() {
+  const now = Date.now();
+  return state.quotes.filter(q => q.status === "ok" && q.exp > now);
+}
+// Rank by landed price: unit price plus a small time-value penalty on lead days.
+function score(q) { return q.price * (1 + 0.0006 * q.lead) ; }
+
+function render() {
+  const r = state.rfq;
+  if (!r) return;
+  const now = Date.now();
+  state.quotes.forEach(q => { if (q.status === "ok" && q.exp <= now && !state.trade) q.status = "exp"; });
+  const live = liveQuotes();
+  const best = live.length ? live.reduce((a, b) => score(a) < score(b) ? a : b) : null;
+  const order = [...state.quotes].sort((a, b) => {
+    const rank = q => q.status === "ok" ? 0 : q.status === "wait" ? 1 : q.status === "exp" ? 2 : 3;
+    return rank(a) - rank(b) || (a.price || 0) - (b.price || 0);
+  });
+  $("quotes").innerHTML = order.map(q => {
+    const d = q.dealer, isBest = q === best && !state.trade;
+    const locked = !!state.trade;
+    let status, price = "-", dev = "-", lead = "-", valid = "";
+    if (q.status === "wait") status = `<span class="pill wait">pricing...</span>`;
+    else if (q.status === "dec") status = `<span class="pill no">${q.note}</span>`;
+    else if (q.status === "exp") status = `<span class="pill no">expired</span>`;
+    else status = `<span class="pill ok">firm</span>`;
+    if (q.price) {
+      price = `<span class="mono">${fmt(q.price)}</span>`;
+      const pct = (q.price / r.ref - 1) * 100;
+      dev = `<span class="dev ${pct < 0 ? "neg" : "pos"} mono">${pct > 0 ? "+" : ""}${pct.toFixed(1)}%</span>`;
+      lead = q.lead + "d";
+      if (q.status === "ok") {
+        const left = Math.max(0, q.exp - now), pctLeft = left / (r.ttl * 1000) * 100;
+        valid = `<span class="mono">${(left / 1000).toFixed(0)}s</span><div class="bar"><i style="width:${pctLeft}%"></i></div>`;
+      }
+    }
+    const canTake = q.status === "ok" && !locked;
+    const cls = q.status === "exp" ? "exp" : q.status === "dec" ? "dec" : isBest ? "best" : "";
+    return `<tr class="${cls}"><td><b>${d.n}</b><br><small class="mono">${d.rel}% on-time${isBest ? " &middot; best landed" : ""}</small></td>` +
+      `<td>${status}</td><td>${price}</td><td>${dev}</td><td class="mono">${lead}</td><td>${valid}</td>` +
+      `<td><button class="take" data-i="${state.quotes.indexOf(q)}" ${canTake ? "" : "disabled"}>Accept</button></td></tr>`;
+  }).join("");
+  document.querySelectorAll(".take").forEach(b => b.onclick = () => accept(+b.dataset.i));
+
+  const pending = state.quotes.some(q => q.status === "wait");
+  const secs = ((now - r.t0) / 1000).toFixed(1);
+  $("clock").textContent = state.trade ? "trade open" : (pending ? `t+${secs}s` : (live.length ? `${live.length} live` : "all quotes lapsed"));
+  if (!pending && !live.length && !state.trade) {
+    clearInterval(state.tick); state.tick = null; $("send").disabled = false;
+    $("send").textContent = "Re-send RFQ";
+  }
+}
+
+// ---------- trade + settlement ----------
+function accept(i) {
+  const q = state.quotes[i];
+  if (!q || q.status !== "ok" || q.exp <= Date.now() || state.trade) return;
+  const r = state.rfq, notional = q.price * r.qty;
+  const best = liveQuotes().reduce((a, b) => score(a) < score(b) ? a : b);
+  const slip = (q.price - best.price) * r.qty;
+  state.trade = {q, r, notional, stage: 0, times: [Date.now()], id: "T-" + Math.floor(rnd(100000, 999999)), auto: false};
+  state.quotes.forEach(x => { if (x !== q && x.status === "ok") x.status = "exp"; });
+  logLine(`ACCEPTED ${q.dealer.n} at ${fmt(q.price)}/GPU, notional ${fmt(notional)}` +
+    (slip > 0 ? ` (left ${fmt(slip)} vs best landed)` : ""));
+  render();
+  renderTrade();
+}
+
+function advance() {
+  const t = state.trade;
+  if (!t || t.stage >= STAGES.length - 1) return;
+  t.stage++; t.times.push(Date.now());
+  logLine(`${t.id}: ${STAGES[t.stage][0]}`);
+  renderTrade();
+}
+
+function renderTrade() {
+  const t = state.trade;
+  if (!t) { $("settle").innerHTML = `<div class="empty">Accept a quote to open a trade.</div>`; return; }
+  const released = t.stage === STAGES.length - 1;
+  const held = released ? 0 : t.notional;
+  const items = STAGES.map((s, i) => {
+    const cls = i < t.stage || released && i === t.stage ? "done" : i === t.stage ? "cur" : "";
+    const when = t.times[i] ? new Date(t.times[i]).toLocaleTimeString() : "";
+    return `<li class="${cls}">${s[0]}<small>${when ? when + " &middot; " : ""}${s[1]}</small></li>`;
+  }).join("");
+  $("settle").innerHTML =
+    `<div class="mono" style="font-size:12px;margin-bottom:10px">${t.id} &middot; ${t.q.dealer.n}<br>${t.r.qty}x ${t.r.sku} ${t.r.cond}</div>` +
+    `<div class="escrow"><div>In escrow<b class="mono">${fmt(held)}</b></div><div style="text-align:right">Released<b class="mono">${fmt(t.notional - held)}</b></div></div>` +
+    `<ul class="tl">${items}</ul>` +
+    (released ? `<button class="btn ghost" id="again">Start another RFQ</button>` :
+      `<button class="btn" id="adv">Simulate: ${STAGES[t.stage + 1][0].toLowerCase()}</button>`);
+  if ($("adv")) $("adv").onclick = advance;
+  if ($("again")) $("again").onclick = resetDesk;
+}
+
+function clearAll() {
+  state.timers.forEach(clearTimeout); state.timers = [];
+  if (state.tick) clearInterval(state.tick);
+  state.tick = null;
+}
+function resetDesk() {
+  clearAll();
+  state.rfq = null; state.quotes = []; state.trade = null;
+  $("quotes").innerHTML = `<tr><td colspan="7" class="empty">No open RFQ. Configure one on the left and send it.</td></tr>`;
+  $("clock").textContent = ""; $("log").innerHTML = "";
+  $("send").disabled = false; $("send").textContent = "Send RFQ to 7 dealers";
+  renderTrade();
+}
+
+// ---------- boot ----------
+buildForm();
+updateRef();
+setInterval(() => { if (!state.rfq) updateRef(); }, 1000);
+$("send").onclick = sendRFQ;
+$("reset").onclick = resetDesk;
+</script>
+</body>
+</html>

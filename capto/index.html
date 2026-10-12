@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bidfit - fit-score solicitations against your company profile (toy demo)</title>
+<style>
+:root{--bg:#f4f1ea;--card:#fffdf8;--ink:#1d2320;--mute:#6b736e;--line:#dcd6c8;--acc:#1f6f54;--acc2:#e4efe9;--warn:#b4561b;--bad:#a63232;--good:#1f6f54}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 10px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{margin:0;font:700 22px/1 Georgia,serif;letter-spacing:-.3px}
+header p{margin:0;color:var(--mute)}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:2px 9px;color:var(--mute);background:var(--card)}
+main{display:grid;grid-template-columns:300px 1fr 1.15fr;gap:16px;padding:10px 28px 24px;align-items:start}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 10px;font:600 12px/1 ui-sans-serif,system-ui;text-transform:uppercase;letter-spacing:.8px;color:var(--mute)}
+label{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}
+input[type=text],textarea,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit;background:#fff;color:var(--ink)}
+textarea{resize:vertical;min-height:70px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:3px 10px;font-size:12px;cursor:pointer;user-select:none}
+.chip.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:7px 12px}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.opp{border:1px solid var(--line);border-radius:8px;padding:11px 12px;margin-bottom:9px;cursor:pointer;display:flex;gap:12px;background:#fff;transition:transform .12s,border-color .12s}
+.opp:hover{border-color:var(--acc)}
+.opp.sel{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc2)}
+.score{flex:none;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:15px;color:#fff}
+.opp h3{margin:0;font-size:14px;line-height:1.3}
+.meta{font-size:12px;color:var(--mute)}
+.bar{display:flex;align-items:center;gap:8px;font-size:12px;margin:5px 0}
+.bar span.l{width:120px;color:var(--mute)}
+.bar .t{flex:1;height:7px;background:#ece7da;border-radius:4px;overflow:hidden}
+.bar .f{height:100%;background:var(--acc);transition:width .35s}
+.bar span.v{width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.why{background:var(--acc2);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:13px}
+.req{border-left:3px solid var(--line);padding:6px 10px;margin:7px 0;background:#fff;border-radius:0 6px 6px 0}
+.req.met{border-color:var(--good)}.req.part{border-color:var(--warn)}.req.gap{border-color:var(--bad)}
+.req .cite{font-size:11px;color:var(--mute);font-family:ui-monospace,Menlo,monospace}
+.req .st{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.met .st{color:var(--good)}.part .st{color:var(--warn)}.gap .st{color:var(--bad)}
+.kv{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+.kv div{background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px 9px;font-size:12px}
+.verdict{font:700 18px Georgia,serif;margin:8px 0}
+.empty{color:var(--mute);padding:30px 0;text-align:center}
+.row{display:flex;gap:8px;margin-top:10px}
+footer{padding:18px 28px 30px;color:var(--mute);font-size:12px;border-top:1px solid var(--line);margin:0 28px}
+.hint{font-size:12px;color:var(--mute);margin:0 0 10px}
+mark{background:#f3e3a6;padding:0 2px;border-radius:2px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bidfit</h1>
+  <p>Edit your company profile. Watch every solicitation re-score with a written rationale, then open one to see requirements pulled out and mapped to what you can do.</p>
+  <span class="tag">toy demo - all data synthetic - runs fully in your browser</span>
+</header>
+
+<main>
+  <section class="card" id="profile">
+    <h2>1 · Company profile</h2>
+    <label>Company</label>
+    <input type="text" id="pName" value="Larkspur Systems LLC">
+    <label>NAICS codes (comma separated)</label>
+    <input type="text" id="pNaics" value="541512, 541519">
+    <label>Set-aside status (click to toggle)</label>
+    <div class="chips" id="pSet"></div>
+    <label>Capabilities (click to toggle)</label>
+    <div class="chips" id="pCaps"></div>
+    <label>Past performance agencies</label>
+    <div class="chips" id="pAgy"></div>
+    <label>Add a capability keyword</label>
+    <div class="row" style="margin-top:0"><input type="text" id="newCap" placeholder="e.g. geospatial"><button class="ghost" id="addCap">Add</button></div>
+    <div class="row"><button class="ghost" id="reset">Reset</button><button class="ghost" id="rand">Try a different company</button></div>
+  </section>
+
+  <section class="card">
+    <h2>2 · Discovered opportunities (ranked)</h2>
+    <p class="hint">Scored 0-100 on NAICS, set-aside, capability overlap, and past performance. Rationale is generated from the actual matches.</p>
+    <div id="list"></div>
+    <details style="margin-top:12px"><summary style="cursor:pointer;color:var(--mute)">Paste your own solicitation text</summary>
+      <textarea id="custom" placeholder="Paste text with lines like: 'Section L.2 The contractor shall provide cloud migration...' and 'Technical 40%, Past Performance 30%, Price 30%'" style="margin-top:8px;min-height:110px"></textarea>
+      <div class="row"><button id="useCustom">Analyze pasted text</button></div>
+    </details>
+  </section>
+
+  <section class="card" id="detail">
+    <h2>3 · Capture analysis</h2>
+    <div class="empty">Pick an opportunity to extract its requirements.</div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Capto (YC S26). Not affiliated with Capto.</footer>
+
+<script>
+"use strict";
+// ---------- synthetic data ----------
+const SETS = ["Small Business","8(a)","WOSB","SDVOSB","HUBZone"];
+const CAPS = ["cloud migration","cybersecurity","data engineering","machine learning","help desk","software modernization","FedRAMP","agile delivery","systems integration","training","logistics","construction mgmt"];
+const AGENCIES = ["VA","DHS","USDA","DOT","HHS","State of Maryland","NASA"];
+const PROFILES = [
+  {name:"Larkspur Systems LLC",naics:"541512, 541519",sets:["Small Business","SDVOSB"],caps:["cloud migration","cybersecurity","agile delivery","software modernization"],agy:["VA","DHS"]},
+  {name:"Pinewell Analytics Inc",naics:"541511, 541690",sets:["Small Business","WOSB"],caps:["data engineering","machine learning","agile delivery"],agy:["HHS","NASA"]},
+  {name:"Ironbridge Build Co",naics:"236220, 237310",sets:["Small Business","HUBZone"],caps:["construction mgmt","logistics"],agy:["DOT","State of Maryland"]}
+];
+const OPPS = [
+ {id:"VA-26-0412",title:"Legacy claims portal modernization",agency:"VA",naics:"541512",set:["SDVOSB","Small Business"],value:"$4.2M",due:"Nov 18",
+  text:`Section C.1 The contractor shall migrate the legacy claims portal to a FedRAMP authorized cloud environment.
+Section C.2 The contractor must provide cybersecurity monitoring aligned to NIST 800-53 controls.
+Section C.3 The contractor shall deliver in two-week agile sprints with a demonstrable increment.
+Section H.4 Offerors shall hold an active facility clearance at the Secret level.
+Section L.5 Offeror must show 3 past performance references of similar scope within 5 years.
+Section M.1 Evaluation: Technical 40%, Past Performance 30%, Price 30%.`},
+ {id:"DHS-26-0877",title:"Border sensor data pipeline",agency:"DHS",naics:"541511",set:["Small Business"],value:"$7.9M",due:"Dec 02",
+  text:`Section C.1 The contractor shall build data engineering pipelines ingesting sensor telemetry at scale.
+Section C.2 The contractor shall apply machine learning for anomaly detection on streams.
+Section C.4 The contractor must support on-call help desk coverage 24x7.
+Section L.2 Offerors must be a small business under the stated NAICS code.
+Section M.1 Evaluation: Technical 50%, Past Performance 20%, Price 30%.`},
+ {id:"USDA-26-0150",title:"Grants management training program",agency:"USDA",naics:"611430",set:["WOSB"],value:"$1.1M",due:"Nov 25",
+  text:`Section C.1 The contractor shall develop and deliver training for 400 grant officers.
+Section C.2 The contractor must provide help desk support during rollout.
+Section L.1 Offeror shall be certified Woman-Owned Small Business.
+Section M.1 Evaluation: Technical 35%, Past Performance 35%, Price 30%.`},
+ {id:"DOT-26-0931",title:"Bridge inspection logistics and field ops",agency:"DOT",naics:"237310",set:["HUBZone","Small Business"],value:"$12.5M",due:"Jan 09",
+  text:`Section C.1 The contractor shall provide logistics coordination across 14 field offices.
+Section C.2 The contractor must provide construction mgmt oversight for rehabilitation work.
+Section H.2 Offeror shall maintain a bonding capacity of at least $5M.
+Section M.1 Evaluation: Technical 45%, Past Performance 25%, Price 30%.`},
+ {id:"HHS-26-0266",title:"Clinical data lake and ML scoring",agency:"HHS",naics:"541511",set:["Small Business","8(a)"],value:"$5.6M",due:"Dec 14",
+  text:`Section C.1 The contractor shall design a clinical data lake using modern data engineering practice.
+Section C.2 The contractor shall deploy machine learning models for risk scoring.
+Section C.3 The contractor must satisfy FedRAMP moderate baselines.
+Section L.3 Offeror must provide 2 past performance references with HHS or sister agencies.
+Section M.1 Evaluation: Technical 40%, Past Performance 40%, Price 20%.`},
+ {id:"MD-26-0044",title:"State DMV cloud migration and support",agency:"State of Maryland",naics:"541519",set:["Small Business"],value:"$2.8M",due:"Nov 30",
+  text:`Section C.1 The contractor shall execute cloud migration of DMV workloads in phases.
+Section C.2 The contractor shall provide help desk tier 1 and tier 2 support.
+Section C.5 The contractor must adhere to cybersecurity requirements of the state security office.
+Section M.1 Evaluation: Technical 30%, Past Performance 20%, Price 50%.`},
+ {id:"NASA-26-0590",title:"Mission systems integration support",agency:"NASA",naics:"541330",set:["Small Business","8(a)"],value:"$9.3M",due:"Jan 21",
+  text:`Section C.1 The contractor shall perform systems integration for ground station software.
+Section C.2 The contractor must apply agile delivery with monthly releases.
+Section H.1 Offerors shall have US person staff only.
+Section M.1 Evaluation: Technical 60%, Past Performance 20%, Price 20%.`}
+];
+
+// ---------- state ----------
+let P = clone(PROFILES[0]);
+let allCaps = CAPS.slice();
+let selId = null, custom = null;
+function clone(o){return JSON.parse(JSON.stringify(o))}
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ---------- scoring engine ----------
+function naicsList(){return P.naics.split(/[,\s]+/).filter(x=>/^\d{2,6}$/.test(x))}
+function capHits(text){
+  const t = text.toLowerCase();
+  return P.caps.filter(c => c.toLowerCase().split(/\s+/).every(w => t.includes(w.replace("mgmt","management").slice(0,5))));
+}
+function score(o){
+  const ns = naicsList(), notes = [];
+  // NAICS: exact 25, same 4-digit 14, same 3-digit 6
+  let n = 0;
+  for (const c of ns){
+    if (c === o.naics) n = Math.max(n,25);
+    else if (c.slice(0,4) === o.naics.slice(0,4)) n = Math.max(n,14);
+    else if (c.slice(0,3) === o.naics.slice(0,3)) n = Math.max(n,6);
+  }
+  notes.push(n===25?`NAICS ${o.naics} is an exact match`:n?`NAICS ${o.naics} is only adjacent to your codes`:`you hold no NAICS near ${o.naics}`);
+  // set-aside: restricted to a non-Small-Business status is a hard gate
+  const restricted = o.set.filter(s => s !== "Small Business");
+  const eligible = o.set.some(s => P.sets.includes(s));
+  let s = eligible ? 25 : 0;
+  if (restricted.length && !restricted.some(r => P.sets.includes(r))) { s = 0; notes.push(`set-aside needs ${restricted.join(" or ")}, which you lack`); }
+  else notes.push(eligible ? `you qualify for the ${o.set.filter(x=>P.sets.includes(x)).join("/")} set-aside` : "no set-aside you hold applies");
+  // capabilities
+  const hits = capHits(o.text + " " + o.title);
+  const want = Math.max(1, reqs(o.text).length);
+  const c = Math.min(35, Math.round(35 * hits.length / Math.min(want, 4)));
+  notes.push(hits.length ? `capability overlap on ${hits.join(", ")}` : "no capability keywords overlap the scope");
+  // past performance
+  const pp = P.agy.includes(o.agency) ? 15 : 0;
+  notes.push(pp ? `prior work for ${o.agency} counts as relevant past performance` : `no past performance with ${o.agency}`);
+  const total = n + s + c + pp;
+  return {total, parts:{NAICS:[n,25],"Set-aside":[s,25],Capabilities:[c,35],"Past performance":[pp,15]}, notes, hits};
+}
+function color(v){return v>=70?"#1f6f54":v>=40?"#b4761b":"#a63232"}
+
+// ---------- requirement extraction ----------
+function reqs(text){
+  return text.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+    const m = l.match(/^(Section\s+[A-Z]\.\d+)\s+(.*)$/i);
+    return m ? {cite:m[1], text:m[2]} : null;
+  }).filter(r => r && /\b(shall|must|required|offeror)\b/i.test(r.text) && !/^Evaluation:/i.test(r.text));
+}
+function weights(text){
+  const m = text.match(/Evaluation:\s*(.*)/i); if(!m) return [];
+  return [...m[1].matchAll(/([A-Za-z ]+?)\s+(\d+)%/g)].map(x=>({k:x[1].trim().replace(/^and /i,""),v:+x[2]}));
+}
+function mapReq(r, o){
+  const t = r.text.toLowerCase();
+  const hit = P.caps.find(c => c.toLowerCase().split(/\s+/).every(w => t.includes(w.replace("mgmt","management").slice(0,5))));
+  if (hit) return {st:"met", why:`maps to your capability "${hit}"`};
+  if (/small business|woman-owned|wosb|sdvosb|8\(a\)|hubzone/i.test(t)) {
+    const need = SETS.find(s => t.includes(s.toLowerCase())) || (t.includes("woman")?"WOSB":"Small Business");
+    return P.sets.includes(need) ? {st:"met", why:`you hold ${need} status`} : {st:"gap", why:`requires ${need}; not on your profile`};
+  }
+  if (/past performance reference/i.test(t)) return P.agy.length ? {st:"part", why:`you list ${P.agy.join(", ")}; check references are in scope and recent`} : {st:"gap", why:"no past performance recorded"};
+  if (/clearance|bond|us person/i.test(t)) return {st:"part", why:"compliance item; not captured in this profile, verify manually"};
+  return {st:"gap", why:"no matching capability on your profile"};
+}
+
+// ---------- rendering ----------
+function chips(el, items, sel, onClick){
+  el.innerHTML = items.map(i=>`<span class="chip ${sel.includes(i)?"on":""}" data-v="${esc(i)}">${esc(i)}</span>`).join("");
+  el.onclick = e => { const v = e.target.dataset && e.target.dataset.v; if(v){ onClick(v); } };
+}
+function toggle(arr,v){const i=arr.indexOf(v); i<0?arr.push(v):arr.splice(i,1)}
+function renderProfile(){
+  $("#pName").value = P.name; $("#pNaics").value = P.naics;
+  chips($("#pSet"), SETS, P.sets, v=>{toggle(P.sets,v);refresh()});
+  chips($("#pCaps"), allCaps, P.caps, v=>{toggle(P.caps,v);refresh()});
+  chips($("#pAgy"), AGENCIES, P.agy, v=>{toggle(P.agy,v);refresh()});
+}
+function pool(){return custom ? [custom, ...OPPS] : OPPS}
+function renderList(){
+  const rows = pool().map(o=>({o, s:score(o)})).sort((a,b)=>b.s.total-a.s.total);
+  $("#list").innerHTML = rows.map(({o,s})=>`
+    <div class="opp ${o.id===selId?"sel":""}" data-id="${o.id}">
+      <div class="score" style="background:${color(s.total)}">${s.total}</div>
+      <div><h3>${esc(o.title)}</h3>
+      <div class="meta">${esc(o.id)} · ${esc(o.agency)} · NAICS ${o.naics} · ${o.value} · due ${o.due}</div>
+      <div class="meta">${o.set.map(esc).join(" / ")}</div></div>
+    </div>`).join("");
+}
+function renderDetail(){
+  const o = pool().find(x=>x.id===selId);
+  if(!o){ $("#detail").innerHTML = `<h2>3 · Capture analysis</h2><div class="empty">Pick an opportunity to extract its requirements.</div>`; return; }
+  const s = score(o), rq = reqs(o.text).map(r=>({...r, ...mapReq(r,o)})), w = weights(o.text);
+  const met = rq.filter(r=>r.st==="met").length, part = rq.filter(r=>r.st==="part").length, gaps = rq.filter(r=>r.st==="gap").length;
+  const ready = rq.length ? Math.round(100*(met + part*0.5)/rq.length) : 0;
+  const blocker = s.parts["Set-aside"][0]===0 || rq.some(r=>r.st==="gap" && /requires/.test(r.why));
+  const go = !blocker && s.total>=60 && ready>=60, maybe = !blocker && (s.total>=40 && ready>=40);
+  const verdict = go ? ["GO","var(--good)"] : maybe ? ["BID ONLY WITH A TEAMING PARTNER","var(--warn)"] : ["NO-GO","var(--bad)"];
+  const why = go ? "Strong fit and most requirements are covered." : blocker ? "A hard eligibility gate fails, so a prime bid is not possible as configured. A sub or teaming role is the realistic path." : maybe ? "Partial fit. Gaps could be covered by a teammate." : "Too many unmet requirements for the effort.";
+  $("#detail").innerHTML = `<h2>3 · Capture analysis</h2>
+    <h3 style="margin:0 0 2px;font:700 17px Georgia,serif">${esc(o.title)}</h3>
+    <div class="meta">${esc(o.id)} · ${esc(o.agency)}</div>
+    <div class="verdict" style="color:${verdict[1]}">${verdict[0]}</div>
+    <div class="meta">${why}</div>
+    <div style="margin-top:10px">${Object.entries(s.parts).map(([k,[v,m]])=>`<div class="bar"><span class="l">${k}</span><span class="t"><span class="f" style="display:block;width:${100*v/m}%"></span></span><span class="v">${v}/${m}</span></div>`).join("")}</div>
+    <div class="why"><b>Why ${s.total}:</b> ${s.notes.map(esc).join("; ")}.</div>
+    <h2 style="margin-top:14px">Evaluation weights</h2>
+    <div class="kv">${w.length ? w.map(x=>`<div>${esc(x.k)} <b>${x.v}%</b></div>`).join("") : "<div>none found</div>"}</div>
+    <h2 style="margin-top:14px">Requirements · readiness ${ready}% (${met} met, ${part} check, ${gaps} gap)</h2>
+    ${rq.length ? rq.map(r=>`<div class="req ${r.st}"><span class="st">${r.st==="met"?"Covered":r.st==="part"?"Verify":"Gap"}</span> <span class="cite">${esc(r.cite)}</span><div>${esc(r.text)}</div><div class="meta">${esc(r.why)}</div></div>`).join("") : `<div class="empty">No "shall/must" requirement lines found. Prefix lines with "Section C.1".</div>`}`;
+  const bars = $("#detail").querySelectorAll(".f"); bars.forEach(b=>{const x=b.style.width;b.style.width="0";requestAnimationFrame(()=>requestAnimationFrame(()=>b.style.width=x))});
+}
+function refresh(){ renderProfile(); renderList(); renderDetail(); }
+
+// ---------- events ----------
+$("#pName").oninput = e => { P.name = e.target.value; };
+$("#pNaics").oninput = e => { P.naics = e.target.value; renderList(); renderDetail(); };
+$("#list").onclick = e => { const c = e.target.closest(".opp"); if(c){ selId = c.dataset.id; renderList(); renderDetail(); } };
+$("#addCap").onclick = () => {
+  const v = $("#newCap").value.trim().toLowerCase(); if(!v) return;
+  if(!allCaps.includes(v)) allCaps.push(v);
+  if(!P.caps.includes(v)) P.caps.push(v);
+  $("#newCap").value = ""; refresh();
+};
+$("#reset").onclick = () => { P = clone(PROFILES[0]); allCaps = CAPS.slice(); refresh(); };
+let pi = 0;
+$("#rand").onclick = () => { pi = (pi+1)%PROFILES.length; P = clone(PROFILES[pi]); refresh(); };
+$("#useCustom").onclick = () => {
+  const text = $("#custom").value.trim(); if(!text) return;
+  custom = {id:"PASTED-001", title:"Your pasted solicitation", agency:"Unknown", naics:(text.match(/NAICS\s*(\d{6})/i)||[])[1]||"000000", set:["Small Business"], value:"n/a", due:"n/a", text};
+  selId = custom.id; refresh();
+};
+refresh();
+</script>
+</body>
+</html>

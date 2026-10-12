@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campaign Bench - verified vs naive hill-climbing on a toy agent</title>
+<style>
+:root{--bg:#10120f;--panel:#181b16;--line:#2a2f27;--ink:#e9ecdf;--mut:#8e9585;--ok:#9be36b;--bad:#ff7a59;--acc:#f2c14e;--blue:#6bb7e3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+header{padding:22px 28px 8px}
+h1{margin:0 0 4px;font-size:20px;letter-spacing:.02em}
+header p{margin:0;color:var(--mut);max-width:900px}
+main{display:grid;grid-template-columns:300px 1fr 360px;gap:14px;padding:14px 28px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--mut);font-weight:600}
+button{background:#242a20;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 11px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.pri{background:var(--acc);color:#1a1500;border-color:var(--acc);font-weight:700}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+label{display:block;margin:10px 0 3px;color:var(--mut);font-size:12px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tab{flex:1;text-align:center;padding:7px;border:1px solid var(--line);border-radius:6px;cursor:pointer;color:var(--mut)}
+.tab.on{color:var(--ink);border-color:var(--acc);background:#20241c}
+.tab b{display:block;font-size:18px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px}
+.kv span:nth-child(odd){color:var(--mut)}
+#tree{max-height:520px;overflow:auto}
+.node{padding:5px 8px;border-left:2px solid var(--line);margin:2px 0;border-radius:0 5px 5px 0;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.node:hover,.node.sel{background:#20241c}
+.node.acc{border-left-color:var(--ok)}
+.node.rej{border-left-color:var(--bad);color:var(--mut)}
+.node.root{border-left-color:var(--blue)}
+.tag{font-size:11px;padding:0 6px;border-radius:9px;border:1px solid currentColor;white-space:nowrap}
+.acc .tag{color:var(--ok)}.rej .tag{color:var(--bad)}.root .tag{color:var(--blue)}
+svg{width:100%;height:210px;display:block}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:6px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.mem{max-height:150px;overflow:auto;font-size:12px;color:var(--mut)}
+.mem div{padding:1px 0}
+.ci{position:relative;height:26px;background:#10120f;border:1px solid var(--line);border-radius:5px;margin:8px 0}
+.ci i{position:absolute;top:11px;height:3px;background:var(--acc)}
+.ci u{position:absolute;top:0;bottom:0;width:1px;background:var(--mut)}
+footer{padding:18px 28px 30px;color:var(--mut);border-top:1px solid var(--line);margin-top:10px;font-size:12px}
+.note{font-size:12px;color:var(--mut);margin-top:8px}
+.good{color:var(--ok)}.warn{color:var(--bad)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Campaign Bench</h1>
+  <p>A toy research loop. A campaign mutates an agent config, scores each candidate on a noisy eval, and only keeps changes it can verify. Run the same campaign with and without statistical verification and compare the true score of what each one ships. All tasks and numbers are synthetic.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Campaign controls</h2>
+    <div class="row">
+      <button class="pri" id="b1">Step</button>
+      <button id="b10">+10</button>
+      <button id="b40">+40</button>
+      <button id="rst">Reset</button>
+    </div>
+    <label>Seed: <span id="seedv">7</span></label>
+    <input type="range" id="seed" min="1" max="50" value="7">
+    <label>Dev set size (cheap, noisy): <span id="devv">40</span></label>
+    <input type="range" id="dev" min="10" max="120" step="10" value="40">
+    <label>Verification set size: <span id="verv">400</span></label>
+    <input type="range" id="ver" min="100" max="1500" step="100" value="400">
+    <h2 style="margin-top:16px">Incumbent config</h2>
+    <div class="kv" id="cfg"></div>
+    <p class="note">Pass rate is the only objective. Few-shot count, retries and the verifier step add cost but the campaign does not see that, like a real eval with a missing metric.</p>
+  </section>
+
+  <section class="card">
+    <div class="tabs">
+      <div class="tab on" id="tabA"><span>Verified campaign</span><b id="scA">-</b></div>
+      <div class="tab" id="tabB"><span>Naive campaign (dev set only)</span><b id="scB">-</b></div>
+    </div>
+    <h2>Experiment lineage</h2>
+    <div id="tree"></div>
+  </section>
+
+  <section class="card">
+    <h2>True score of shipped incumbent</h2>
+    <svg id="chart" viewBox="0 0 340 210" preserveAspectRatio="none"></svg>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--ok)"></span>verified</span>
+      <span><span class="dot" style="background:var(--bad)"></span>naive</span>
+    </div>
+    <p class="note">True score = expected pass rate on a 4000-item hidden population. Neither campaign sees it. They only see sampled evals.</p>
+    <h2 style="margin-top:16px">Selected experiment</h2>
+    <div id="detail" class="note">Click a node in the lineage.</div>
+    <h2 style="margin-top:16px">Persistent memory</h2>
+    <div class="mem" id="mem"></div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Autoresearch, Inc. (YC S26). Not affiliated with Autoresearch, Inc..</footer>
+
+<script>
+"use strict";
+// ---------- deterministic RNG ----------
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0,v=0;while(!u)u=r();v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(6.2831853*v)}
+const sig=x=>1/(1+Math.exp(-x));
+
+// ---------- toy task: 4000 items, two categories ----------
+const POP=(function(){const r=rng(12345),a=[];for(let i=0;i<4000;i++)a.push({cat:r()<0.5?'math':'format',d:gauss(r)*1.2});return a})();
+
+// ---------- the "agent": a config with knobs ----------
+const KNOBS={
+  fewshot:[0,1,2,3,4,6,8,10],
+  temp:[0,0.2,0.4,0.7,1.0],
+  tools:[false,true],
+  retries:[0,1,2,3],
+  verifier:[false,true],
+  style:['terse','cot','structured']
+};
+const START={fewshot:0,temp:1.0,tools:false,retries:0,verifier:false,style:'terse'};
+function skill(c,cat){
+  let s=-0.4;
+  s+=0.14*Math.min(c.fewshot,4)-0.12*Math.max(0,c.fewshot-4);
+  s-=(cat==='math'?1.6:0.5)*c.temp;
+  if(c.tools)s+=cat==='math'?1.2:-0.3;
+  s+=0.3*Math.sqrt(c.retries);
+  if(c.verifier)s+=0.45;
+  if(c.style==='cot')s+=cat==='math'?0.6:-0.2;
+  if(c.style==='structured')s+=cat==='format'?0.7:0.05;
+  return s;
+}
+function pItem(c,it){return sig(skill(c,it.cat)+1.3-it.d)}
+function trueScore(c){let t=0;for(const it of POP)t+=pItem(c,it);return t/POP.length}
+function cost(c){return 1+0.3*c.fewshot+0.5*c.retries+(c.verifier?1:0)+(c.tools?0.5:0)+(c.style==='cot'?1:0)}
+// paired eval: same sampled items and same random draws for parent and child
+function pairedEval(parent,child,n,r){
+  const diffs=[];let pa=0,pc=0;
+  for(let i=0;i<n;i++){
+    const it=POP[Math.floor(r()*POP.length)],u=r();
+    const a=u<pItem(parent,it)?1:0,b=u<pItem(child,it)?1:0;
+    pa+=a;pc+=b;diffs.push(b-a);
+  }
+  const m=diffs.reduce((x,y)=>x+y,0)/n;
+  const v=diffs.reduce((x,y)=>x+(y-m)*(y-m),0)/(n-1);
+  const se=Math.sqrt(v/n);
+  return{n,gain:m,se,lo:m-1.96*se,hi:m+1.96*se,pa:pa/n,pc:pc/n};
+}
+const key=c=>JSON.stringify(c);
+const show=v=>typeof v==='boolean'?(v?'on':'off'):String(v);
+
+// ---------- a campaign ----------
+function Campaign(name,seed,useVerify){
+  const r=rng(seed*7919+(useVerify?0:0)); // identical proposal stream for both modes
+  const evalR=rng(seed*104729+(useVerify?1:2));
+  const root={id:0,parent:null,depth:0,cfg:{...START},status:'root',label:'baseline',truth:trueScore(START)};
+  return{name,useVerify,r,evalR,nodes:[root],inc:root,memory:new Set([key(START)]),hist:[root.truth],
+    step(devN,verN){
+      // propose: mutate one knob of the incumbent, skip anything already in memory
+      let cand=null,knob,val,tries=0;
+      while(tries++<60){
+        const ks=Object.keys(KNOBS);knob=ks[Math.floor(this.r()*ks.length)];
+        const opts=KNOBS[knob].filter(o=>o!==this.inc.cfg[knob]);
+        val=opts[Math.floor(this.r()*opts.length)];
+        const c={...this.inc.cfg,[knob]:val};
+        if(!this.memory.has(key(c))){cand=c;break}
+      }
+      const id=this.nodes.length;
+      if(!cand){this.hist.push(this.inc.truth);return null}
+      this.memory.add(key(cand));
+      const node={id,parent:this.inc.id,depth:this.inc.depth+1,cfg:cand,label:knob+': '+show(this.inc.cfg[knob])+' -> '+show(val),truth:trueScore(cand)};
+      node.dev=pairedEval(this.inc.cfg,cand,devN,this.evalR);
+      if(node.dev.gain<=0){node.status='rej';node.why='no gain on dev'}
+      else if(!this.useVerify){node.status='acc';node.why='dev gain, shipped unverified'}
+      else{
+        node.ver=pairedEval(this.inc.cfg,cand,verN,this.evalR);
+        if(node.ver.lo>0){node.status='acc';node.why='verified: 95% CI lower bound > 0'}
+        else{node.status='rej';node.why=node.ver.gain>0?'dev win did not survive verification':'failed verification'}
+      }
+      this.nodes.push(node);
+      if(node.status==='acc')this.inc=node;
+      this.hist.push(this.inc.truth);
+      return node;
+    }};
+}
+
+// ---------- UI ----------
+const $=id=>document.getElementById(id);
+let A,B,view='A',sel=null;
+function build(){const s=+$('seed').value;A=Campaign('verified',s,true);B=Campaign('naive',s,false);sel=null;render()}
+function run(n){for(let i=0;i<n;i++){A.step(+$('dev').value,+$('ver').value);B.step(+$('dev').value,+$('ver').value)}render()}
+function cur(){return view==='A'?A:B}
+function pct(x){return(x*100).toFixed(1)+'%'}
+function spct(x){return(x>=0?'+':'')+(x*100).toFixed(1)+'pp'}
+
+function render(){
+  $('scA').textContent=pct(A.inc.truth);$('scB').textContent=pct(B.inc.truth);
+  $('tabA').classList.toggle('on',view==='A');$('tabB').classList.toggle('on',view==='B');
+  const c=cur();
+  // config
+  const cfg=c.inc.cfg;
+  $('cfg').innerHTML=Object.keys(cfg).map(k=>`<span>${k}</span><span>${show(cfg[k])}</span>`).join('')+
+    `<span>cost/task</span><span>${cost(cfg).toFixed(1)}x</span><span>experiments</span><span>${c.nodes.length-1}</span><span>shipped</span><span>${c.nodes.filter(n=>n.status==='acc').length}</span>`;
+  // lineage: nodes in id order, indented by depth, newest first
+  $('tree').innerHTML=c.nodes.slice().reverse().map(n=>{
+    const tag=n.status==='root'?'start':n.status==='acc'?'kept':'dropped';
+    return`<div class="node ${n.status}${sel===n.id?' sel':''}" data-id="${n.id}" style="margin-left:${Math.min(n.depth,12)*10}px"><span>#${n.id} ${n.label}</span><span class="tag">${tag}</span></div>`}).join('');
+  [...$('tree').children].forEach(e=>e.onclick=()=>{sel=+e.dataset.id;render()});
+  // memory
+  $('mem').innerHTML=c.nodes.slice(1).reverse().slice(0,40).map(n=>`<div>${n.status==='acc'?'+':'x'} ${n.label} (${n.why})</div>`).join('')||'Nothing yet. Press Step.';
+  // detail
+  const n=c.nodes[sel];
+  if(!n||n.status==='root'){$('detail').textContent='Click a node in the lineage.'}
+  else{
+    const lo=-0.12,hi=0.12,pos=x=>Math.max(0,Math.min(100,(x-lo)/(hi-lo)*100));
+    const bar=(e)=>`<div class="ci"><u style="left:${pos(0)}%"></u><i style="left:${pos(e.lo)}%;width:${Math.max(1,pos(e.hi)-pos(e.lo))}%"></i></div>`;
+    const real=n.truth-c.nodes[n.parent].truth;
+    $('detail').innerHTML=`<b>#${n.id} ${n.label}</b><br>parent #${n.parent}<br>
+      Dev (n=${n.dev.n}): ${spct(n.dev.gain)} [${spct(n.dev.lo)}, ${spct(n.dev.hi)}]${bar(n.dev)}
+      ${n.ver?`Verify (n=${n.ver.n}): ${spct(n.ver.gain)} [${spct(n.ver.lo)}, ${spct(n.ver.hi)}]${bar(n.ver)}`:''}
+      Decision: <b class="${n.status==='acc'?'good':'warn'}">${n.status==='acc'?'kept':'dropped'}</b> - ${n.why}<br>
+      Hidden truth: <span class="${real>=0?'good':'warn'}">${spct(real)}</span> vs parent`;
+  }
+  chart();
+}
+function chart(){
+  const W=340,H=210,p=24,all=A.hist.concat(B.hist),lo=Math.min(...all)-0.01,hi=Math.max(...all)+0.01;
+  const N=Math.max(A.hist.length,2);
+  const X=i=>p+(W-p-6)*i/(N-1),Y=v=>H-p-(H-p-8)*(v-lo)/(hi-lo);
+  const line=(h,col)=>`<polyline fill="none" stroke="${col}" stroke-width="2" points="${h.map((v,i)=>X(i)+','+Y(v)).join(' ')}"/>`;
+  let g='';for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3;g+=`<line x1="${p}" x2="${W-6}" y1="${Y(v)}" y2="${Y(v)}" stroke="#2a2f27"/><text x="0" y="${Y(v)+3}" fill="#8e9585" font-size="9">${(v*100).toFixed(0)}%</text>`}
+  g+=`<text x="${p}" y="${H-6}" fill="#8e9585" font-size="9">experiment 0</text><text x="${W-60}" y="${H-6}" fill="#8e9585" font-size="9">${N-1}</text>`;
+  $('chart').innerHTML=g+line(A.hist,'#9be36b')+line(B.hist,'#ff7a59');
+}
+$('b1').onclick=()=>run(1);$('b10').onclick=()=>run(10);$('b40').onclick=()=>run(40);
+$('rst').onclick=build;
+$('tabA').onclick=()=>{view='A';sel=null;render()};$('tabB').onclick=()=>{view='B';sel=null;render()};
+$('seed').oninput=e=>{$('seedv').textContent=e.target.value;build()};
+$('dev').oninput=e=>$('devv').textContent=e.target.value;
+$('ver').oninput=e=>$('verv').textContent=e.target.value;
+build();
+</script>
+</body>
+</html>
