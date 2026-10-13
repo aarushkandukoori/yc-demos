@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Night Desk - a toy approve-or-autopilot hotel ops agent</title>
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--panel2:#1d242d;--line:#2a333f;--ink:#e7ecf2;--mute:#8a96a6;--acc:#f2b44c;--ok:#5fd1a0;--bad:#ef6f6c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line)}
+h1{font-size:17px;margin:0;letter-spacing:.3px}
+h1 span{color:var(--acc)}
+.sub{color:var(--mute);font-size:12px}
+.sp{flex:1}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;text-align:center;min-width:84px}
+.stat b{display:block;font-size:18px}
+.stat i{font-style:normal;color:var(--mute);font-size:11px}
+main{display:grid;grid-template-columns:300px 1fr 340px;gap:14px;padding:14px 20px;min-height:calc(100vh - 150px)}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:hidden}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute);margin:0 0 10px;display:flex;justify-content:space-between;align-items:center}
+button{font:inherit;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 11px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#1b1305;border-color:var(--acc);font-weight:600}
+button.danger:hover{border-color:var(--bad);color:var(--bad)}
+button:disabled{opacity:.4;cursor:default}
+.item{padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--panel2)}
+.item.sel{border-color:var(--acc)}
+.item .t{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.item .d{color:var(--mute);font-size:12px;margin-top:2px}
+.pill{font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.pill.hi{color:var(--ok);border-color:var(--ok)}.pill.mid{color:var(--acc);border-color:var(--acc)}.pill.lo{color:var(--bad);border-color:var(--bad)}
+.empty{color:var(--mute);text-align:center;padding:18px 6px;font-size:13px}
+.floor{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.fl{width:28px;color:var(--mute);font-size:12px}
+.elev{width:34px;height:58px;border:1px dashed var(--line);border-radius:6px;color:var(--mute);font-size:10px;display:flex;align-items:center;justify-content:center;writing-mode:vertical-rl}
+.rooms{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;flex:1}
+.room{height:58px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);padding:5px 7px;font-size:11px;position:relative;transition:.2s}
+.room b{font-size:13px}
+.room .g{color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.room .ty{position:absolute;right:6px;top:5px;color:var(--mute);font-size:10px}
+.room.occupied{border-color:#3b6ea8;background:#15253a}
+.room.reserved{border-color:#8a6a2c;background:#2a2112}
+.room.dirty{border-color:#6b5b3a;background:repeating-linear-gradient(45deg,#1d242d,#1d242d 6px,#232b36 6px,#232b36 12px)}
+.room.ooo{border-color:var(--bad);background:#2b1717;color:#f3b4b2}
+.room.from{outline:2px solid var(--bad)}
+.room.target{outline:2px solid var(--ok);box-shadow:0 0 14px #5fd1a055}
+.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--mute);font-size:11px;margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;border:1px solid var(--line)}
+.msg{background:var(--panel2);border-left:3px solid var(--acc);padding:8px 10px;border-radius:0 8px 8px 0;margin-bottom:10px}
+.msg small{color:var(--mute);display:block;margin-bottom:2px}
+.why{margin:6px 0 10px;padding-left:16px;color:#b9c3cf;font-size:12.5px}
+.act{display:flex;gap:8px;padding:6px 8px;border-radius:6px;background:var(--panel2);margin-bottom:5px;font-size:12.5px}
+.act code{color:var(--acc);min-width:52px;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding-top:1px}
+.bar{height:6px;background:var(--panel2);border-radius:9px;overflow:hidden;margin:4px 0 12px}
+.bar div{height:100%;transition:.3s}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;margin-bottom:12px}
+.sw{position:relative;width:38px;height:22px;background:#2a333f;border-radius:99px;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#8a96a6;transition:.2s}
+.sw.on{background:#35563f}.sw.on::after{left:19px;background:var(--ok)}
+input[type=range]{accent-color:var(--acc);width:120px}
+.log{max-height:430px;overflow:auto}
+.le{padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.le .h{display:flex;justify-content:space-between;gap:6px;font-weight:600}
+.le ul{margin:4px 0 0;padding-left:16px;color:var(--mute)}
+.le.undone{opacity:.45;text-decoration:line-through}
+.tag{font-size:10px;padding:1px 6px;border-radius:5px;white-space:nowrap}
+.tag.auto{background:#1b3a2b;color:var(--ok)}.tag.human{background:#3a2f14;color:var(--acc)}
+#toast{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);background:#2b2412;border:1px solid var(--acc);color:var(--ink);padding:9px 16px;border-radius:9px;opacity:0;transition:.25s;pointer-events:none;z-index:5}
+#toast.show{opacity:1}
+footer{padding:14px 20px;border-top:1px solid var(--line);color:var(--mute);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1><span>Night Desk</span> / toy hotel ops agent</h1>
+    <div class="sub">Events come in. An agent reads live room state, proposes actions, and you approve with one click or let it fly on autopilot.</div>
+  </div>
+  <div class="sp"></div>
+  <div class="stat"><b id="sAuto">0</b><i>auto-handled</i></div>
+  <div class="stat"><b id="sHuman">0</b><i>you approved</i></div>
+  <div class="stat"><b id="sQueue">0</b><i>waiting on you</i></div>
+  <div class="stat"><b id="sOcc">0%</b><i>occupancy</i></div>
+</header>
+
+<main>
+  <section>
+    <h2>Inbox <span><button id="btnGen">+ event</button> <button id="btnBurst">+ 5</button></span></h2>
+    <div id="queue"></div>
+  </section>
+
+  <section>
+    <h2>Floor plan (synthetic property, 18 rooms)</h2>
+    <div id="plan"></div>
+    <div class="legend">
+      <span><i style="background:#15253a"></i>occupied</span><span><i style="background:#2a2112"></i>arriving</span>
+      <span><i style="background:#232b36"></i>needs clean</span><span><i style="background:#2b1717"></i>out of order</span>
+      <span><i style="background:#1d242d"></i>vacant</span>
+      <span style="color:var(--ok)">green ring = agent target</span><span style="color:var(--bad)">red ring = source</span>
+    </div>
+    <h2 style="margin-top:18px">Activity ledger <button id="btnUndo">Undo last</button></h2>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section>
+    <div class="ctrl">
+      <div class="sw" id="sw" title="Autopilot"></div>
+      <div><b>Autopilot</b><div class="sub">apply when confidence is at least <b id="thv">85</b>%</div></div>
+      <input type="range" id="th" min="50" max="99" value="85">
+    </div>
+    <h2>Proposed plan</h2>
+    <div id="detail"></div>
+  </section>
+</main>
+
+<div id="toast"></div>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Zaplar (YC S26). Not affiliated with Zaplar.</footer>
+
+<script>
+"use strict";
+// ---------- seeded synthetic data ----------
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const pick = a => a[Math.floor(rnd() * a.length)];
+const NAMES = ["Mara Okafor","Jonas Lindqvist","Priya Raman","Tomas Ibarra","Wen Zhao","Sofia Marchetti","Dale Whitfield","Amara Nwosu","Lucas Brandt","Hana Sato","Eli Ferreira","Noor Haddad","Ben Castellano","Iris Valdez","Owen Pryce"];
+const TYPE_NAME = {K: "King", D: "Double", S: "Suite"};
+const LAYOUT = ["K","K","D","D","K","S"];
+let rooms = [];
+const used = new Set();
+const freshName = () => { let n; do n = pick(NAMES); while (used.has(n) && used.size < NAMES.length); used.add(n); return n; };
+for (let f = 2; f <= 4; f++) for (let i = 1; i <= 6; i++) {
+  const r = {id: f * 100 + i, floor: f, type: LAYOUT[i - 1], quiet: i >= 5, status: "vacant", guest: null, arrivalToday: false};
+  const x = rnd();
+  if (x < .5) { r.status = "occupied"; r.guest = freshName(); r.arrivalToday = rnd() < .4; }
+  else if (x < .65) r.status = "dirty";
+  else if (x < .8) { r.status = "reserved"; r.guest = freshName(); }
+  rooms.push(r);
+}
+const byId = id => rooms.find(r => r.id === id);
+let queue = [], ledger = [], nextId = 1, autopilot = false, threshold = 85;
+const stats = {auto: 0, human: 0};
+let selected = null, outbox = [];
+
+// ---------- planners: pure functions of current state -> plan ----------
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function scoreRoom(r, ev) {
+  let s = 0;
+  if (r.type === ev.type) s += 6;
+  if (ev.quiet && r.quiet) s += 3;
+  if (ev.high) s += r.floor;
+  if (r.type === "S" && ev.type !== "S") s -= 4;
+  return s;
+}
+function planBooking(ev) {
+  const c = rooms.filter(r => r.status === "vacant").map(r => ({r, s: scoreRoom(r, ev)})).sort((a, b) => b.s - a.s);
+  if (!c.length) return {why: ["No vacant room tonight.", "Waitlisting and offering a partner property is a human call."], actions: [{k: "ticket", text: `Waitlist ${ev.guest} (${ev.nights}n)`}], conf: .4};
+  const top = c[0], gap = top.s - (c[1] ? c[1].s : 0), match = top.r.type === ev.type;
+  const why = [`Wants ${TYPE_NAME[ev.type]}${ev.quiet ? ", quiet" : ""}${ev.high ? ", high floor" : ""}.`,
+    "Top candidates: " + c.slice(0, 3).map(x => `${x.r.id} (score ${x.s})`).join(", ") + ".",
+    match ? `Room ${top.r.id} matches the requested type.` : `No ${TYPE_NAME[ev.type]} left, nearest is ${TYPE_NAME[top.r.type]}.`];
+  return {why, conf: clamp(.55 + .06 * gap + (match ? .2 : -.15), .2, .98), actions: [
+    {k: "assign", room: top.r.id, guest: ev.guest},
+    {k: "msg", to: ev.guest, text: `Confirmed: ${TYPE_NAME[top.r.type]} ${top.r.id}, ${ev.nights} night${ev.nights > 1 ? "s" : ""}.`}]};
+}
+function planMaint(ev) {
+  const r = byId(ev.room), actions = [], why = [`${ev.issue} reported in ${r.id}.`];
+  let conf = .96;
+  if (r.status === "occupied") {
+    const vac = rooms.filter(x => x.status === "vacant")
+      .map(x => ({x, s: (x.type === r.type ? 10 : 0) + (x.floor === r.floor ? 2 : 0) + (x.quiet === r.quiet ? 1 : 0) - (x.type !== r.type && x.type !== "S" ? 5 : 0)})).sort((a, b) => b.s - a.s);
+    if (vac.length && vac[0].x.type === r.type) { conf = .93; why.push(`Same-type swap available: ${vac[0].x.id}.`); }
+    else if (vac.length) { conf = .66; why.push(`No ${TYPE_NAME[r.type]} free. ${vac[0].x.id} is a ${vac[0].x.type === "S" ? "free upgrade" : "downgrade"}.`); }
+    else { conf = .3; why.push("Zero vacant rooms. Guest cannot be moved without a human."); }
+    if (vac.length) {
+      actions.push({k: "move", from: r.id, to: vac[0].x.id});
+      actions.push({k: "msg", to: r.guest, text: `Sorry about the ${ev.issue.toLowerCase()}. We moved you to ${vac[0].x.id}, bags will follow.`});
+    }
+  } else why.push("Room is empty, so no guest impact.");
+  actions.push({k: "status", room: r.id, status: "ooo"});
+  actions.push({k: "ticket", text: `Maintenance: ${ev.issue} in ${r.id}`});
+  return {why, actions, conf};
+}
+function planLate(ev) {
+  const r = byId(ev.room);
+  return {why: [`${r.guest} is arriving at ${ev.eta}, past standard hold time.`, `Room ${r.id} is reserved and clean, safe to hold.`], conf: .95, actions: [
+    {k: "hold", room: r.id, until: ev.eta},
+    {k: "msg", to: r.guest, text: `Your room is held until ${ev.eta}. Night desk will have your key.`},
+    {k: "ticket", text: `Night audit: keep ${r.id} reserved until ${ev.eta}`}]};
+}
+function planLCO(ev) {
+  const r = byId(ev.room);
+  if (!r.arrivalToday) return {why: [`${r.guest} asks for ${ev.until} checkout.`, `No arrival is booked into ${r.id} today.`, "Policy: $25 late fee."], conf: .92, actions: [
+    {k: "fee", guest: r.guest, amount: 25}, {k: "msg", to: r.guest, text: `Late checkout to ${ev.until} approved, $25 added.`}]};
+  return {why: [`${r.guest} asks for ${ev.until} checkout.`, `A guest is arriving into ${r.id} today, so a yes risks a walk.`, "Agent would decline and offer luggage storage. Declining a guest is your call."], conf: .62, actions: [
+    {k: "msg", to: r.guest, text: `We can't extend ${r.id} today, but we'll store your bags and hold the lobby lounge for you.`}]};
+}
+const PLANNERS = {booking: planBooking, maint: planMaint, late: planLate, lco: planLCO};
+
+// ---------- event generation ----------
+function makeEvent() {
+  const kinds = ["booking", "booking", "maint", "late", "lco"];
+  for (let t = 0; t < 12; t++) {
+    const kind = pick(kinds);
+    if (kind === "booking") return {kind, guest: freshName(), type: pick(["K","K","D","S"]), nights: 1 + Math.floor(rnd() * 4), quiet: rnd() < .5, high: rnd() < .5, title: "New booking request"};
+    if (kind === "maint") {
+      const c = rooms.filter(r => r.status === "occupied" || r.status === "vacant");
+      if (c.length) return {kind, room: pick(c).id, issue: pick(["AC not cooling","Leaking shower","TV dead","Door lock fault"]), title: "Maintenance report"};
+    }
+    if (kind === "late") { const c = rooms.filter(r => r.status === "reserved"); if (c.length) return {kind, room: pick(c).id, eta: pick(["11:30 pm","12:15 am","1:00 am"]), title: "Late arrival notice"}; }
+    if (kind === "lco") { const c = rooms.filter(r => r.status === "occupied"); if (c.length) return {kind, room: pick(c).id, until: pick(["1 pm","2 pm","3 pm"]), title: "Late checkout request"}; }
+  }
+  return {kind: "booking", guest: freshName(), type: "K", nights: 2, quiet: true, high: false, title: "New booking request"};
+}
+function evText(ev) {
+  if (ev.kind === "booking") return `${ev.guest}: ${TYPE_NAME[ev.type]}, ${ev.nights}n${ev.quiet ? ", quiet" : ""}${ev.high ? ", high floor" : ""}`;
+  if (ev.kind === "maint") return `Room ${ev.room}: ${ev.issue}`;
+  if (ev.kind === "late") return `Room ${ev.room} arriving ${ev.eta}`;
+  return `Room ${ev.room} wants ${ev.until} checkout`;
+}
+
+// ---------- state mutation ----------
+function applyAction(a) {
+  const r = a.room ? byId(a.room) : null;
+  if (a.k === "assign") { r.status = "reserved"; r.guest = a.guest; }
+  else if (a.k === "status") r.status = a.status;
+  else if (a.k === "move") { const f = byId(a.from), t = byId(a.to); t.status = "occupied"; t.guest = f.guest; t.arrivalToday = f.arrivalToday; f.guest = null; f.status = "dirty"; }
+  else if (a.k === "hold") r.held = a.until;
+  else if (a.k === "msg") outbox.push({to: a.to, text: a.text});
+  else if (a.k === "ticket") outbox.push({to: "ops", text: a.text});
+  else if (a.k === "fee") outbox.push({to: "folio", text: `+$${a.amount} ${a.guest}`});
+}
+function describe(a) {
+  switch (a.k) {
+    case "assign": return ["assign", `Put ${a.guest} in ${a.room}`];
+    case "status": return ["status", `Mark ${a.room} ${a.status === "ooo" ? "out of order" : a.status}`];
+    case "move": return ["move", `Move guest ${a.from} → ${a.to}`];
+    case "hold": return ["hold", `Hold ${a.room} until ${a.until}`];
+    case "msg": return ["message", `To ${a.to}: "${a.text}"`];
+    case "ticket": return ["ticket", a.text];
+    case "fee": return ["charge", `$${a.amount} to ${a.guest}'s folio`];
+  }
+}
+const snap = () => JSON.stringify({rooms, outbox});
+const restore = s => { const o = JSON.parse(s); rooms = o.rooms; outbox = o.outbox; };
+
+function commit(item, mode) {
+  const before = snap();
+  item.plan.actions.forEach(applyAction);
+  ledger.unshift({id: item.id, text: evText(item.ev), actions: item.plan.actions, mode, before, undone: false});
+  queue = queue.filter(q => q !== item);
+  stats[mode]++;
+  if (selected === item) selected = null;
+}
+
+// ---------- queue flow ----------
+function ingest(ev) {
+  const item = {id: nextId++, ev, plan: PLANNERS[ev.kind](ev)};
+  queue.push(item);
+  if (autopilot && item.plan.conf * 100 >= threshold) commit(item, "auto");
+}
+function approve(item) {
+  // state may have moved since the plan was drawn: re-plan and make the human look again
+  const fresh = PLANNERS[item.ev.kind](item.ev);
+  if (JSON.stringify(fresh.actions) !== JSON.stringify(item.plan.actions)) {
+    item.plan = fresh;
+    toast("Room state changed since this was planned. Agent re-planned, please review again.");
+    return render();
+  }
+  commit(item, "human"); render();
+}
+function undoLast() {
+  const e = ledger.find(l => !l.undone);
+  if (!e) return;
+  restore(e.before); e.undone = true;
+  stats[e.mode] = Math.max(0, stats[e.mode] - 1);
+  toast("Undid: " + e.text);
+  render();
+}
+
+// ---------- rendering ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const confClass = c => c >= .85 ? "hi" : c >= .65 ? "mid" : "lo";
+function render() {
+  if (!selected || !queue.includes(selected)) selected = queue[0] || null;
+  const from = new Set(), to = new Set();
+  if (selected) selected.plan.actions.forEach(a => {
+    if (a.from) from.add(a.from);
+    if (a.to && typeof a.to === "number") to.add(a.to);
+    if (a.room) (a.k === "status" ? from : to).add(a.room);
+  });
+  let html = "";
+  for (let f = 4; f >= 2; f--) {
+    html += `<div class="floor"><div class="fl">F${f}</div><div class="elev">lift</div><div class="rooms">`;
+    rooms.filter(r => r.floor === f).forEach(r => {
+      const label = r.guest ? esc(r.guest) : ({vacant: "vacant", ooo: "out of order", dirty: "needs clean"}[r.status] || "");
+      html += `<div class="room ${r.status}${from.has(r.id) ? " from" : ""}${to.has(r.id) ? " target" : ""}"><b>${r.id}</b><span class="ty">${r.type}${r.quiet ? "·q" : ""}</span><span class="g">${label}${r.held ? " ⏳" : ""}</span></div>`;
+    });
+    html += `</div></div>`;
+  }
+  $("plan").innerHTML = html;
+
+  $("queue").innerHTML = queue.length ? queue.map(q => `<div class="item${q === selected ? " sel" : ""}" data-id="${q.id}"><div class="t"><span>${q.ev.title}</span><span class="pill ${confClass(q.plan.conf)}">${Math.round(q.plan.conf * 100)}%</span></div><div class="d">${esc(evText(q.ev))}</div></div>`).join("")
+    : `<div class="empty">Inbox zero.${autopilot ? " Autopilot is handling the easy ones." : ""}</div>`;
+  $("queue").querySelectorAll(".item").forEach(el => el.onclick = () => { selected = queue.find(q => q.id == el.dataset.id); render(); });
+
+  if (selected) {
+    const p = selected.plan, pct = Math.round(p.conf * 100), col = p.conf >= .85 ? "var(--ok)" : p.conf >= .65 ? "var(--acc)" : "var(--bad)";
+    $("detail").innerHTML = `<div class="msg"><small>${selected.ev.title}</small>${esc(evText(selected.ev))}</div>
+      <div class="sub">Agent confidence ${pct}%${pct < threshold ? " (below your autopilot bar)" : ""}</div>
+      <div class="bar"><div style="width:${pct}%;background:${col}"></div></div>
+      <div class="sub">Reasoning</div><ul class="why">${p.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
+      <div class="sub" style="margin-bottom:6px">Will do ${p.actions.length} thing${p.actions.length > 1 ? "s" : ""}</div>
+      ${p.actions.map(a => { const d = describe(a); return `<div class="act"><code>${d[0]}</code><span>${esc(d[1])}</span></div>`; }).join("")}
+      <div class="row"><button class="primary" id="bOk">Approve all</button><button class="danger" id="bNo">Dismiss</button></div>`;
+    $("bOk").onclick = () => approve(selected);
+    $("bNo").onclick = () => { queue = queue.filter(q => q !== selected); selected = null; render(); };
+  } else $("detail").innerHTML = `<div class="empty">Nothing selected. Hit "+ event" to simulate the hotel doing hotel things.</div>`;
+
+  $("log").innerHTML = ledger.length ? ledger.map(l => `<div class="le${l.undone ? " undone" : ""}"><div class="h"><span>${esc(l.text)}</span><span class="tag ${l.mode}">${l.mode === "auto" ? "autopilot" : "approved"}</span></div><ul>${l.actions.map(a => `<li>${esc(describe(a)[1])}</li>`).join("")}</ul></div>`).join("")
+    : `<div class="empty">Nothing executed yet.</div>`;
+  $("btnUndo").disabled = !ledger.some(l => !l.undone);
+
+  const occ = rooms.filter(r => r.status === "occupied" || r.status === "reserved").length;
+  $("sAuto").textContent = stats.auto; $("sHuman").textContent = stats.human;
+  $("sQueue").textContent = queue.length; $("sOcc").textContent = Math.round(occ / rooms.length * 100) + "%";
+  $("sw").classList.toggle("on", autopilot);
+}
+let tt;
+function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 3200); }
+
+// ---------- wiring ----------
+$("btnGen").onclick = () => { ingest(makeEvent()); render(); };
+$("btnBurst").onclick = () => { for (let i = 0; i < 5; i++) ingest(makeEvent()); render(); };
+$("btnUndo").onclick = undoLast;
+$("sw").onclick = () => {
+  autopilot = !autopilot;
+  if (autopilot) queue.slice().filter(q => q.plan.conf * 100 >= threshold).forEach(q => commit(q, "auto"));
+  render();
+};
+$("th").oninput = e => { threshold = +e.target.value; $("thv").textContent = threshold; render(); };
+for (let i = 0; i < 4; i++) ingest(makeEvent());
+render();
+</script>
+</body>
+</html>

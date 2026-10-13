@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Deltarace - delta transfer with resume, toy edition</title>
+<style>
+:root{--bg:#0f1218;--panel:#171b24;--line:#272d3a;--txt:#e6e9f0;--mut:#8a93a6;--have:#2a3142;--need:#d9a441;--got:#3ecf8e;--fly:#5aa9ff;--bad:#ef5b5b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:28px 20px 12px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+h1 span{color:var(--got)}
+.sub{color:var(--mut);margin:0 0 22px;max-width:700px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:0 0 10px;font-weight:600}
+label.chk{display:flex;gap:10px;align-items:flex-start;padding:7px 0;cursor:pointer;border-bottom:1px solid var(--line)}
+label.chk:last-of-type{border:0}
+label.chk b{display:block;font-weight:600}
+label.chk small{color:var(--mut)}
+input[type=checkbox]{margin-top:4px;accent-color:var(--got)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+button{background:#232a39;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
+button:hover:not(:disabled){border-color:#41495c}
+button.go{background:var(--got);color:#06210f;border-color:var(--got);font-weight:700}
+button.cut{border-color:#6b2f2f;color:#ffb0b0}
+button:disabled{opacity:.4;cursor:default}
+input[type=range]{accent-color:var(--fly);width:150px}
+.mut{color:var(--mut)}
+.lane{margin-bottom:12px}
+.lane h3{margin:0 0 6px;font-size:14px;display:flex;justify-content:space-between;align-items:baseline}
+.lane h3 em{font-style:normal;color:var(--mut);font-size:12px;font-weight:400}
+.bar{height:16px;border-radius:8px;background:var(--have);overflow:hidden;position:relative;margin-bottom:5px}
+.bar i{display:block;height:100%;width:0;background:var(--fly);transition:width .08s linear}
+.bar.done i{background:var(--got)}
+.stats{display:flex;gap:18px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.stats div{min-width:84px}
+.stats strong{display:block;font-size:19px}
+.stats span{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+#map{display:grid;grid-template-columns:repeat(auto-fill,minmax(9px,1fr));gap:2px}
+#map u{height:9px;border-radius:2px;background:var(--have);text-decoration:none}
+#map u.need{background:var(--need)}
+#map u.fly{background:var(--fly)}
+#map u.got{background:var(--got)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:8px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+#net{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;background:#12301f;color:var(--got)}
+#net.off{background:#3a1717;color:var(--bad)}
+#log{height:150px;overflow:auto;font:12px/1.55 ui-monospace,Menlo,monospace;color:var(--mut);background:#0b0e13;border-radius:8px;padding:10px;margin-top:10px}
+#log .ok{color:var(--got)}#log .err{color:var(--bad)}#log .inf{color:var(--fly)}
+.full{grid-column:1/-1}
+footer{max-width:1000px;margin:10px auto 30px;padding:14px 20px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<main>
+<h1>Delta<span>race</span></h1>
+<p class="sub">A toy model of shipping a software update to a robot over a bad cellular link. Pick what changed in the bundle, then race a whole-layer pull against content-defined delta transfer. Cut the network mid-flight and see who loses work.</p>
+
+<div class="grid">
+  <section class="card">
+    <h2>1. What changed on your laptop?</h2>
+    <label class="chk"><input type="checkbox" data-m="tweak" checked><span><b>Tweak one line of app code</b><small>40 bytes overwritten in the app layer</small></span></label>
+    <label class="chk"><input type="checkbox" data-m="insert"><span><b>Insert a new function</b><small>300 bytes inserted mid-file, shifting everything after it</small></span></label>
+    <label class="chk"><input type="checkbox" data-m="head"><span><b>Retrain the model head</b><small>24 KB rewritten at the end of the weights layer</small></span></label>
+    <label class="chk"><input type="checkbox" data-m="dep"><span><b>Bump a dependency</b><small>70 KB replaced in the deps layer</small></span></label>
+    <div class="row"><span class="mut">Bundle: 4 layers, <span id="total"></span> total. Robot already runs v1.</span></div>
+  </section>
+
+  <section class="card">
+    <h2>2. The link</h2>
+    <div class="row" style="margin-top:0"><span>Bandwidth <input type="range" id="bw" min="20" max="400" value="120"> <b id="bwv"></b></span></div>
+    <div class="row"><span>Sim speed <input type="range" id="spd" min="1" max="8" value="3"> <b id="spdv"></b></span></div>
+    <div class="row"><label><input type="checkbox" id="flaky"> flaky LTE (random drops)</label></div>
+    <div class="row">
+      <button class="go" id="start">Deploy v2</button>
+      <button class="cut" id="cut" disabled>Cut network (2s)</button>
+      <button id="reset">Reset</button>
+      <span id="net">online</span>
+    </div>
+    <p class="mut" style="margin:12px 0 0;font-size:12px">Whole-layer pulls restart the layer they were in when the link dies. Delta transfer keeps every chunk (and partial chunk) already received.</p>
+  </section>
+
+  <section class="card full">
+    <h2>3. The race</h2>
+    <div class="grid">
+      <div>
+        <div class="lane"><h3>Layer pull <em id="dState">idle</em></h3>
+          <div id="dLayers"></div>
+        </div>
+        <div class="stats">
+          <div><strong id="dSent">0</strong><span>on the wire</span></div>
+          <div><strong id="dWaste">0</strong><span>thrown away</span></div>
+          <div><strong id="dTime">-</strong><span>elapsed</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="lane"><h3>Delta + resume <em id="xState">idle</em></h3>
+          <div class="bar" id="xBar"><i></i></div>
+        </div>
+        <div class="stats">
+          <div><strong id="xSent">0</strong><span>on the wire</span></div>
+          <div><strong id="xWaste">0</strong><span>thrown away</span></div>
+          <div><strong id="xTime">-</strong><span>elapsed</span></div>
+          <div><strong id="xRatio">-</strong><span>vs layer pull</span></div>
+        </div>
+      </div>
+    </div>
+    <h2 style="margin-top:18px">Chunk map of v2 (<span id="nch"></span> chunks, content-defined)</h2>
+    <div id="map"></div>
+    <div class="legend"><span><i style="background:var(--have)"></i>robot already has it</span><span><i style="background:var(--need)"></i>needs sending</span><span><i style="background:var(--fly)"></i>in flight</span><span><i style="background:var(--got)"></i>received</span></div>
+    <div id="log"></div>
+  </section>
+</div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Agency Tool Company (YC S26). Not affiliated with Agency Tool Company. All data here is synthetic and generated in your browser.</footer>
+
+<script>
+// ---------- synthetic bundle ----------
+const $ = id => document.getElementById(id);
+function rng(seed){let s=seed>>>0||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s}}
+function bytes(seed,n){const r=rng(seed),a=new Uint8Array(n);for(let i=0;i<n;i++)a[i]=r()&255;return a}
+const LAYERS=[
+  {name:'base-os',size:380000,seed:11},
+  {name:'deps',size:260000,seed:22},
+  {name:'app',size:90000,seed:33},
+  {name:'model-weights',size:420000,seed:44}
+];
+const V1=LAYERS.map(l=>bytes(l.seed,l.size));
+function concat(parts){let n=0;parts.forEach(p=>n+=p.length);const o=new Uint8Array(n);let k=0;parts.forEach(p=>{o.set(p,k);k+=p.length});return o}
+function buildV2(sel){
+  const v=V1.map(a=>a.slice());
+  if(sel.tweak)v[2].set(bytes(901,40),41000);
+  if(sel.insert){const a=v[2];v[2]=concat([a.subarray(0,20000),bytes(902,300),a.subarray(20000)])}
+  if(sel.head){const a=v[3];a.set(bytes(903,24000),a.length-24000)}
+  if(sel.dep)v[1].set(bytes(904,70000),100000);
+  return v;
+}
+
+// ---------- hashing + content-defined chunking (gear hash) ----------
+function fnv(a,s,e,seed){let h=seed>>>0;for(let i=s;i<e;i++){h^=a[i];h=Math.imul(h,16777619)>>>0}return h}
+function hashKey(a,s,e){return fnv(a,s,e,2166136261).toString(16)+fnv(a,s,e,0x9747b28c).toString(16)+(e-s)}
+const GEAR=(()=>{const r=rng(777),t=new Uint32Array(256);for(let i=0;i<256;i++)t[i]=r();return t})();
+const MIN=512,MAX=8192,MASK=(1<<11)-1;
+function chunk(a){
+  const out=[];let start=0,h=0;
+  for(let i=0;i<a.length;i++){
+    h=((h<<1)+GEAR[a[i]])>>>0;
+    const len=i-start+1;
+    if((len>=MIN&&(h&MASK)===0)||len>=MAX||i===a.length-1){
+      out.push({s:start,e:i+1,key:hashKey(a,start,i+1)});start=i+1;h=0;
+    }
+  }
+  return out;
+}
+
+// ---------- state ----------
+const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+' MB':n>=1e3?(n/1e3).toFixed(1)+' KB':n+' B';
+const robotStore=new Map(); // key -> bytes the robot already holds (from v1)
+let v1Chunks=[];
+V1.forEach(l=>chunk(l).forEach(c=>robotStore.set(c.key,l.subarray(c.s,c.e))));
+$('total').textContent=fmt(V1.reduce((n,a)=>n+a.length,0));
+
+let S=null; // simulation state
+function sel(){const o={};document.querySelectorAll('[data-m]').forEach(c=>o[c.dataset.m]=c.checked);return o}
+
+function prepare(){
+  const v2=buildV2(sel());
+  const layers=v2.map((a,i)=>({name:LAYERS[i].name,data:a,size:a.length,changed:hashKey(a,0,a.length)!==hashKey(V1[i],0,V1[i].length)}));
+  const chunks=[];
+  layers.forEach((l,li)=>chunk(l.data).forEach(c=>chunks.push({...c,li,have:robotStore.has(c.key),state:'have',prog:0})));
+  const seen=new Set();
+  chunks.forEach(c=>{ if(!c.have&&!seen.has(c.key)){c.state='need';seen.add(c.key)} else if(!c.have){c.state='dup'} });
+  const need=chunks.filter(c=>c.state==='need');
+  const dLayers=layers.filter(l=>l.changed);
+  S={layers,chunks,need,
+    fullHash:hashKey(concat(layers.map(l=>l.data)),0,layers.reduce((n,l)=>n+l.size,0)),
+    ni:0,wire:0,xWaste:0,xDone:false,
+    dLayers,di:0,dProg:0,dWire:0,dWaste:0,dDone:false,
+    t:0,tx:null,td:null,online:true,offLeft:0,running:false,received:new Map()};
+  render(true);
+}
+
+// ---------- rendering ----------
+function render(init){
+  if(init){
+    $('nch').textContent=S.chunks.length;
+    $('map').innerHTML=S.chunks.map(()=>'<u></u>').join('');
+    $('dLayers').innerHTML=S.layers.map((l,i)=>`<div class="mut" style="font-size:12px">${l.name} ${fmt(l.size)} ${l.changed?'<b style="color:var(--need)">changed</b>':'unchanged, skipped'}</div><div class="bar" id="lb${i}"><i></i></div>`).join('');
+    $('bwv').textContent=$('bw').value+' KB/s';
+    $('spdv').textContent=$('spd').value+'x';
+  }
+  const cells=$('map').children;
+  S.chunks.forEach((c,i)=>{const cur=S.need[S.ni]===c&&S.running&&!S.xDone;
+    cells[i].className=c.state==='dup'?'got':cur?'fly':c.state==='have'?'':c.state;});
+  S.layers.forEach((l,i)=>{
+    const bar=$('lb'+i);let p=0;
+    if(!l.changed)p=0;else{const k=S.dLayers.indexOf(l);p=k<S.di?1:k===S.di?S.dProg/l.size:0}
+    bar.firstElementChild.style.width=(p*100)+'%';bar.classList.toggle('done',p>=1);
+  });
+  const need=S.need.reduce((n,c)=>n+(c.e-c.s),0);
+  const done=S.need.slice(0,S.ni).reduce((n,c)=>n+(c.e-c.s),0)+(S.need[S.ni]?S.need[S.ni].prog:0);
+  const xb=$('xBar');xb.firstElementChild.style.width=(need?done/need*100:100)+'%';xb.classList.toggle('done',S.xDone);
+  $('dSent').textContent=fmt(Math.round(S.dWire));$('dWaste').textContent=fmt(Math.round(S.dWaste));
+  $('xSent').textContent=fmt(Math.round(S.wire));$('xWaste').textContent=fmt(Math.round(S.xWaste));
+  $('dTime').textContent=S.td!=null?S.td.toFixed(1)+'s':S.running?S.t.toFixed(1)+'s':'-';
+  $('xTime').textContent=S.tx!=null?S.tx.toFixed(1)+'s':S.running?S.t.toFixed(1)+'s':'-';
+  if(S.xDone&&S.dDone)$('xRatio').textContent=(S.dWire/Math.max(S.wire,1)).toFixed(1)+'x less data';
+  $('dState').textContent=S.dDone?'complete':S.running?(S.online?'pulling '+(S.dLayers[S.di]||{}).name:'stalled'):'idle';
+  $('xState').textContent=S.xDone?'verified, hash matches':S.running?(S.online?'sending chunk '+(S.ni+1)+'/'+S.need.length:'paused, will resume'):'idle';
+  $('net').textContent=S.online?'online':'offline';$('net').className=S.online?'':'off';
+}
+function log(msg,cls){const d=document.createElement('div');d.className=cls||'';d.textContent='['+S.t.toFixed(1).padStart(5)+'s] '+msg;$('log').appendChild(d);$('log').scrollTop=1e9}
+
+// ---------- simulation ----------
+let last=0,raf=0;
+function dropNow(secs){
+  if(!S.online)return;
+  S.online=false;S.offLeft=secs;
+  const lost=S.dProg;
+  if(!S.dDone&&lost>0){S.dWaste+=lost;S.dProg=0;log('link down: layer pull discards '+fmt(Math.round(lost))+' of '+S.dLayers[S.di].name+' and must restart it','err')}
+  else if(!S.dDone)log('link down','err');
+  if(!S.xDone){
+    const c=S.need[S.ni];
+    log('link down: delta keeps '+S.ni+' chunks'+(c&&c.prog?' + '+c.prog+' B of the current one':'')+'; resume point saved','inf');
+  }
+}
+function tick(now){
+  raf=requestAnimationFrame(tick);
+  const dt=Math.min((now-last)/1000,0.1)*(+$('spd').value);last=now;
+  if(!S||!S.running)return;
+  S.t+=dt;
+  if(!S.online){S.offLeft-=dt;if(S.offLeft<=0){S.online=true;
+    log('link restored: delta resumes at chunk '+(S.ni+1)+(S.dDone?'':'; layer pull restarts '+((S.dLayers[S.di]||{}).name||'')),'ok')}}
+  else if($('flaky').checked&&Math.random()<dt*0.45&&!(S.dDone&&S.xDone))dropNow(1+Math.random()*1.5);
+  if(S.online){
+    const rate=(+$('bw').value)*1000;
+    if(!S.dDone){ // layer pull
+      let b=rate*dt;
+      while(b>0&&S.di<S.dLayers.length){
+        const l=S.dLayers[S.di],take=Math.min(b,l.size-S.dProg);
+        S.dProg+=take;S.dWire+=take;b-=take;
+        if(S.dProg>=l.size-1e-6){log('layer pull: '+l.name+' complete ('+fmt(l.size)+')','');S.di++;S.dProg=0}
+      }
+      if(S.di>=S.dLayers.length){S.dDone=true;S.td=S.t;log('layer pull finished: '+fmt(Math.round(S.dWire))+' sent','ok')}
+    }
+    if(!S.xDone){ // delta
+      let b=rate*dt;
+      while(b>0&&S.ni<S.need.length){
+        const c=S.need[S.ni],len=c.e-c.s,take=Math.min(b,len-c.prog);
+        c.prog+=take;S.wire+=take;b-=take;
+        if(c.prog>=len-1e-6){c.state='got';S.received.set(c.key,S.layers[c.li].data.subarray(c.s,c.e));S.chunks.forEach(d=>{if(d.state==='dup'&&d.key===c.key)d.state='got'});S.ni++}
+      }
+      if(S.ni>=S.need.length){S.xDone=true;S.tx=S.t;finish()}
+    }
+  }
+  if(S.xDone&&S.dDone){S.running=false;$('start').disabled=false;$('cut').disabled=true}
+  render();
+}
+function finish(){
+  // reassemble from robot store + received chunks, verify against the manifest hash
+  const parts=S.chunks.map(c=>{const d=S.layers[c.li].data;return (robotStore.get(c.key)||S.received.get(c.key)||new Uint8Array(0))});
+  const out=concat(parts);
+  const h=hashKey(out,0,out.length);
+  log('delta finished: '+fmt(Math.round(S.wire))+' sent, '+S.need.length+' new chunks',"ok");
+  log('reassembled '+fmt(out.length)+' on robot, hash '+h.slice(0,12)+' '+(h===S.fullHash?'== manifest. VERIFIED':'MISMATCH'),h===S.fullHash?'ok':'err');
+}
+
+// ---------- wiring ----------
+$('start').onclick=()=>{
+  prepare();$('log').innerHTML='';
+  const need=S.need.reduce((n,c)=>n+(c.e-c.s),0),full=S.dLayers.reduce((n,l)=>n+l.size,0);
+  if(!S.need.length){log('nothing changed. Robot is already on this version.','inf');render(true);return}
+  S.running=true;$('start').disabled=true;$('cut').disabled=false;
+  log('manifest: '+S.chunks.length+' chunks, '+S.need.length+' missing on robot ('+fmt(need)+'). Layer pull must send '+fmt(full)+'.','inf');
+  last=performance.now();render(true);
+};
+$('cut').onclick=()=>{if(S&&S.running)dropNow(2)};
+$('reset').onclick=()=>{$('log').innerHTML='';$('start').disabled=false;$('cut').disabled=true;prepare()};
+$('bw').oninput=()=>{$('bwv').textContent=$('bw').value+' KB/s'};
+$('spd').oninput=()=>{$('spdv').textContent=$('spd').value+'x'};
+document.querySelectorAll('[data-m]').forEach(c=>c.onchange=()=>{if(!S.running){prepare();$('log').innerHTML='';
+  log('preview: '+S.need.length+' of '+S.chunks.length+' chunks differ from v1 ('+fmt(S.need.reduce((n,c)=>n+(c.e-c.s),0))+') vs '+fmt(S.dLayers.reduce((n,l)=>n+l.size,0))+' for changed layers','inf')}});
+prepare();
+log('preview: '+S.need.length+' of '+S.chunks.length+' chunks differ from v1 ('+fmt(S.need.reduce((n,c)=>n+(c.e-c.s),0))+') vs '+fmt(S.dLayers.reduce((n,l)=>n+l.size,0))+' for changed layers','inf');
+raf=requestAnimationFrame(tick);
+</script>
+</body>
+</html>

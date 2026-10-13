@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flare Detective - lagged cause finder for skin logs</title>
+<style>
+:root{--bg:#14161a;--panel:#1c1f25;--line:#2b2f38;--ink:#e8e6e1;--mute:#8d93a0;--acc:#f2b47e;--acc2:#7ed0c0;--bad:#ee7b7b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:32px 24px 8px;max-width:1040px;margin:auto}
+h1{font:600 28px/1.2 ui-serif,Georgia,serif;margin:0 0 6px;letter-spacing:.2px}
+h1 span{color:var(--acc)}
+.sub{color:var(--mute);max-width:720px;margin:0}
+main{max-width:1040px;margin:auto;padding:16px 24px 24px;display:grid;grid-template-columns:1.6fr 1fr;gap:16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1.4px;color:var(--mute);margin:0 0 10px;font-weight:600}
+.full{grid-column:1/-1}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{background:#262a33;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#1a1209;border-color:var(--acc);font-weight:600}
+svg{width:100%;display:block}
+.sus{display:grid;grid-template-columns:22px 1fr 64px;gap:8px;align-items:center;padding:8px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.sus:hover{background:#232730}
+.sus.sel{border-color:var(--acc);background:#262a33}
+.bar{height:6px;background:#2b2f38;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--acc2)}
+.sus.weak .bar i{background:#555b68}
+.name{font-weight:600}
+.meta{color:var(--mute);font-size:12px}
+.tag{font-size:11px;padding:2px 8px;border-radius:999px;text-align:center}
+.tag.hit{background:#1f3b36;color:var(--acc2)}
+.tag.no{background:#2b2f38;color:var(--mute)}
+.verdict{font-size:14px;margin-top:10px;padding:10px 12px;border-left:3px solid var(--acc);background:#22262e;border-radius:0 8px 8px 0}
+#tip{min-height:44px;color:var(--mute);font-size:13px;margin-top:8px}
+#tip b{color:var(--ink)}
+.truth{margin-top:10px;font-size:13px;color:var(--mute)}
+.truth b{color:var(--bad)}
+footer{max-width:1040px;margin:auto;padding:12px 24px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+.legend{font-size:12px;color:var(--mute);display:flex;gap:14px;margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Flare <span>Detective</span></h1>
+  <p class="sub">12 weeks of synthetic daily logs and skin scores. Breakouts rarely come from what you did today, so this finds the habit that shows up a few days <em>before</em> each flare, and tests whether the link is real or luck.</p>
+</header>
+<main>
+  <section class="card full">
+    <div class="row" id="metricBtns"></div>
+    <div class="row" style="margin-top:8px"><button id="reseed">New person (new hidden causes)</button><span class="meta" id="seedLbl"></span></div>
+  </section>
+
+  <section class="card">
+    <h2 id="chartTitle">Skin score over time</h2>
+    <svg id="chart" viewBox="0 0 640 230" preserveAspectRatio="none"></svg>
+    <div class="legend"><span><i style="background:var(--acc)"></i>score (higher = worse)</span><span><i style="background:var(--acc2)"></i>selected habit, shifted to where its effect lands</span><span><i style="background:#555b68"></i>flare day (top 10%)</span></div>
+    <div id="tip">Click any day on the chart to see what was logged in the 4 days before it.</div>
+  </section>
+
+  <section class="card">
+    <h2>Ranked suspects</h2>
+    <div id="suspects"></div>
+    <div class="verdict" id="verdict"></div>
+  </section>
+
+  <section class="card full">
+    <h2 id="lagTitle">Lag profile</h2>
+    <svg id="lag" viewBox="0 0 640 130" preserveAspectRatio="none"></svg>
+    <div class="meta">Correlation of the habit on day t-k with the score on day t. A real cause peaks at one lag; noise is flat.</div>
+    <div class="row" style="margin-top:10px"><button id="reveal">Reveal hidden truth</button></div>
+    <div class="truth" id="truth"></div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Lumeria (YC S26). Not affiliated with Lumeria. All data here is randomly generated in your browser.</footer>
+
+<script>
+(()=>{
+const N=84, MAXLAG=5;
+const METRICS=[
+  {id:'red',label:'Redness'},
+  {id:'oil',label:'Oiliness'},
+  {id:'tex',label:'Texture roughness'}
+];
+const FACTORS=[
+  {id:'dairy',label:'Dairy',kind:'bin',p:.35},
+  {id:'sugar',label:'High sugar',kind:'bin',p:.3},
+  {id:'sleep',label:'Under 6h sleep',kind:'bin',p:.28},
+  {id:'alc',label:'Alcohol',kind:'bin',p:.18},
+  {id:'spf',label:'Skipped sunscreen',kind:'bin',p:.3},
+  {id:'acid',label:'Exfoliating acid',kind:'bin',p:.22},
+  {id:'stress',label:'Stress (0-10)',kind:'num'},
+  {id:'humid',label:'Humidity',kind:'num'}
+];
+
+// seeded PRNG (mulberry32)
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){return Math.sqrt(-2*Math.log(r()+1e-9))*Math.cos(2*Math.PI*r())}
+
+let S={seed:0,metric:'red',data:null,truth:null,sel:null,results:[],shown:false};
+
+function generate(seed){
+  const r=rng(seed), X={}, truth={};
+  FACTORS.forEach(f=>{
+    X[f.id]=[];
+    let v=5;
+    for(let t=0;t<N;t++){
+      if(f.kind==='bin') X[f.id].push(r()<f.p?1:0);
+      else {v=Math.max(0,Math.min(10,v+gauss(r)*1.3+(5-v)*.12));X[f.id].push(+v.toFixed(1));}
+    }
+  });
+  METRICS.forEach(m=>{
+    const pool=FACTORS.map(f=>f.id).sort(()=>r()-.5);
+    const causes=pool.slice(0,2).map((id,i)=>({id,lag:1+Math.floor(r()*4),w:(i?0.55:0.9)+r()*.3}));
+    truth[m.id]=causes;
+    const y=[]; let drift=0;
+    for(let t=0;t<N;t++){
+      drift=drift*.7+gauss(r)*.25;
+      let s=40+drift*8+gauss(r)*3.2;
+      causes.forEach(c=>{
+        const f=FACTORS.find(q=>q.id===c.id), k=t-c.lag;
+        if(k>=0){const z=f.kind==='bin'?X[c.id][k]:(X[c.id][k]-5)/2.5;s+=z*c.w*13}
+      });
+      y.push(Math.max(2,s));
+    }
+    X['_'+m.id]=y;
+  });
+  return {X,truth};
+}
+
+function pearson(a,b){
+  const n=a.length;let ma=0,mb=0;
+  for(let i=0;i<n;i++){ma+=a[i];mb+=b[i]}
+  ma/=n;mb/=n;let sab=0,saa=0,sbb=0;
+  for(let i=0;i<n;i++){const da=a[i]-ma,db=b[i]-mb;sab+=da*db;saa+=da*da;sbb+=db*db}
+  return saa&&sbb?sab/Math.sqrt(saa*sbb):0;
+}
+function lagR(x,y,k){return pearson(x.slice(0,N-k),y.slice(k))}
+function lagProfile(x,y){const o=[];for(let k=0;k<=MAXLAG;k++)o.push(lagR(x,y,k));return o}
+function bestOf(p){let b=0;p.forEach((v,i)=>{if(Math.abs(v)>Math.abs(p[b]))b=i});return b}
+
+// Null: circularly shift the habit (keeps its streakiness), take max |r| over lags.
+// This corrects for the fact that we pick the best lag after looking.
+function analyze(){
+  const y=S.data.X['_'+S.metric];
+  S.results=FACTORS.map(f=>{
+    const x=S.data.X[f.id], prof=lagProfile(x,y), lag=bestOf(prof), r=prof[lag];
+    let ge=0,tot=0;
+    for(let s=8;s<N-8;s++){
+      const xs=x.slice(s).concat(x.slice(0,s));
+      const mx=Math.max(...lagProfile(xs,y).map(Math.abs));
+      tot++; if(mx>=Math.abs(r)) ge++;
+    }
+    return {f,prof,lag,r,p:(ge+1)/(tot+1)};
+  }).sort((a,b)=>a.p-b.p||Math.abs(b.r)-Math.abs(a.r));
+  S.sel=S.results[0].f.id;
+}
+
+const $=id=>document.getElementById(id);
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e}
+
+function renderChart(){
+  const svg=$('chart');svg.innerHTML='';
+  const y=S.data.X['_'+S.metric], W=640,H=230,pad=14;
+  const mx=Math.max(...y)*1.05, mn=Math.min(...y)*.9;
+  const X=t=>pad+t*(W-2*pad)/(N-1), Y=v=>H-pad-(v-mn)/(mx-mn)*(H-2*pad);
+  const sorted=[...y].sort((a,b)=>a-b), thr=sorted[Math.floor(N*.9)];
+  y.forEach((v,t)=>{if(v>=thr)el('rect',{x:X(t)-3,y:0,width:6,height:H,fill:'#555b68',opacity:.35},svg)});
+  const res=S.results.find(q=>q.f.id===S.sel), x=S.data.X[S.sel];
+  const fct=FACTORS.find(f=>f.id===S.sel);
+  for(let t=0;t<N-res.lag;t++){
+    const on=fct.kind==='bin'?x[t]===1:x[t]>=7;
+    if(on)el('rect',{x:X(t+res.lag)-2,y:H-pad+1,width:4,height:11,fill:'#7ed0c0',rx:1},svg);
+  }
+  el('polyline',{points:y.map((v,t)=>X(t)+','+Y(v)).join(' '),fill:'none',stroke:'#f2b47e','stroke-width':2,'stroke-linejoin':'round','vector-effect':'non-scaling-stroke'},svg);
+  const hit=el('rect',{x:0,y:0,width:W,height:H,fill:'transparent',style:'cursor:crosshair'},svg);
+  hit.addEventListener('click',e=>{
+    const b=svg.getBoundingClientRect(), vx=(e.clientX-b.left)/b.width*W;
+    showDay(Math.max(0,Math.min(N-1,Math.round((vx-pad)/(W-2*pad)*(N-1)))));
+  });
+  $('chartTitle').textContent=METRICS.find(m=>m.id===S.metric).label+' score, 12 weeks';
+}
+
+function showDay(t){
+  const y=S.data.X['_'+S.metric];
+  const parts=[];
+  for(let k=1;k<=4;k++){
+    if(t-k<0)continue;
+    const on=FACTORS.filter(f=>{const v=S.data.X[f.id][t-k];return f.kind==='bin'?v===1:v>=7}).map(f=>f.label);
+    parts.push('<b>'+k+'d before:</b> '+(on.length?on.join(', '):'nothing flagged'));
+  }
+  $('tip').innerHTML='<b>Day '+(t+1)+'</b>, score '+y[t].toFixed(0)+'<br>'+parts.join('<br>');
+}
+
+function renderLag(){
+  const svg=$('lag');svg.innerHTML='';
+  const res=S.results.find(q=>q.f.id===S.sel), W=640,H=130,mid=H/2;
+  $('lagTitle').textContent='Lag profile: '+res.f.label;
+  const bw=W/(MAXLAG+1);
+  el('line',{x1:0,x2:W,y1:mid,y2:mid,stroke:'#2b2f38'},svg);
+  res.prof.forEach((v,k)=>{
+    const h=Math.abs(v)*(mid-22), best=k===res.lag;
+    el('rect',{x:k*bw+bw*.2,width:bw*.6,y:v>=0?mid-h:mid,height:Math.max(1,h),fill:best?'#f2b47e':'#3a3f4b',rx:3},svg);
+    const t=el('text',{x:k*bw+bw/2,y:H-3,'text-anchor':'middle',fill:'#8d93a0','font-size':11},svg);t.textContent=k+' day'+(k===1?'':'s')+' earlier';
+    const q=el('text',{x:k*bw+bw/2,y:v>=0?mid-h-4:mid+h+11,'text-anchor':'middle',fill:best?'#f2b47e':'#8d93a0','font-size':11},svg);q.textContent=v.toFixed(2);
+  });
+}
+
+function renderSuspects(){
+  const box=$('suspects');box.innerHTML='';
+  const top=Math.max(...S.results.map(r=>Math.abs(r.r)));
+  S.results.forEach((q,i)=>{
+    const real=q.p<0.05;
+    const d=document.createElement('div');
+    d.className='sus'+(q.f.id===S.sel?' sel':'')+(real?'':' weak');
+    d.innerHTML='<div class="meta">'+(i+1)+'</div><div><div class="name">'+q.f.label+'</div><div class="meta">best lag '+q.lag+'d, r='+q.r.toFixed(2)+', p='+q.p.toFixed(3)+'</div><div class="bar"><i style="width:'+(Math.abs(q.r)/top*100)+'%"></i></div></div><div class="tag '+(real?'hit':'no')+'">'+(real?'likely':'noise')+'</div>';
+    d.onclick=()=>{S.sel=q.f.id;renderAll(true)};
+    box.appendChild(d);
+  });
+  const hits=S.results.filter(q=>q.p<0.05);
+  const ml=METRICS.find(m=>m.id===S.metric).label.toLowerCase();
+  $('verdict').innerHTML=hits.length
+    ? 'Pattern found: '+hits.slice(0,2).map(q=>'<b>'+q.f.label.toLowerCase()+'</b> tends to show up <b>'+q.lag+' day'+(q.lag===1?'':'s')+'</b> before a '+(q.r>0?'worse':'better')+' '+ml+' reading').join('; and ')+'.'
+    : 'No habit clears the bar. Honest answer: not enough signal yet.';
+}
+
+function renderTruth(){
+  const t=S.truth[S.metric];
+  $('truth').innerHTML=S.shown
+    ? 'Hidden truth for this metric: '+t.map(c=>'<b>'+FACTORS.find(f=>f.id===c.id).label+'</b> at lag '+c.lag+'d').join(' and ')+'. Everything else is a decoy.'
+    : '';
+  $('reveal').textContent=S.shown?'Hide hidden truth':'Reveal hidden truth';
+}
+
+function renderAll(keep){
+  if(!keep)analyze();
+  renderSuspects();renderChart();renderLag();renderTruth();
+  if(!keep)$('tip').innerHTML='Click any day on the chart to see what was logged in the 4 days before it.';
+}
+
+function buildButtons(){
+  const box=$('metricBtns');box.innerHTML='';
+  METRICS.forEach(m=>{
+    const b=document.createElement('button');
+    b.textContent=m.label;b.className=m.id===S.metric?'on':'';
+    b.onclick=()=>{S.metric=m.id;buildButtons();renderAll()};
+    box.appendChild(b);
+  });
+}
+function load(seed){
+  S.seed=seed;S.data=generate(seed);S.truth=S.data.truth;S.shown=false;
+  $('seedLbl').textContent='person #'+seed;
+  buildButtons();renderAll();
+}
+$('reseed').onclick=()=>load(Math.floor(Math.random()*9000)+1000);
+$('reveal').onclick=()=>{S.shown=!S.shown;renderTruth()};
+load(4242);
+})();
+</script>
+</body>
+</html>
