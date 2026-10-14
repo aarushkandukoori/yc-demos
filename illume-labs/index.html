@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fusion Desk - a toy cross-source health insight engine</title>
+<style>
+:root{--bg:#10130f;--card:#181d16;--line:#2a3226;--ink:#e9eee2;--mute:#8d9987;--a:#c9e265;--b:#f0a35e;--c:#7fc8c0;--bad:#ee7b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:auto}
+h1{margin:0;font:600 26px/1.2 ui-serif,Georgia,serif;letter-spacing:-.3px}
+h1 span{color:var(--a)}
+header p{color:var(--mute);margin:6px 0 0;max-width:720px}
+main{max-width:1100px;margin:auto;padding:16px 24px 24px;display:grid;grid-template-columns:1.35fr 1fr;gap:16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card h2{margin:0 0 10px;font:600 12px/1 ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute)}
+.src{display:flex;gap:8px;flex-wrap:wrap}
+.src label{cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:6px 12px;display:flex;gap:8px;align-items:center;user-select:none;transition:.15s}
+.src input{display:none}
+.src label.on{border-color:var(--c);background:#1b2a28}
+.src label i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.src label.on i{background:var(--c)}
+.row{display:flex;align-items:center;gap:12px;margin-top:12px;color:var(--mute);font-size:13px}
+input[type=range]{flex:1;accent-color:var(--a)}
+canvas{width:100%;height:230px;display:block;margin-top:6px;border-radius:8px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);flex-wrap:wrap;margin-top:6px}
+.legend b{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.ins{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:.15s}
+.ins:hover{border-color:var(--a)}
+.ins.open{border-color:var(--a);background:#1d2418}
+.ins .t{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.tag{font:10px ui-monospace,monospace;padding:2px 6px;border-radius:4px;background:#232b20;color:var(--c);height:fit-content}
+.ev{display:none;margin-top:8px;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mute)}
+.ins.open .ev{display:block}
+.bar{height:5px;background:var(--line);border-radius:3px;margin-top:6px}
+.bar div{height:100%;border-radius:3px;background:var(--a)}
+.phone{background:#0b0d0a;border:1px solid var(--line);border-radius:22px;padding:14px;min-height:300px;max-height:620px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:88%;padding:9px 12px;border-radius:16px;font-size:14px;white-space:pre-wrap;animation:pop .25s ease}
+.msg.bot{background:#222a1e;border-bottom-left-radius:4px;align-self:flex-start}
+.msg.me{background:var(--a);color:#14180d;border-bottom-right-radius:4px;align-self:flex-end}
+.msg b{color:var(--a)}
+.msg.me b{color:inherit}
+@keyframes pop{from{opacity:0;transform:translateY(6px)}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+button{font:inherit;font-size:13px;background:#232b20;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--a)}
+button.pri{background:var(--a);color:#14180d;border-color:var(--a);font-weight:600}
+.empty{color:var(--mute);font-size:13px;padding:6px 2px}
+footer{max-width:1100px;margin:auto;padding:8px 24px 36px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Fusion <span>Desk</span></h1>
+  <p>A toy engine that fuses wearable, bloodwork, genome and food-log data into one timeline, finds patterns no single source can see, and texts you what changed. All data below is synthetic (a seeded random 90-day "person").</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1 - Sources feeding the model</h2>
+    <div class="src" id="src"></div>
+    <div class="row"><span>Today is day</span><input type="range" id="day" min="35" max="89" value="89"><b id="dayv" style="color:var(--ink)">89</b></div>
+    <canvas id="cv" width="900" height="460"></canvas>
+    <div class="legend">
+      <span><b style="background:var(--c)"></b>HRV (ms)</span>
+      <span><b style="background:var(--b)"></b>resting HR (bpm)</span>
+      <span><b style="background:var(--bad)"></b>alcohol night</span>
+      <span><b style="background:var(--a)"></b>blood draw</span>
+    </div>
+    <h2 style="margin-top:18px">2 - Insights the engine can justify <span id="cnt" style="color:var(--a)"></span></h2>
+    <div id="ins"></div>
+  </section>
+  <section class="card">
+    <h2>3 - Your agent, by text</h2>
+    <div class="phone" id="phone"></div>
+    <div class="chips" id="chips"></div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Illume Labs (YC S26). Not affiliated with Illume Labs. Sample data is fabricated; nothing here is medical advice.</footer>
+
+<script>
+// ---------- seeded synthetic person ----------
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(7), gauss=()=>{let u=0;for(let i=0;i<6;i++)u+=R();return(u-3)*1.41};
+const N=90, D=[];
+for(let i=0;i<N;i++){
+  const alc=R()<(i<55?0.12:0.5)?1:0, late=R()<0.3?1:0;
+  D.push({i,alc,late,
+    hrv:+(64-12*alc-4*late-i*0.04+gauss()*3.5).toFixed(1),
+    rhr:+(55+3.5*alc+i*0.03+gauss()*1.3).toFixed(1),
+    sleep:+(7.5-0.5*alc-0.8*late+gauss()*0.4).toFixed(2),
+    gluc:+(91+7*late+2*alc+gauss()*3).toFixed(1)});
+}
+const BLOOD=[
+ {day:0, crp:1.1,apob:88, a1c:5.3},
+ {day:45,crp:1.8,apob:97, a1c:5.4},
+ {day:88,crp:2.7,apob:109,a1c:5.7}];
+const REF={crp:{n:"hsCRP",u:"mg/L",hi:2.0},apob:{n:"ApoB",u:"mg/dL",hi:90},a1c:{n:"HbA1c",u:"%",hi:5.6}};
+const GENOME={apoe:"e3/e4"};
+
+// ---------- stats helpers ----------
+const mean=a=>a.reduce((s,x)=>s+x,0)/(a.length||1);
+const sd=a=>{const m=mean(a);return Math.sqrt(mean(a.map(x=>(x-m)**2)))||1};
+function effect(rows,key,flag){ // flagged minus unflagged, in SD units
+  const f=rows.filter(r=>r[flag]).map(r=>r[key]), u=rows.filter(r=>!r[flag]).map(r=>r[key]);
+  if(f.length<4||u.length<4)return null;
+  const diff=mean(f)-mean(u);
+  return{diff,d:diff/sd(rows.map(r=>r[key])),nf:f.length,nu:u.length};
+}
+const slope=a=>{const n=a.length,mx=(n-1)/2,my=mean(a);let num=0,den=0;a.forEach((y,x)=>{num+=(x-mx)*(y-my);den+=(x-mx)**2});return num/den};
+
+// ---------- state ----------
+const SOURCES=[["wear","Wearable"],["food","Food & drink log"],["blood","Blood panels"],["gene","Genome"]];
+const on={wear:true,food:true,blood:true,gene:true};
+let today=89, openId=null;
+const $=id=>document.getElementById(id);
+
+// ---------- insight engine ----------
+function bloodNow(){return BLOOD.filter(b=>b.day<=today).slice(-1)[0]}
+function bloodPrev(){const l=BLOOD.filter(b=>b.day<=today);return l.length>1?l[l.length-2]:null}
+function compute(){
+  const rows=D.slice(0,today+1), win=rows.slice(-60), last7=rows.slice(-7), base=rows.slice(-35,-7);
+  const out=[]; const add=o=>{if(o.needs.every(s=>on[s]))out.push(o)};
+  const b=bloodNow(), bp=bloodPrev();
+  // single source: HRV drop vs baseline
+  const dh=mean(last7.map(r=>r.hrv))-mean(base.map(r=>r.hrv)), zh=dh/sd(base.map(r=>r.hrv));
+  if(zh<-0.8) add({id:"hrv",needs:["wear"],score:Math.min(1,-zh/3),
+    title:`HRV is down ${Math.abs(dh).toFixed(1)} ms vs your 4-week baseline`,
+    mean:"Your recovery signal is sliding, but a wearable alone can't tell you why.",
+    next:"Hold hard training until HRV rebounds.",
+    ev:`last7 mean=${mean(last7.map(r=>r.hrv)).toFixed(1)}  baseline=${mean(base.map(r=>r.hrv)).toFixed(1)}  z=${zh.toFixed(2)}`});
+  // wearable x food log
+  const eA=effect(win,"hrv","alc");
+  if(eA&&eA.d<-0.7) add({id:"alc",needs:["wear","food"],score:Math.min(1,-eA.d/2),
+    title:`Alcohol nights cost you ${Math.abs(eA.diff).toFixed(0)} ms of HRV`,
+    mean:`Drinks are logged on ${win.filter(r=>r.alc).length} of the last ${win.length} days, and each one lines up with a same-night HRV crash and resting HR +${effect(win,"rhr","alc").diff.toFixed(1)} bpm.`,
+    next:"Try 2 dry weeknights and watch HRV recover within ~3 days.",
+    ev:`HRV alc=${mean(win.filter(r=>r.alc).map(r=>r.hrv)).toFixed(1)} vs dry=${mean(win.filter(r=>!r.alc).map(r=>r.hrv)).toFixed(1)}  d=${eA.d.toFixed(2)}  n=${eA.nf}/${eA.nu}`});
+  const eL=effect(win,"sleep","late");
+  if(eL&&eL.d<-0.8) add({id:"late",needs:["wear","food"],score:Math.min(1,-eL.d/2.5),
+    title:`Late meals shave ${Math.abs(eL.diff*60).toFixed(0)} min off your sleep`,
+    mean:"Eating within ~3h of bed moves both sleep time and overnight glucose.",
+    next:"Move dinner before 8pm on four nights this week.",
+    ev:`sleep late=${mean(win.filter(r=>r.late).map(r=>r.sleep)).toFixed(2)}h vs early=${mean(win.filter(r=>!r.late).map(r=>r.sleep)).toFixed(2)}h  d=${eL.d.toFixed(2)}`});
+  // wearable x blood
+  const rs=mean(rows.slice(-28).map(r=>r.rhr))-mean(rows.slice(0,28).map(r=>r.rhr));
+  if(b.crp>=2&&rs>1.5) add({id:"crp",needs:["wear","blood"],score:Math.min(1,b.crp/4),
+    title:`Resting HR creeping up ${rs.toFixed(1)} bpm while hsCRP hit ${b.crp}`,
+    mean:"Two independent systems point the same way: low-grade inflammation, not just a hard training block.",
+    next:"Prioritise sleep and cut alcohol; retest hsCRP in 6 weeks.",
+    ev:`RHR last28 vs first28 = +${rs.toFixed(2)} bpm  hsCRP ${bp?bp.crp+" -> ":""}${b.crp} mg/L (flag >=2.0)`});
+  // blood x genome
+  if(b.apob>REF.apob.hi) add({id:"apob",needs:["blood","gene"],score:Math.min(1,(b.apob-80)/50),
+    title:`ApoB ${b.apob} mg/dL is high for an APOE e4 carrier`,
+    mean:`Your genotype (APOE ${GENOME.apoe}) makes this marker matter more; a generic range would call ${b.apob} borderline.`,
+    next:"Swap saturated fat for unsaturated, add 25g soluble fibre daily, and raise it with your doctor.",
+    ev:`ApoB ${bp?bp.apob+" -> ":""}${b.apob}  genotype APOE ${GENOME.apoe}  personal target <90`});
+  // blood x food
+  if(bp&&b.a1c-bp.a1c>=0.2) add({id:"a1c",needs:["blood","food"],score:Math.min(1,(b.a1c-5)/1),
+    title:`HbA1c rose ${bp.a1c} -> ${b.a1c} and ${(mean(win.map(r=>r.late))*100).toFixed(0)}% of dinners were late`,
+    mean:"Average glucose is drifting up in step with late eating, not total calories.",
+    next:"Early dinners plus a 10 minute walk afterwards.",
+    ev:`HbA1c delta=+${(b.a1c-bp.a1c).toFixed(1)}  overnight glucose late=${mean(win.filter(r=>r.late).map(r=>r.gluc)).toFixed(0)} vs ${mean(win.filter(r=>!r.late).map(r=>r.gluc)).toFixed(0)} mg/dL`});
+  // 4-way join: the headline no single platform can show
+  if(on.wear&&on.food&&on.blood&&on.gene&&eA&&eA.d<-0.7&&b.crp>=2&&b.apob>REF.apob.hi) out.push({id:"fuse",needs:["wear","food","blood","gene"],score:1,
+    title:"One habit is behind three of your red flags",
+    mean:"Rising alcohol nights drive the HRV drop, the RHR drift and the hsCRP rise, and with your APOE e4 the ApoB climb compounds it.",
+    next:"A 3-week dry experiment is the highest-value single change.",
+    ev:"joins: wearable.hrv, wearable.rhr, food.alcohol, blood.hsCRP, blood.ApoB, genome.APOE"});
+  return out.sort((x,y)=>y.score-x.score);
+}
+
+// ---------- UI ----------
+const TAGNAME={wear:"wearable",food:"food",blood:"blood",gene:"genome"};
+function renderSrc(){
+  $("src").innerHTML=SOURCES.map(([k,l])=>`<label class="${on[k]?"on":""}"><input type="checkbox" data-k="${k}" ${on[k]?"checked":""}><i></i>${l}</label>`).join("");
+  $("src").querySelectorAll("input").forEach(el=>el.onchange=()=>{on[el.dataset.k]=el.checked;refresh()});
+}
+function renderIns(){
+  const list=compute();
+  $("cnt").textContent=`(${list.length})`;
+  if(!list.length){$("ins").innerHTML='<div class="empty">Nothing defensible with these sources. Turn more on: cross-source patterns appear when data is fused.</div>';return}
+  $("ins").innerHTML=list.map(x=>`<div class="ins ${openId===x.id?"open":""}" data-id="${x.id}"><div class="t"><span>${x.title}</span><span class="tags">${x.needs.map(n=>`<span class="tag">${TAGNAME[n]}</span>`).join("")}</span></div>
+    <div class="bar"><div style="width:${Math.round(x.score*100)}%"></div></div>
+    <div class="ev">${x.ev}</div></div>`).join("");
+  $("ins").querySelectorAll(".ins").forEach(el=>el.onclick=()=>{openId=openId===el.dataset.id?null:el.dataset.id;renderIns()});
+}
+function draw(){
+  const c=$("cv"),g=c.getContext("2d"),W=c.width,H=c.height,pad=30;
+  g.clearRect(0,0,W,H);
+  const x=i=>pad+i*(W-2*pad)/(N-1);
+  g.strokeStyle="#2a3226";g.lineWidth=1;
+  for(let k=0;k<5;k++){const y=pad+k*(H-2*pad)/4;g.beginPath();g.moveTo(pad,y);g.lineTo(W-pad,y);g.stroke()}
+  if(on.food) D.slice(0,today+1).forEach(r=>{if(r.alc){g.fillStyle="rgba(238,123,107,.18)";g.fillRect(x(r.i)-4,pad,8,H-2*pad)}});
+  if(on.blood) BLOOD.forEach(b=>{if(b.day<=today){g.strokeStyle="#c9e265";g.setLineDash([5,5]);g.beginPath();g.moveTo(x(b.day),pad);g.lineTo(x(b.day),H-pad);g.stroke();g.setLineDash([])}});
+  if(on.wear) [["hrv","#7fc8c0",40,75],["rhr","#f0a35e",50,66]].forEach(([k,col,lo,hi])=>{
+    g.strokeStyle=col;g.lineWidth=2;g.beginPath();
+    D.slice(0,today+1).forEach((r,i)=>{const y=H-pad-(r[k]-lo)/(hi-lo)*(H-2*pad);i?g.lineTo(x(i),y):g.moveTo(x(i),y)});
+    g.stroke()});
+  else{g.fillStyle="#8d9987";g.font="22px sans-serif";g.fillText("Wearable off - no HRV / HR stream",pad+10,H/2)}
+  g.strokeStyle="#e9eee2";g.beginPath();g.moveTo(x(today),pad);g.lineTo(x(today),H-pad);g.stroke();
+  g.fillStyle="#8d9987";g.font="20px sans-serif";g.fillText("day "+today,Math.min(x(today)+6,W-90),pad-8);
+}
+
+// ---------- the agent ----------
+const phone=$("phone");
+function say(html,who){const d=document.createElement("div");d.className="msg "+who;d.innerHTML=html;phone.appendChild(d);phone.scrollTop=phone.scrollHeight}
+function dailyText(){
+  const list=compute();
+  if(!list.length) return say("Morning. With the sources you've connected I can't find anything I'd stand behind today. Connect more data and I'll cross-check it.","bot");
+  const top=list[0];
+  let t=`<b>Day ${today} update</b>\n<b>What changed:</b> ${top.title}.\n<b>What it means:</b> ${top.mean}\n<b>Next:</b> ${top.next}`;
+  if(list[1]) t+=`\n\nAlso watching: ${list[1].title}.`;
+  say(t,"bot");
+}
+function answerBloodwork(){
+  if(!on.blood) return say("I don't have a blood panel connected, so I'd be guessing. Turn on Blood panels and ask again.","bot");
+  const b=bloodNow(), rows=D.slice(0,today+1).slice(-60);
+  const flags=Object.keys(REF).filter(k=>b[k]>REF[k].hi).map(k=>`${REF[k].n} ${b[k]} ${REF[k].u}`);
+  if(!flags.length) return say(`Nothing is out of range on your day-${b.day} panel. Keep doing what you're doing.`,"bot");
+  let t=`<b>Out of range (day ${b.day} panel):</b> ${flags.join(", ")}.\n\n<b>Levers, ranked by evidence in your own data:</b>`;
+  const eA=on.wear&&on.food?effect(rows,"hrv","alc"):null, eL=on.wear&&on.food?effect(rows,"sleep","late"):null;
+  let n=1;
+  if(eA&&eA.d<-0.7) t+=`\n${n++}. Cut alcohol - your HRV drops ${Math.abs(eA.diff).toFixed(0)} ms on drinking nights.`;
+  if(eL&&eL.d<-0.8) t+=`\n${n++}. Eat earlier - late dinners cost you ${Math.abs(eL.diff*60).toFixed(0)} min of sleep and nudge glucose.`;
+  if(b.apob>REF.apob.hi) t+=`\n${n++}. ${on.gene?`With APOE ${GENOME.apoe}, aim for ApoB under 90: more fibre, less saturated fat.`:"More fibre and less saturated fat for ApoB."}`;
+  if(n===1) t+="\nWithout wearable + food data I can only give generic advice: sleep, fibre, fewer late meals.";
+  say(t,"bot");
+}
+function whyHrv(){
+  const l=compute(), x=l.find(i=>i.id==="alc")||l.find(i=>i.id==="hrv");
+  say(x?`<b>${x.title}.</b>\n${x.mean}\n<b>Next:</b> ${x.next}`:"HRV looks normal, or there's not enough connected data to explain it.","bot");
+}
+function ask(label,fn){say(label,"me");setTimeout(fn,350)}
+function intro(){say("Hi, I'm your health agent (demo). I read four synthetic data sources as one model. Toggle sources above, drag the day slider, then ask me something.","bot")}
+function chips(){
+  [["Text me today's update",dailyText,1],["What should I do to improve my bloodwork?",answerBloodwork],["Why is my HRV down?",whyHrv]].forEach(([l,f,p])=>{
+    const b=document.createElement("button");b.textContent=l;if(p)b.className="pri";
+    b.onclick=()=>ask(l,f);$("chips").appendChild(b)});
+  const r=document.createElement("button");r.textContent="Reset chat";r.onclick=()=>{phone.innerHTML="";intro()};$("chips").appendChild(r);
+}
+
+function refresh(){renderSrc();renderIns();draw()}
+$("day").oninput=e=>{today=+e.target.value;$("dayv").textContent=today;refresh()};
+intro();chips();refresh();
+</script>
+</body>
+</html>

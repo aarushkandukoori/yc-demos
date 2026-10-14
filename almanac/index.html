@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marginalia - a self-updating work wiki (toy demo)</title>
+<style>
+:root{--bg:#15171b;--panel:#1c1f25;--panel2:#23272f;--line:#2e333c;--ink:#e8e6e1;--mute:#8d939e;--amber:#e9b44c;--teal:#59c9b1;--rose:#ef7b7b;--blue:#7aa7f0}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;min-height:100vh}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.logo{font-family:Georgia,serif;font-size:20px;letter-spacing:.3px}
+.logo i{color:var(--amber)}
+.tag{color:var(--mute);font-size:12px;flex:1;min-width:200px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;color:var(--mute);border:0;padding:6px 12px;cursor:pointer;font:inherit;font-size:12px}
+.seg button.on{background:var(--amber);color:#1a1405;font-weight:600}
+main{flex:1;display:grid;grid-template-columns:300px 1fr 300px;gap:14px;padding:14px 20px;min-height:0}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:300px;max-height:calc(100vh - 150px);overflow:hidden}
+@media(max-width:1000px){section{max-height:none}}
+section>h2{margin:0;padding:12px 14px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--mute);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.scroll{overflow:auto;padding:10px 12px;flex:1}
+button.act{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 10px;cursor:pointer;font:inherit;font-size:12px}
+button.act:hover{border-color:var(--amber)}
+button.act.pri{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:600}
+.src{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--panel2);transition:border-color .3s,box-shadow .3s}
+.src.hl{border-color:var(--amber);box-shadow:0 0 0 2px #e9b44c44}
+.src.done{opacity:.6}
+.src .top{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:6px;gap:6px}
+.src .who{font-weight:600}
+.badge{font-size:10px;padding:2px 7px;border-radius:99px;border:1px solid}
+.badge.p{color:var(--rose);border-color:#ef7b7b66}
+.badge.s{color:var(--teal);border-color:#59c9b166}
+.src p{margin:0 0 8px;color:#c9c7c1;font-size:12.5px;white-space:pre-wrap}
+.src mark{background:#e9b44c2e;color:var(--amber);border-radius:3px;padding:0 2px}
+textarea{width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:12.5px;resize:vertical;min-height:70px}
+.row{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}
+select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px;font:inherit;font-size:12px}
+.wiki{display:grid;grid-template-columns:150px 1fr;flex:1;min-height:0}
+.nav{border-right:1px solid var(--line);overflow:auto;padding:8px}
+.nav h3{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:1px;margin:10px 6px 4px}
+.nav a{display:flex;justify-content:space-between;padding:6px 8px;border-radius:6px;cursor:pointer;color:#c9c7c1}
+.nav a:hover{background:var(--panel2)}
+.nav a.on{background:var(--panel2);color:var(--amber)}
+.nav a small{color:var(--mute)}
+.page{overflow:auto;padding:14px 18px}
+.page h1{font-family:Georgia,serif;font-weight:normal;margin:0 0 2px;font-size:26px}
+.page .kind{color:var(--mute);font-size:12px;margin-bottom:14px}
+.page h4{margin:16px 0 6px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--mute)}
+.fact{display:flex;gap:8px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;align-items:baseline;background:var(--panel2)}
+.fact .k{color:var(--mute);width:110px;flex:none;font-size:12px}
+.fact .v{flex:1}
+.fact.new{animation:flash 2.2s ease-out}
+@keyframes flash{0%{background:#e9b44c55;border-color:var(--amber)}100%{background:var(--panel2)}}
+.fact.old{opacity:.5}
+.fact.old .v{text-decoration:line-through}
+.chip{font-size:10.5px;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--blue);cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--blue)}
+.pill{font-size:10px;padding:1px 6px;border-radius:5px;background:#59c9b122;color:var(--teal)}
+.pill.r{background:#ef7b7b22;color:var(--rose)}
+.empty{color:var(--mute);text-align:center;padding:40px 14px;font-size:13px}
+.task{display:flex;gap:9px;padding:9px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:var(--panel2)}
+.task.new{animation:flash 2.2s ease-out}
+.task.done .t{text-decoration:line-through;color:var(--mute)}
+.task input{margin-top:3px;accent-color:var(--amber)}
+.task .m{font-size:11.5px;color:var(--mute);margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.log{font:11.5px ui-monospace,Menlo,monospace;color:var(--mute);border-top:1px solid var(--line);padding:8px 12px;height:84px;overflow:auto}
+.log b{color:var(--teal);font-weight:600}
+.hidden-note{font-size:11.5px;color:var(--rose);background:#ef7b7b14;border:1px dashed #ef7b7b55;border-radius:8px;padding:6px 9px;margin-bottom:10px}
+footer{padding:14px 20px;border-top:1px solid var(--line);color:var(--mute);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Margin<i>alia</i></div>
+  <div class="tag">Feed it messy work. It writes the wiki and the to-do list. Nobody types a field.</div>
+  <div><span style="color:var(--mute);font-size:12px;margin-right:6px">View as</span>
+    <span class="seg" id="viewSeg"><button data-v="sam" class="on">Sam (owner)</button><button data-v="dana">Dana (teammate)</button></span></div>
+</header>
+
+<main>
+  <section>
+    <h2>Connected sources <button class="act pri" id="all">Ingest all</button></h2>
+    <div class="scroll" id="sources"></div>
+    <div style="padding:10px 12px;border-top:1px solid var(--line)">
+      <textarea id="paste" placeholder="Paste your own note. Try: Lena will send the contract by Nov 12. Ledger launch slipped to Jan 9. We decided to use Postgres."></textarea>
+      <div class="row">
+        <select id="pscope"><option value="shared">shared account</option><option value="personal">personal account</option></select>
+        <button class="act" id="padd">Add as source</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Wiki <span id="stats" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="wiki"><div class="nav" id="nav"></div><div class="page" id="page"></div></div>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section>
+    <h2>Captured tasks <span id="tcount" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="scroll" id="tasks"></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Almanac (YC S26). Not affiliated with Almanac. All people, projects and messages above are synthetic. Extraction here is a handful of regexes, not a model.</footer>
+
+<script>
+// ---------- synthetic data ----------
+const PEOPLE = ['Priya','Dana','Sam','Marcus','Lena'];
+const PROJECTS = ['Orion','Ledger','Onboarding'];
+let SOURCES = [
+  {id:'s1',app:'Mail',who:'Priya to Sam',scope:'personal',owner:'Sam',
+   text:"Subject: Orion pricing\nOrion launch is now pushed to Nov 18. Dana will send the pricing draft by Friday. We decided to keep the free tier at 3 seats."},
+  {id:'s2',app:'Slack #launch',who:'Marcus',scope:'shared',owner:'Marcus',
+   text:"Marcus will finish the SSO fix by Nov 6. Onboarding is blocked on legal review of the DPA. Orion launch is blocked by the SSO fix."},
+  {id:'s3',app:'Calendar',who:'Sam, Lena sync',scope:'personal',owner:'Sam',
+   text:"Sync with Lena, Nov 3. Can you share the Ledger migration plan with Lena? We decided to cut over Ledger after Orion ships."},
+  {id:'s4',app:'GitHub',who:'PR #212',scope:'shared',owner:'Marcus',
+   text:"PR #212 merged. Marcus will finish the SSO fix by Nov 8. Orion launch slipped to Dec 2 because billing review found a bug."},
+  {id:'s5',app:'Meeting notes',who:'Pricing review',scope:'personal',owner:'Sam',
+   text:"Decision: move the free tier to 5 seats. Dana will send the pricing draft by Nov 10. Onboarding is no longer blocked on legal review."}
+];
+const DUE = '((?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day|(?:Oct|Nov|Dec|Jan) \\d{1,2})';
+const TOPICS = ['free tier','cut over','postgres'];
+
+// ---------- state ----------
+const S = {facts:[], tasks:[], done:new Set(), ingested:new Set(), seq:0, fresh:new Set(), view:'sam', page:'Orion', pages:new Set([...PROJECTS,...PEOPLE])};
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const find = (s, list) => list.filter(n => new RegExp('\\b' + n + '\\b', 'i').test(s));
+
+// ---------- extractor: sentence -> structured facts / tasks ----------
+function extract(src){
+  const spans = [];                      // matched substrings, for highlighting
+  const out = {facts:0, tasks:0};
+  let lastProj = null;
+  const sentences = src.text.split(/(?<=[.?!])\s+|\n/).filter(Boolean);
+  for (const s of sentences){
+    const proj = find(s, [...S.pages].filter(p => !PEOPLE.includes(p)));
+    const dyn = s.match(/\bProject ([A-Z]\w+)/);
+    if (dyn){ S.pages.add(dyn[1]); proj.unshift(dyn[1]); }
+    const ppl = find(s, PEOPLE);
+    if (proj.length) lastProj = proj[0];
+    const page = proj[0] || lastProj;
+    const add = (pg, key, value, kind) => {
+      S.facts.push({id:++S.seq, page:pg, key, value, kind, src:src.id, scope:src.scope});
+      S.fresh.add('f'+S.seq); out.facts++;
+    };
+    let m;
+    if ((m = s.match(new RegExp('\\b(launch|ship|release|deadline)\\b[^.]*?\\bto ((?:Oct|Nov|Dec|Jan) \\d{1,2})','i'))) && page){
+      add(page, 'target date', m[2], 'date'); spans.push(m[0]);
+    }
+    if ((m = s.match(/\b(?:we decided(?: to)?|decision:|let's go with)\s+([^.]*)/i)) && page){
+      const val = cap(m[1].trim());
+      const topic = TOPICS.find(t => val.toLowerCase().includes(t)) || val.toLowerCase();
+      add(page, 'decision: ' + topic, val, 'decision'); spans.push(m[0]);
+    } else if ((m = s.match(/\bdecision:\s*([^.]*)/i))){
+      // decision with no project in sentence: attach to the free tier's home page
+      const val = cap(m[1].trim());
+      const topic = TOPICS.find(t => val.toLowerCase().includes(t)) || val.toLowerCase();
+      add(lastProj || 'Orion', 'decision: ' + topic, val, 'decision'); spans.push(m[0]);
+    }
+    if ((m = s.match(/\b(?:is|are) no longer blocked\b/i)) && page){
+      add(page, 'blocker', 'cleared', 'unblock'); spans.push(m[0]);
+    } else if ((m = s.match(/\bblocked (?:on|by) ([^.]*)/i)) && page){
+      add(page, 'blocker', m[1].trim(), 'blocker'); spans.push(m[0]);
+    }
+    if ((m = s.match(new RegExp('\\b([A-Z][a-z]+) (?:will|\'ll) ([^.]*?) by ' + DUE))) && PEOPLE.includes(m[1])){
+      addTask(m[1], m[2], m[3], page || m[1], src); out.tasks++; spans.push(m[0]);
+    } else if ((m = s.match(new RegExp('\\bI(?:\'ll| will) ([^.]*?) by ' + DUE)))){
+      addTask(src.owner, m[1], m[2], page || src.owner, src); out.tasks++; spans.push(m[0]);
+    } else if ((m = s.match(/^(?:Can|Could) you ([^?]*)\?/))){
+      addTask(src.owner, m[1], null, page || src.owner, src); out.tasks++; spans.push(m[0]);
+    }
+  }
+  src.spans = spans;
+  return out;
+}
+function addTask(owner, text, due, page, src){
+  const key = (owner + '|' + text).toLowerCase();
+  let t = S.tasks.find(t => t.key === key);
+  if (!t){ t = {id:'t'+(++S.seq), key, owner, text, page, mentions:[]}; S.tasks.push(t); S.fresh.add(t.id); }
+  else S.fresh.add(t.id);
+  t.mentions.push({src:src.id, due, scope:src.scope, n:++S.seq});
+}
+
+// ---------- visibility + derivation (computed fresh each render) ----------
+const visible = scope => S.view === 'sam' || scope === 'shared';
+function derive(){
+  const facts = S.facts.filter(f => visible(f.scope));
+  const hiddenFacts = S.facts.length - facts.length;
+  const byKey = {};
+  for (const f of facts){
+    if (f.kind === 'unblock'){                    // resolves earlier blockers on the page
+      facts.forEach(g => { if (g.page === f.page && g.kind === 'blocker' && g.id < f.id) g.resolvedBy = f; });
+      continue;
+    }
+    const k = f.page + '|' + (f.kind === 'blocker' ? 'b:' + f.value : f.key);
+    (byKey[k] = byKey[k] || []).push(f);
+  }
+  const groups = Object.values(byKey).map(a => {
+    a.sort((x, y) => x.id - y.id);
+    return {current:a[a.length - 1], history:a.slice(0, -1)};
+  });
+  const tasks = S.tasks.map(t => {
+    const ms = t.mentions.filter(m => visible(m.scope)).sort((a, b) => a.n - b.n);
+    if (!ms.length) return null;
+    const dueM = [...ms].reverse().find(m => m.due);
+    return {...t, ms, due: dueM ? dueM.due : null, history: ms.filter(m => m.due).map(m => m.due)};
+  }).filter(Boolean);
+  const hiddenTasks = S.tasks.length - tasks.length;
+  return {groups, tasks, hiddenFacts, hiddenTasks};
+}
+const srcOf = id => SOURCES.find(s => s.id === id);
+
+// ---------- rendering ----------
+function renderSources(){
+  $('sources').innerHTML = SOURCES.map(s => {
+    let body = esc(s.text);
+    if (s.spans) for (const sp of s.spans) body = body.replace(esc(sp), m => '<mark>' + m + '</mark>');
+    const done = S.ingested.has(s.id);
+    const ok = visible(s.scope);
+    return `<div class="src ${done ? 'done' : ''}" id="src-${s.id}">
+      <div class="top"><span class="who">${esc(s.app)} <span style="color:var(--mute);font-weight:400">${esc(s.who)}</span></span>
+      <span class="badge ${s.scope === 'personal' ? 'p' : 's'}">${s.scope === 'personal' ? 'private to ' + esc(s.owner) : 'shared'}</span></div>
+      <p>${ok ? body : '<i style="color:var(--mute)">Private to ' + esc(s.owner) + '. You cannot see this.</i>'}</p>
+      <button class="act ${done ? '' : 'pri'}" data-ing="${s.id}" ${done ? 'disabled' : ''}>${done ? 'Ingested' : 'Ingest'}</button></div>`;
+  }).join('');
+}
+function chip(id){ const s = srcOf(id); return `<span class="chip" data-chip="${id}">${esc(s.app)}</span>`; }
+
+function renderWiki(d){
+  const count = p => d.groups.filter(g => g.current.page === p).length + d.tasks.filter(t => t.page === p || t.owner === p).length;
+  const sec = (title, names) => `<h3>${title}</h3>` + names.map(n =>
+    `<a data-page="${n}" class="${S.page === n ? 'on' : ''}">${esc(n)}<small>${count(n) || ''}</small></a>`).join('');
+  $('nav').innerHTML = sec('Projects', [...S.pages].filter(p => !PEOPLE.includes(p))) + sec('People', PEOPLE);
+  const p = S.page, isPerson = PEOPLE.includes(p);
+  const gs = d.groups.filter(g => g.current.page === p);
+  let h = `<h1>${esc(p)}</h1><div class="kind">${isPerson ? 'Person' : 'Project'} page, written by the agent</div>`;
+  if (S.view === 'dana' && (d.hiddenFacts || d.hiddenTasks))
+    h += `<div class="hidden-note">${d.hiddenFacts} facts and ${d.hiddenTasks} tasks derived from Sam's private accounts are hidden from you.</div>`;
+  const live = gs.filter(g => !(g.current.kind === 'blocker' && g.current.resolvedBy));
+  const resolved = gs.filter(g => g.current.kind === 'blocker' && g.current.resolvedBy);
+  const row = g => {
+    const f = g.current;
+    return `<div class="fact ${S.fresh.has('f' + f.id) ? 'new' : ''}"><div class="k">${esc(f.kind === 'blocker' ? 'blocked on' : f.key)}</div>
+      <div class="v">${esc(f.value)} ${g.history.length ? `<span class="pill">updated x${g.history.length}</span>` : ''}</div>${chip(f.src)}</div>` +
+      g.history.slice().reverse().map(o => `<div class="fact old"><div class="k">was</div><div class="v">${esc(o.value)}</div>${chip(o.src)}</div>`).join('');
+  };
+  h += '<h4>Current state</h4>' + (live.length ? live.map(row).join('') : '<div class="empty">Nothing known yet. Ingest a source.</div>');
+  if (resolved.length) h += '<h4>Resolved</h4>' + resolved.map(g => `<div class="fact old"><div class="k">was blocked on</div><div class="v">${esc(g.current.value)}</div>${chip(g.current.resolvedBy.src)}</div>`).join('');
+  const ts = d.tasks.filter(t => t.page === p || t.owner === p);
+  if (ts.length) h += '<h4>Open work</h4>' + ts.map(t => `<div class="fact"><div class="k">${esc(t.owner)}</div><div class="v">${esc(cap(t.text))}${t.due ? ' <span class="pill">due ' + esc(t.due) + '</span>' : ''}</div>${chip(t.ms[t.ms.length - 1].src)}</div>`).join('');
+  $('page').innerHTML = h;
+  $('stats').textContent = `${d.groups.length} facts, ${S.ingested.size}/${SOURCES.length} sources`;
+}
+
+function renderTasks(d){
+  const ts = d.tasks.slice().sort((a, b) => b.ms[b.ms.length - 1].n - a.ms[a.ms.length - 1].n);
+  $('tcount').textContent = ts.length ? ts.length + ' items' : '';
+  $('tasks').innerHTML = ts.length ? ts.map(t => {
+    const dueChanged = new Set(t.history).size > 1;
+    return `<div class="task ${S.done.has(t.id) ? 'done' : ''} ${S.fresh.has(t.id) ? 'new' : ''}">
+      <input type="checkbox" data-task="${t.id}" ${S.done.has(t.id) ? 'checked' : ''}>
+      <div><div class="t">${esc(cap(t.text))}</div>
+      <div class="m"><span>${esc(t.owner)}</span>${t.due ? `<span class="pill ${dueChanged ? 'r' : ''}">${dueChanged ? 'moved: ' + esc([...new Set(t.history)].join(' > ')) : 'due ' + esc(t.due)}</span>` : ''}
+      ${t.ms.map(m => chip(m.src)).filter((c, i, a) => a.indexOf(c) === i).join(' ')}</div></div></div>`;
+  }).join('') : '<div class="empty">No tasks yet. They appear when a source contains a commitment or a request.</div>';
+}
+
+function render(){
+  const d = derive();
+  renderSources(); renderWiki(d); renderTasks(d);
+  S.fresh.clear();
+}
+function log(html){ const l = $('log'); l.innerHTML += html + '<br>'; l.scrollTop = l.scrollHeight; }
+
+// ---------- actions ----------
+function ingest(id){
+  if (S.ingested.has(id)) return;
+  const src = srcOf(id), r = extract(src);
+  S.ingested.add(id);
+  log(`<b>ingest</b> ${esc(src.app)} (${src.scope}) -> ${r.facts} facts, ${r.tasks} tasks`);
+  const first = S.facts.filter(f => f.src === id).pop();
+  if (first) S.page = first.page;
+  render();
+}
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.dataset.ing) ingest(t.dataset.ing);
+  if (t.dataset.page){ S.page = t.dataset.page; render(); }
+  if (t.dataset.chip){
+    const el = $('src-' + t.dataset.chip); el.scrollIntoView({behavior:'smooth', block:'center'});
+    el.classList.add('hl'); setTimeout(() => el.classList.remove('hl'), 1600);
+  }
+  if (t.dataset.v){
+    S.view = t.dataset.v;
+    document.querySelectorAll('#viewSeg button').forEach(b => b.classList.toggle('on', b === t));
+    log(`<b>view</b> now as ${S.view === 'sam' ? 'Sam (sees personal + shared)' : 'Dana (sees shared only)'}`);
+    render();
+  }
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset.task){ const id = e.target.dataset.task; S.done.has(id) ? S.done.delete(id) : S.done.add(id); render(); }
+});
+$('all').onclick = () => SOURCES.forEach(s => ingest(s.id));
+$('padd').onclick = () => {
+  const text = $('paste').value.trim(); if (!text) return;
+  const n = SOURCES.length + 1;
+  SOURCES.push({id:'s' + n, app:'Pasted note', who:'you', scope:$('pscope').value, owner:'Sam', text});
+  $('paste').value = '';
+  ingest('s' + n);
+  const added = srcOf('s' + n);
+  if (!added.spans.length) log('<b>note</b> no pattern matched. Needs a launch date, "X will ... by <date>", a decision, or a blocker.');
+};
+log('<b>ready</b> 5 synthetic sources connected. Ingest them one at a time and watch the wiki change.');
+render();
+</script>
+</body>
+</html>

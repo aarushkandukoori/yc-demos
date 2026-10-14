@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Redline Bench - sequence + abort-logic toy</title>
+<style>
+:root {
+  --bg: #f4f1ea;
+  --ink: #1d2321;
+  --mut: #6b726e;
+  --card: #fffdf8;
+  --line: #ddd6c7;
+  --a: #0f766e;
+  --b: #c2410c;
+  --c: #4338ca;
+  --bad: #b91c1c;
+  --ok: #15803d;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header { padding: 20px 28px 8px; }
+h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+h1 span { color: var(--a); }
+header p { margin: 4px 0 0; color: var(--mut); max-width: 760px; }
+main {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  gap: 16px;
+  padding: 12px 28px 20px;
+}
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--mut);
+}
+textarea {
+  width: 100%;
+  height: 240px;
+  font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #faf8f2;
+  color: var(--ink);
+  resize: vertical;
+}
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+button, select {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 11px;
+  cursor: pointer;
+  color: var(--ink);
+}
+button:hover { border-color: var(--a); }
+button.go { background: var(--a); color: #fff; border-color: var(--a); font-weight: 600; }
+button.stop { background: var(--bad); color: #fff; border-color: var(--bad); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.err { color: var(--bad); font: 12px ui-monospace, monospace; min-height: 16px; margin-top: 6px; white-space: pre-wrap; }
+.right { display: grid; gap: 16px; align-content: start; }
+.chans { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.ch { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: #fff; }
+.ch b { display: block; font: 600 11px ui-monospace, monospace; }
+.ch i { font-style: normal; font-size: 10px; color: var(--mut); }
+.ch .v { font: 600 20px ui-monospace, monospace; margin-top: 2px; }
+.ch.hot { border-color: var(--bad); background: #fef2f2; }
+.valves { display: flex; gap: 8px; flex-wrap: wrap; }
+.valve {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font: 600 11px ui-monospace, monospace;
+  background: #fff;
+}
+.valve.on { background: var(--a); color: #fff; border-color: var(--a); }
+.valve.reg { color: var(--c); border-color: var(--c); }
+canvas {
+  width: 100%;
+  height: 290px;
+  display: block;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--mut); margin-top: 6px; }
+.legend u { display: inline-block; width: 14px; height: 3px; margin-right: 5px; vertical-align: middle; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 700px) { .two { grid-template-columns: 1fr; } }
+#log {
+  height: 160px;
+  overflow: auto;
+  font: 12px/1.55 ui-monospace, Menlo, monospace;
+  background: #faf8f2;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+#log .abort { color: var(--bad); font-weight: 700; }
+#log .hub { color: var(--c); }
+#log .cmd { color: var(--a); }
+#log .t { color: var(--mut); }
+.runs { display: flex; flex-direction: column; gap: 6px; font-size: 12px; max-height: 160px; overflow: auto; }
+.run {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.run:hover { border-color: var(--c); }
+.tag { font: 600 10px ui-monospace, monospace; padding: 2px 6px; border-radius: 4px; }
+.tag.ok { background: #dcfce7; color: var(--ok); }
+.tag.ab { background: #fee2e2; color: var(--bad); }
+pre {
+  margin: 10px 0 0;
+  font: 12px/1.5 ui-monospace, Menlo, monospace;
+  background: #1d2321;
+  color: #d7e7e1;
+  border-radius: 6px;
+  padding: 10px;
+  overflow: auto;
+  max-height: 220px;
+}
+footer {
+  padding: 14px 0 28px;
+  color: var(--mut);
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+  margin: 0 28px;
+}
+.hint { font-size: 12px; color: var(--mut); margin-top: 6px; }
+code { background: #ece7da; padding: 1px 4px; border-radius: 3px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Redline <span>Bench</span></h1>
+  <p>A toy test-sequence runner. Write a firing sequence and redlines as code, inject a fault into a simulated rig, and watch abort logic fire off live telemetry. All data is synthetic.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Sequence + redlines (as code)</h2>
+    <textarea id="src" spellcheck="false"></textarea>
+    <div class="err" id="err"></div>
+    <div class="row">
+      <button class="go" id="run">Run</button>
+      <button class="stop" id="abortBtn" disabled>Manual abort</button>
+      <select id="speed" title="sim speed">
+        <option value="1">1x</option>
+        <option value="3" selected>3x</option>
+        <option value="8">8x</option>
+      </select>
+    </div>
+    <h2 style="margin-top:14px">Inject fault</h2>
+    <div class="row" style="margin-top:0">
+      <select id="fault">
+        <option value="none">None (nominal)</option>
+        <option value="stuck">Regulator stuck open</option>
+        <option value="drift">Chamber sensor A drifts</option>
+      </select>
+      <button id="gen">Show as Python</button>
+    </div>
+    <div class="hint">Syntax: <code>T+2.0 open V_PRESS</code> <code>T+3 close V_FEED</code> <code>T+0 set REG 60</code> <code>redline P_TANK &gt; 90 for 0.3 -&gt; abort</code>. Abort closes pressurization and feed, opens vent. Try the faults, then loosen or tighten a redline.</div>
+    <pre id="py" style="display:none"></pre>
+  </section>
+
+  <div class="right">
+    <section class="card">
+      <h2>Rig (simulated, mixed protocols)</h2>
+      <div class="chans" id="chans"></div>
+      <div class="valves" id="valves" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <h2>Live telemetry</h2>
+      <canvas id="cv" width="900" height="290"></canvas>
+      <div class="legend">
+        <span><u style="background:#0f766e"></u>P_TANK</span>
+        <span><u style="background:#c2410c"></u>P_CH_A</span>
+        <span><u style="background:#4338ca"></u>T_LINE</span>
+        <span><u style="background:#b9b3a5"></u>previous run P_CH_A</span>
+        <span><u style="background:#b91c1c"></u>redline / abort</span>
+      </div>
+    </section>
+
+    <section class="card two">
+      <div><h2>Event log</h2><div id="log"></div></div>
+      <div><h2>Run history (click to overlay)</h2><div class="runs" id="runs"><span class="hint">No runs yet.</span></div></div>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Daqstra (YC S26). Not affiliated with Daqstra.</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const DEFAULT = `# pressurize the tank, then feed the chamber
+T+0.0 set REG 60
+T+0.5 open V_PRESS
+T+5.0 close V_PRESS
+T+6.0 open V_FEED
+T+11.0 close V_FEED
+T+12.0 open V_VENT
+
+# redlines: checked on every sample
+redline P_TANK > 90 for 0.2 -> abort
+redline P_CH_A > 55 for 0.5 -> abort
+redline T_LINE > 75 for 1.0 -> abort`;
+$('src').value = DEFAULT;
+
+const CH = [
+  { k: 'P_TANK', proto: 'OPC-UA', u: 'psi' },
+  { k: 'P_CH_A', proto: 'NI DAQ', u: 'psi' },
+  { k: 'P_CH_B', proto: 'Modbus', u: 'psi' },
+  { k: 'T_LINE', proto: 'TCP', u: 'C' },
+];
+const VALVES = ['V_PRESS', 'V_FEED', 'V_VENT'];
+const COL = { P_TANK: '#0f766e', P_CH_A: '#c2410c', T_LINE: '#4338ca' };
+
+$('chans').innerHTML = CH.map(c =>
+  `<div class="ch" id="ch_${c.k}"><b>${c.k}</b><i>${c.proto}</i><div class="v" id="v_${c.k}">--</div></div>`
+).join('');
+
+function paintValves(s) {
+  $('valves').innerHTML = VALVES.map(v => {
+    const on = s && s.valves[v];
+    return `<span class="valve ${on ? 'on' : ''}">${v} ${on ? 'OPEN' : 'closed'}</span>`;
+  }).join('') + `<span class="valve reg">REG ${s ? s.reg : 0} psi</span>`;
+}
+paintValves(null);
+
+// ---- parser: text -> {steps, reds}; throws with a line number on bad input
+function parse(text) {
+  const steps = [], reds = [];
+  text.split('\n').forEach((raw, i) => {
+    const l = raw.replace(/#.*/, '').trim();
+    if (!l) return;
+    let m;
+    if ((m = l.match(/^T\+(\d+(?:\.\d+)?)\s+(open|close)\s+(\w+)$/i))) {
+      if (!VALVES.includes(m[3])) throw new Error(`line ${i + 1}: unknown valve ${m[3]} (have ${VALVES.join(', ')})`);
+      steps.push({ t: +m[1], op: m[2].toLowerCase(), arg: m[3], src: l });
+    } else if ((m = l.match(/^T\+(\d+(?:\.\d+)?)\s+set\s+REG\s+(\d+(?:\.\d+)?)$/i))) {
+      steps.push({ t: +m[1], op: 'set', arg: +m[2], src: l });
+    } else if ((m = l.match(/^redline\s+(\w+)\s*>\s*(\d+(?:\.\d+)?)(?:\s+for\s+(\d+(?:\.\d+)?))?\s*->\s*abort$/i))) {
+      if (!CH.some(c => c.k === m[1])) throw new Error(`line ${i + 1}: unknown channel ${m[1]}`);
+      reds.push({ ch: m[1], lim: +m[2], dur: +(m[3] || 0), since: null, src: l });
+    } else {
+      throw new Error(`line ${i + 1}: can't parse "${l}"`);
+    }
+  });
+  if (!steps.length) throw new Error('no steps found');
+  steps.sort((a, b) => a.t - b.t);
+  return { steps, reds };
+}
+
+// ---- rig simulator (a tank, a feed line, a chamber, a vent)
+let S = null, timer = null, history = [], overlay = null, runN = 0;
+const rnd = a => (Math.random() - .5) * 2 * a;
+
+function newState(prog, fault) {
+  return {
+    t: 0, P: 18, C: 0, T: 21, reg: 0,
+    valves: { V_PRESS: false, V_FEED: false, V_VENT: false },
+    fault, prog, next: 0,
+    end: prog.steps[prog.steps.length - 1].t + 4,
+    aborted: null, abortT: null, hubFlag: false, trace: [], faultT: 0,
+  };
+}
+
+function physics(s, dt) {
+  const target = s.fault === 'stuck' ? 130 : s.reg;   // stuck regulator ignores setpoint
+  if (s.valves.V_PRESS && s.P < target) s.P = Math.min(target, s.P + 16 * dt);
+  if (s.valves.V_VENT) {
+    s.P = Math.max(1, s.P - 22 * dt);
+    s.C = Math.max(0, s.C - 30 * dt);
+  }
+  s.P = Math.max(1, s.P - 0.15 * dt);                 // slow leak
+  if (s.valves.V_FEED) {
+    s.C += (0.7 * s.P - s.C) * Math.min(1, 2.5 * dt);
+    s.P -= 0.05 * s.P * dt;
+  } else {
+    s.C = Math.max(0, s.C - 0.4 * dt);
+  }
+  s.T += ((20 + 0.8 * s.C) - s.T) * Math.min(1, 0.35 * dt);
+  if (s.fault === 'drift' && s.t > 3) s.faultT += dt;
+}
+
+function sample(s) {
+  return {
+    t: s.t,
+    P_TANK: s.P + rnd(.25),
+    P_CH_A: s.C + rnd(.25) + (s.fault === 'drift' ? 3.2 * s.faultT : 0),  // sensor A drifts upward
+    P_CH_B: s.C + rnd(.25),
+    T_LINE: s.T + rnd(.2),
+  };
+}
+
+function log(msg, cls = '') {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.innerHTML = `<span class="t">T+${S ? S.t.toFixed(1) : '0.0'}</span> ${msg}`;
+  $('log').appendChild(d);
+  $('log').scrollTop = 1e9;
+}
+
+function doAbort(s, why) {
+  s.aborted = why;
+  s.abortT = s.t;
+  s.valves.V_PRESS = false;
+  s.valves.V_FEED = false;
+  s.valves.V_VENT = true;
+  log(`ABORT - ${why}. Closed V_PRESS, V_FEED; opened V_VENT.`, 'abort');
+}
+
+function tick() {
+  const s = S;
+  const sub = +$('speed').value;            // 50 ms of sim time per substep
+  for (let k = 0; k < sub; k++) {
+    s.t += 0.05;
+    while (!s.aborted && s.next < s.prog.steps.length && s.prog.steps[s.next].t <= s.t) {
+      const st = s.prog.steps[s.next++];
+      if (st.op === 'set') s.reg = st.arg; else s.valves[st.arg] = st.op === 'open';
+      log(`exec: ${st.src.replace(/^T\+\S+\s+/, '')}`, 'cmd');
+    }
+    physics(s, 0.05);
+    const m = sample(s);
+    s.trace.push(m);
+    if (!s.aborted) {
+      for (const r of s.prog.reds) {
+        if (m[r.ch] > r.lim) {
+          if (r.since === null) r.since = s.t;
+          if (s.t - r.since >= r.dur) {
+            doAbort(s, `redline ${r.ch} > ${r.lim} (read ${m[r.ch].toFixed(1)})`);
+            break;
+          }
+        } else r.since = null;
+      }
+    }
+    // "Hub" style cross-check between redundant sensors
+    if (!s.hubFlag && Math.abs(m.P_CH_A - m.P_CH_B) > 6) {
+      s.hubFlag = true;
+      log(`Hub: P_CH_A diverges from redundant P_CH_B by ${Math.abs(m.P_CH_A - m.P_CH_B).toFixed(1)} psi - suspect sensor drift`, 'hub');
+    }
+  }
+  paint(s);
+  if (s.t >= s.end) finish();
+}
+
+function paint(s) {
+  const m = s.trace[s.trace.length - 1];
+  if (!m) return;
+  for (const c of CH) {
+    $('v_' + c.k).textContent = m[c.k].toFixed(1) + ' ' + c.u;
+    const hot = s.prog.reds.some(r => r.ch === c.k && r.since !== null);
+    $('ch_' + c.k).classList.toggle('hot', hot);
+  }
+  paintValves(s);
+  draw(s.trace, s.prog.reds, s.end, s.abortT);
+}
+
+function finish() {
+  clearInterval(timer);
+  timer = null;
+  const s = S;
+  runN++;
+  const peak = Math.max(...s.trace.map(p => p.P_CH_A));
+  history.unshift({ n: runN, trace: s.trace, aborted: s.aborted, fault: s.fault, peak });
+  log(s.aborted ? 'Run ended (aborted).' : 'Run complete, all redlines held.', 't');
+  renderRuns();
+  $('run').disabled = false;
+  $('abortBtn').disabled = true;
+}
+
+function renderRuns() {
+  $('runs').innerHTML = history.map(h =>
+    `<div class="run" data-n="${h.n}"><span>#${h.n} ${h.fault} - peak ${h.peak.toFixed(0)} psi</span>
+     <span class="tag ${h.aborted ? 'ab' : 'ok'}">${h.aborted ? 'ABORTED' : 'NOMINAL'}</span></div>`
+  ).join('');
+  document.querySelectorAll('.run').forEach(e => e.onclick = () => {
+    overlay = history.find(h => h.n == e.dataset.n).trace;
+    log(`Hub: overlaying run #${e.dataset.n} P_CH_A as ghost trace`, 'hub');
+    if (S) draw(S.trace, S.prog.reds, S.end, S.abortT);
+  });
+}
+
+// ---- chart (plain canvas)
+function draw(trace, reds, end, abortT) {
+  const cv = $('cv'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const pad = { l: 36, r: 10, t: 10, b: 22 };
+  g.clearRect(0, 0, W, H);
+  const X = t => pad.l + (t / end) * (W - pad.l - pad.r);
+  const Y = v => H - pad.b - (Math.min(v, 140) / 140) * (H - pad.t - pad.b);
+  g.font = '11px ui-monospace, monospace';
+  g.fillStyle = '#6b726e';
+  g.strokeStyle = '#eee8da';
+  g.lineWidth = 1;
+  for (let v = 0; v <= 140; v += 20) {
+    g.beginPath(); g.moveTo(pad.l, Y(v)); g.lineTo(W - pad.r, Y(v)); g.stroke();
+    g.fillText(v, 4, Y(v) + 4);
+  }
+  for (let t = 0; t <= end; t += 2) g.fillText(t + 's', X(t) - 6, H - 6);
+  g.setLineDash([5, 4]);
+  g.strokeStyle = '#b91c1c';
+  for (const r of reds) {
+    g.beginPath(); g.moveTo(pad.l, Y(r.lim)); g.lineTo(W - pad.r, Y(r.lim)); g.stroke();
+    g.fillStyle = '#b91c1c';
+    g.fillText(r.ch, W - pad.r - 60, Y(r.lim) - 3);
+  }
+  if (abortT != null) {
+    g.beginPath(); g.moveTo(X(abortT), pad.t); g.lineTo(X(abortT), H - pad.b); g.stroke();
+    g.fillText('ABORT', X(abortT) + 4, pad.t + 10);
+  }
+  g.setLineDash([]);
+  const line = (tr, k, col, w) => {
+    g.strokeStyle = col; g.lineWidth = w; g.beginPath();
+    tr.forEach((p, i) => i ? g.lineTo(X(Math.min(p.t, end)), Y(p[k])) : g.moveTo(X(p.t), Y(p[k])));
+    g.stroke();
+  };
+  if (overlay) line(overlay, 'P_CH_A', '#b9b3a5', 2);
+  for (const k in COL) line(trace, k, COL[k], 1.8);
+}
+
+// ---- actions
+$('run').onclick = () => {
+  $('err').textContent = '';
+  let prog;
+  try { prog = parse($('src').value); } catch (e) { $('err').textContent = e.message; return; }
+  $('log').innerHTML = '';
+  overlay = history.length ? history[0].trace : null;
+  S = newState(prog, $('fault').value);
+  log(`Run armed. ${prog.steps.length} steps, ${prog.reds.length} redlines, fault=${S.fault}`, 't');
+  $('run').disabled = true;
+  $('abortBtn').disabled = false;
+  timer = setInterval(tick, 50);
+};
+
+$('abortBtn').onclick = () => {
+  if (S && !S.aborted && timer) doAbort(S, 'manual abort by operator');
+};
+
+$('gen').onclick = () => {
+  try {
+    const p = parse($('src').value);
+    const L = ['from rig import Sequence', '', 'seq = Sequence("static_fire_01")'];
+    for (const s of p.steps) {
+      L.push(s.op === 'set' ? `seq.at(${s.t}).set("REG", ${s.arg})` : `seq.at(${s.t}).${s.op}("${s.arg}")`);
+    }
+    for (const r of p.reds) L.push(`seq.redline("${r.ch}", gt=${r.lim}, hold=${r.dur}, action="abort")`);
+    L.push('', 'seq.run()  # same program the editor just parsed');
+    $('py').textContent = L.join('\n');
+    $('py').style.display = 'block';
+    $('err').textContent = '';
+  } catch (e) { $('err').textContent = e.message; }
+};
+
+draw([], parse(DEFAULT).reds, 16, null);
+</script>
+</body>
+</html>
