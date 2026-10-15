@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blast Radius - column-level change preflight (toy demo)</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d2320;--mut:#69706b;--card:#fffdf8;--line:#d9d3c4;--ok:#2f7d5b;--warn:#c27c0e;--bad:#b83a2e;--sel:#2b5fd9;--up:#7a5bb5}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:22px 28px 10px;max-width:1280px;margin:auto}
+h1{margin:0;font-size:22px;letter-spacing:-.3px}
+h1 span{color:var(--sel)}
+header p{margin:6px 0 0;color:var(--mut);max-width:760px}
+main{max-width:1280px;margin:auto;padding:8px 28px 24px;display:grid;grid-template-columns:1fr 340px;gap:18px}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+#graphwrap{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto}
+#layers{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:34px;position:relative;z-index:1;min-width:720px}
+.layer h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.tbl{border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:12px;overflow:hidden}
+.tbl>b{display:block;padding:5px 9px;background:#ece7da;font:600 12px ui-monospace,Menlo,monospace}
+.col{padding:4px 9px;font:12px ui-monospace,Menlo,monospace;cursor:pointer;border-top:1px solid #f0ece0;display:flex;justify-content:space-between;gap:6px;transition:background .15s}
+.col:hover{background:#eef2fb}
+.col small{color:var(--mut)}
+.col.sel{background:var(--sel);color:#fff}.col.sel small{color:#dbe5ff}
+.col.down{background:#fbe3df;box-shadow:inset 3px 0 var(--bad)}
+.col.down.soft{background:#fdf0d6;box-shadow:inset 3px 0 var(--warn)}
+.col.up{background:#ece6f7;box-shadow:inset 3px 0 var(--up)}
+.col.dead{text-decoration:line-through;color:var(--bad)}
+.dash{border-style:dashed}
+svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:0}
+path{fill:none;stroke:#cfc8b6;stroke-width:1.3}
+path.hit{stroke:var(--bad);stroke-width:2}
+path.hitup{stroke:var(--up);stroke-width:2}
+aside{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.panel h2{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+select,input,button{font:inherit}
+select,input{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;margin-bottom:8px}
+button{padding:8px 12px;border-radius:7px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button:disabled{opacity:.35;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.tabs{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.tabs button{flex:1;border:0;border-radius:0;background:#fff;color:var(--mut)}
+.tabs button.on{background:var(--ink);color:#fff}
+.verdict{padding:10px;border-radius:8px;margin-bottom:8px;font-weight:600}
+.verdict.safe{background:#e0f0e8;color:var(--ok)}
+.verdict.bad{background:#fbe3df;color:var(--bad)}
+.verdict.warn{background:#fdf0d6;color:var(--warn)}
+ul{margin:6px 0;padding-left:18px}
+li{margin:3px 0}
+code{font:12px ui-monospace,Menlo,monospace;background:#efeadc;padding:1px 4px;border-radius:4px}
+pre{margin:6px 0 0;background:#1d2320;color:#d9eadf;padding:10px;border-radius:8px;font:11.5px/1.5 ui-monospace,Menlo,monospace;overflow:auto;white-space:pre-wrap}
+.mut{color:var(--mut)}
+#log{max-height:120px;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:var(--mut)}
+footer{max-width:1280px;margin:auto;padding:6px 28px 28px;color:var(--mut);font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Blast <span>Radius</span> - a column-level change preflight</h1>
+  <p>Click any column, pick a change, and compare a lineage-blind agent with a lineage-aware one. All tables, edges and numbers are synthetic. The graph is live: applying a change really rewrites it.</p>
+</header>
+<main>
+  <section id="graphwrap">
+    <svg id="wires"></svg>
+    <div id="layers"></div>
+  </section>
+  <aside>
+    <div class="panel">
+      <h2>1. Proposed change</h2>
+      <div id="target" class="mut">Select a column in the graph.</div>
+      <select id="kind" disabled>
+        <option value="rename">Rename column</option>
+        <option value="drop">Drop column</option>
+        <option value="semantic">Change meaning (e.g. cents to dollars)</option>
+      </select>
+      <input id="newname" placeholder="new column name" disabled>
+    </div>
+    <div class="panel">
+      <h2>2. Agent preflight</h2>
+      <div class="tabs"><button id="tBlind">Lineage-blind</button><button id="tAware" class="on">Lineage-aware</button></div>
+      <div id="report" class="mut">Nothing to check yet.</div>
+      <div class="row" style="margin-top:10px">
+        <button id="apply" disabled>Apply plan</button>
+        <button id="reset" class="ghost">Reset graph</button>
+      </div>
+    </div>
+    <div class="panel"><h2>Activity</h2><div id="log">ready</div></div>
+  </aside>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Alkera AI (YC S26). Not affiliated with Alkera AI.</footer>
+
+<script>
+// ---- synthetic warehouse -------------------------------------------------
+// ids are stable; `name` is mutable so renames can propagate without breaking edges.
+const SEED = {
+  layers: ["Sources", "Staging", "Marts", "Consumers"],
+  tables: [
+    {id:"raw_orders", layer:0, name:"raw.orders", cols:[["order_id","int"],["customer_id","int"],["amount_cents","int"],["currency","text"],["created_at","ts"],["status","text"]]},
+    {id:"raw_customers", layer:0, name:"raw.customers", cols:[["customer_id","int"],["email","text"],["country","text"]]},
+    {id:"stg_orders", layer:1, name:"stg_orders", cols:[["order_id","int"],["customer_id","int"],["amount_usd","num"],["created_at","ts"],["is_paid","bool"]]},
+    {id:"stg_customers", layer:1, name:"stg_customers", cols:[["customer_id","int"],["country","text"]]},
+    {id:"fct_orders", layer:2, name:"fct_orders", cols:[["order_id","int"],["customer_id","int"],["amount_usd","num"],["country","text"],["order_day","date"]]},
+    {id:"mart_revenue", layer:2, name:"mart_revenue_daily", cols:[["day","date"],["revenue_usd","num"],["orders","int"]]},
+    {id:"dash_exec", layer:3, name:"dashboard: exec_revenue", dash:1, cols:[["revenue_tile","metric"],["country_split","chart"]]},
+    {id:"model_churn", layer:3, name:"model: churn_v3", dash:1, cols:[["feat_spend","feature"],["feat_country","feature"]]},
+    {id:"alert_fin", layer:3, name:"alert: finance_daily", dash:1, cols:[["revenue_check","rule"]]}
+  ],
+  edges: [
+    ["raw_orders.order_id","stg_orders.order_id"],["raw_orders.customer_id","stg_orders.customer_id"],
+    ["raw_orders.amount_cents","stg_orders.amount_usd"],["raw_orders.currency","stg_orders.amount_usd"],
+    ["raw_orders.created_at","stg_orders.created_at"],["raw_orders.status","stg_orders.is_paid"],
+    ["raw_customers.customer_id","stg_customers.customer_id"],["raw_customers.country","stg_customers.country"],
+    ["stg_orders.order_id","fct_orders.order_id"],["stg_orders.customer_id","fct_orders.customer_id"],
+    ["stg_orders.amount_usd","fct_orders.amount_usd"],["stg_orders.created_at","fct_orders.order_day"],
+    ["stg_orders.is_paid","fct_orders.amount_usd"],["stg_customers.country","fct_orders.country"],
+    ["fct_orders.order_day","mart_revenue.day"],["fct_orders.amount_usd","mart_revenue.revenue_usd"],
+    ["fct_orders.order_id","mart_revenue.orders"],
+    ["mart_revenue.revenue_usd","dash_exec.revenue_tile"],["fct_orders.country","dash_exec.country_split"],
+    ["fct_orders.amount_usd","model_churn.feat_spend"],["fct_orders.country","model_churn.feat_country"],
+    ["mart_revenue.revenue_usd","alert_fin.revenue_check"]
+  ]
+};
+const KB = { // verified business definitions, shown in the aware report
+  "raw_orders.amount_cents":"Order value in minor currency units. Verified by finance, 2 sources.",
+  "stg_orders.amount_usd":"Paid order value in USD. Verified; excludes refunds.",
+  "fct_orders.amount_usd":"Source of truth for revenue. Verified.",
+  "mart_revenue.revenue_usd":"Board-reported revenue. Verified; consumed by alerts."
+};
+let S, sel = null, mode = "aware";
+const $ = id => document.getElementById(id);
+const colOf = id => { const [t,c] = id.split("."); const T = S.tables.find(x=>x.id===t); return {T, C:T.cols.find(x=>x.id===c)}; };
+const label = id => { const {T,C} = colOf(id); return T.name + "." + C.name; };
+
+function init(){
+  S = JSON.parse(JSON.stringify(SEED));
+  S.tables.forEach(t => t.cols = t.cols.map(c => ({id:c[0], name:c[0], type:c[1], dead:false})));
+  sel = null;
+  $("target").textContent = "Select a column in the graph.";
+  $("kind").disabled = true; $("newname").disabled = true;
+  render(); report(); log("graph reset: " + S.tables.length + " nodes, " + S.edges.length + " column edges");
+}
+function log(m){ const l=$("log"); l.innerHTML += "<br>&gt; " + m; l.scrollTop = l.scrollHeight; }
+
+// ---- lineage queries -----------------------------------------------------
+function walk(start, dir){
+  const seen = new Map(), q = [[start,0]];
+  while(q.length){
+    const [n,d] = q.shift();
+    for(const [a,b] of S.edges){
+      const [from,to] = dir==="down" ? [a,b] : [b,a];
+      if(from===n && !seen.has(to)){ seen.set(to,d+1); q.push([to,d+1]); }
+    }
+  }
+  return seen;
+}
+const isLeaf = id => S.tables.find(t=>t.id===id.split(".")[0]).layer===3;
+
+// ---- rendering -----------------------------------------------------------
+function render(){
+  const down = sel ? walk(sel,"down") : new Map(), up = sel ? walk(sel,"up") : new Map();
+  const kind = $("kind").value;
+  $("layers").innerHTML = S.layers.map((ln,i)=>
+    `<div class="layer"><h3>${ln}</h3>` + S.tables.filter(t=>t.layer===i).map(t=>
+      `<div class="tbl ${t.dash?"dash":""}"><b>${t.name}</b>` + t.cols.map(c=>{
+        const id=t.id+"."+c.id;
+        const cls=["col"];
+        if(id===sel) cls.push("sel");
+        else if(down.has(id)){ cls.push("down"); if(kind==="rename"&&mode==="aware") cls.push("soft"); }
+        else if(up.has(id)) cls.push("up");
+        if(c.dead) cls.push("dead");
+        return `<div class="${cls.join(" ")}" data-id="${id}" id="c-${id.replace(".","-")}"><span>${c.name}</span><small>${c.type}</small></div>`;
+      }).join("") + `</div>`).join("") + `</div>`).join("");
+  document.querySelectorAll(".col").forEach(el => el.onclick = () => pick(el.dataset.id));
+  drawWires(down, up);
+}
+function drawWires(down, up){
+  const wrap = $("graphwrap"), box = wrap.getBoundingClientRect(), svg = $("wires");
+  svg.setAttribute("viewBox", `0 0 ${wrap.scrollWidth} ${wrap.scrollHeight}`);
+  svg.style.width = wrap.scrollWidth + "px"; svg.style.height = wrap.scrollHeight + "px";
+  let h = "";
+  for(const [a,b] of S.edges){
+    const ea = $("c-"+a.replace(".","-")), eb = $("c-"+b.replace(".","-"));
+    if(!ea||!eb) continue;
+    const ra = ea.getBoundingClientRect(), rb = eb.getBoundingClientRect();
+    const x1 = ra.right-box.left+wrap.scrollLeft, y1 = ra.top-box.top+ra.height/2+wrap.scrollTop;
+    const x2 = rb.left-box.left+wrap.scrollLeft, y2 = rb.top-box.top+rb.height/2+wrap.scrollTop;
+    const m = (x1+x2)/2;
+    const hit = sel && (a===sel||down.has(a)) && down.has(b), hu = sel && (b===sel||up.has(b)) && up.has(a);
+    h += `<path class="${hit?"hit":hu?"hitup":""}" d="M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}"/>`;
+  }
+  svg.innerHTML = h;
+}
+addEventListener("resize", () => render());
+
+// ---- interaction ---------------------------------------------------------
+function pick(id){
+  sel = id; const {T,C} = colOf(id);
+  $("target").innerHTML = `<code>${T.name}.${C.name}</code> <span class="mut">(${C.type})</span>`;
+  $("kind").disabled = false; $("newname").disabled = false;
+  $("newname").value = C.name + "_v2";
+  syncInput(); render(); report(); log("selected " + label(id));
+}
+function syncInput(){ $("newname").style.display = $("kind").value==="rename" ? "" : "none"; }
+$("kind").onchange = () => { syncInput(); render(); report(); };
+$("newname").oninput = report;
+$("tBlind").onclick = () => setMode("blind");
+$("tAware").onclick = () => setMode("aware");
+function setMode(m){ mode=m; $("tBlind").classList.toggle("on",m==="blind"); $("tAware").classList.toggle("on",m==="aware"); render(); report(); }
+$("reset").onclick = init;
+
+// ---- the preflight -------------------------------------------------------
+function analyze(){
+  const kind = $("kind").value, down = walk(sel,"down");
+  const hit = [...down.keys()];
+  const leaves = hit.filter(isLeaf), models = hit.filter(x=>!isLeaf(x));
+  const verified = [sel, ...hit].filter(x=>KB[x]);
+  // rename can be auto-patched everywhere; drop / semantic changes cannot.
+  let sev = "safe";
+  if(kind==="rename") sev = hit.length ? "warn" : "safe";
+  else if(hit.length) sev = leaves.length ? "bad" : "warn";
+  return {kind, hit, leaves, models, verified, sev, down};
+}
+function report(){
+  const R = $("report"), btn = $("apply");
+  if(!sel){ R.innerHTML = "Nothing to check yet."; btn.disabled = true; return; }
+  const a = analyze(), nn = $("newname").value.trim();
+  const bad = a.kind==="rename" && (!/^[a-z_][a-z0-9_]*$/.test(nn) || nn===colOf(sel).C.name);
+  if(mode==="blind"){
+    R.innerHTML = `<div class="verdict safe">Looks safe: 1 file changed</div>
+      <div class="mut">This agent only reads the model that defines the column. It sees no syntax errors and no failing unit test in that file, so it ships.</div>
+      ${a.hit.length?`<p style="color:var(--bad)"><b>What it missed:</b> ${a.hit.length} downstream column(s), including ${a.leaves.length} dashboard/model/alert consumer(s).</p>`:""}`;
+    btn.disabled = bad; btn.textContent = "Apply (blind)"; return;
+  }
+  const v = a.sev==="safe" ? ["safe","No downstream consumers. Safe to apply."]
+        : a.sev==="warn" ? ["warn","Safe only if patched in "+a.hit.length+" place(s)"]
+        : ["bad","Blocked: would break "+a.leaves.length+" consumer(s)"];
+  let html = `<div class="verdict ${v[0]}">${v[1]}</div>`;
+  if(a.hit.length){
+    html += `<div><b>Downstream (${a.hit.length}):</b><ul>` + a.hit.slice(0,9).map(x=>`<li><code>${label(x)}</code> <span class="mut">+${a.down.get(x)} hop</span></li>`).join("") + (a.hit.length>9?`<li class="mut">and ${a.hit.length-9} more</li>`:"") + `</ul></div>`;
+  }
+  if(a.verified.length) html += `<div><b>Knowledge base:</b><ul>` + a.verified.map(x=>`<li><code>${label(x)}</code>: ${KB[x]}</li>`).join("") + `</ul></div>`;
+  if(a.kind==="rename" && a.hit.length) html += `<b>Plan:</b><pre>${patchPlan()}</pre>`;
+  if(a.kind==="drop" && a.hit.length) html += `<div class="mut">Plan: none. A drop cannot be auto-patched. Pick rename, or remove the consumers first.</div>`;
+  if(a.kind==="semantic") html += a.hit.length ? `<div class="mut">Names stay valid but <b>values change</b> in every column above. The agent would re-run those models in a sandbox and diff <code>revenue_usd</code> before merging; metrics with verified definitions need a human.</div>` : "";
+  R.innerHTML = html;
+  btn.textContent = a.kind==="rename" ? "Apply plan" : a.kind==="drop" ? (a.hit.length?"Blocked":"Drop column") : "Run sandbox diff";
+  btn.disabled = bad || (a.kind==="drop" && a.hit.length>0);
+}
+function patchPlan(){
+  const a = analyze(), tables = [...new Set([sel,...a.hit].map(x=>x.split(".")[0]))];
+  return tables.map((t,i)=>`${i+1}. edit ${S.tables.find(x=>x.id===t).name}`).join("\n") + `\n${tables.length+1}. run tests in sandbox\n${tables.length+2}. open PR (CI gate: must pass)`;
+}
+
+$("apply").onclick = () => {
+  const a = analyze(), {C} = colOf(sel), old = C.name;
+  if(mode==="blind"){
+    if(a.kind==="rename") C.name = $("newname").value.trim();
+    if(a.kind==="drop") C.dead = true;
+    const broke = a.kind==="semantic" ? a.leaves.length : a.hit.length;
+    log("<span style='color:var(--bad)'>blind agent shipped; "+broke+" downstream item(s) now silently wrong/broken ("+a.leaves.map(label).join(", ")+")</span>");
+    render(); report(); return;
+  }
+  if(a.kind==="rename"){
+    const nn = $("newname").value.trim(); C.name = nn;
+    const touched = new Set([sel.split(".")[0], ...a.hit.map(x=>x.split(".")[0])]);
+    log("renamed "+old+" to "+nn+"; patched refs in "+touched.size+" model(s), tests green");
+  } else if(a.kind==="drop"){
+    C.dead = true; log("dropped "+label(sel)+" (no consumers)");
+  } else {
+    const delta = (Math.random()*4+96).toFixed(2);
+    log("sandbox diff on "+label(sel)+": "+a.hit.length+" columns changed, daily revenue shifts to "+delta+"% of baseline. Review required before merge.");
+  }
+  render(); report();
+};
+
+init();
+</script>
+</body>
+</html>

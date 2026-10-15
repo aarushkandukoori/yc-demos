@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trace Bench - grade the path, not just the answer</title>
+<style>
+:root{--bg:#f4f1ea;--panel:#fffdf8;--ink:#1d1b17;--mute:#6f6a5e;--line:#ddd6c5;--acc:#b4430f;--ok:#2f7d4f;--bad:#b3261e;--code:#1f1d1a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Georgia,"Iowan Old Style",serif}
+header{padding:28px 32px 8px;max-width:1280px;margin:0 auto}
+h1{margin:0;font-size:28px;letter-spacing:-.5px}
+h1 span{color:var(--acc)}
+.sub{color:var(--mute);margin:4px 0 0;max-width:760px}
+main{max-width:1280px;margin:0 auto;padding:16px 32px 24px;display:grid;grid-template-columns:1.25fr 1fr;gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1.4px;color:var(--mute);font-family:ui-monospace,Menlo,monospace;font-weight:600}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+textarea,input[type=text]{width:100%;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;color:var(--ink)}
+#code{height:250px;background:var(--code);color:#f2ead7;border:0;tab-size:2;resize:vertical}
+button{font:600 13px ui-monospace,Menlo,monospace;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:7px;padding:8px 13px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button:hover{opacity:.85}
+button:disabled{opacity:.35;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.tests{margin-top:10px;display:grid;gap:4px;font:12.5px ui-monospace,Menlo,monospace}
+.t{display:flex;gap:8px;padding:4px 8px;border-radius:5px;background:#f0ece0}
+.t.p{background:#e3f1e8;color:var(--ok)}.t.f{background:#f8e3e0;color:var(--bad)}
+.chat{max-height:210px;overflow:auto;display:grid;gap:8px;margin-bottom:10px}
+.msg{padding:8px 10px;border-radius:8px;font-size:13.5px;background:#f0ece0}
+.msg.me{background:#ece3d0;justify-self:end;max-width:90%}
+.msg pre{margin:6px 0;background:var(--code);color:#f2ead7;padding:8px;border-radius:6px;font-size:12px;white-space:pre-wrap}
+.tl{max-height:300px;overflow:auto;border-left:2px solid var(--line);margin-left:6px}
+.ev{padding:5px 8px 5px 12px;position:relative;font-size:13px;border-radius:0 6px 6px 0}
+.ev::before{content:"";position:absolute;left:-6px;top:11px;width:10px;height:10px;border-radius:50%;background:var(--mute);border:2px solid var(--panel)}
+.ev.run::before{background:var(--ok)}.ev.ask::before{background:#3b6fb6}.ev.accept::before{background:var(--acc)}.ev.submit::before{background:var(--ink)}
+.ev.hl{background:#fbe6d6}
+.ev time{color:var(--mute);font:11px ui-monospace,Menlo,monospace;margin-right:6px}
+.empty{color:var(--mute);font-style:italic;font-size:13px}
+.pill{font:600 11px ui-monospace,Menlo,monospace;padding:2px 8px;border-radius:99px;background:#ece3d0;color:var(--mute)}
+#report{max-width:1280px;margin:0 auto;padding:0 32px 24px}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.big{font-size:44px;font-weight:700;letter-spacing:-1px;line-height:1}
+.big small{font-size:14px;color:var(--mute);font-weight:400}
+.dim{padding:10px 0;border-top:1px solid var(--line)}
+.dim:first-of-type{border-top:0}
+.bar{height:8px;background:#ece5d3;border-radius:5px;overflow:hidden;margin:5px 0}
+.bar i{display:block;height:100%;background:var(--acc);transition:width .5s}
+.dim .hd{display:flex;justify-content:space-between;font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:600}
+.note{font-size:13.5px;color:#443f35;cursor:pointer;padding:1px 0}
+.note:hover{color:var(--acc)}
+.note b{color:var(--mute);font:11px ui-monospace,Menlo,monospace;font-weight:400}
+.verdict{font-size:15px;margin:8px 0 0}
+footer{max-width:1280px;margin:0 auto;padding:12px 32px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+@media(max-width:900px){main,.cmp{grid-template-columns:1fr}header,main,#report,footer{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Trace <span>Bench</span></h1>
+  <p class="sub">Two candidates can ship the exact same passing code. This toy grades <i>how they got there</i>: every run, edit, AI prompt and accepted suggestion becomes a trajectory event, and the score is computed from the trajectory. Solve the task below (or load a replay), then submit.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Task - mergeIntervals</h2>
+    <p style="margin:0 0 10px">Merge all overlapping or touching intervals. <span class="mono">[[1,4],[4,5]]</span> becomes <span class="mono">[[1,5]]</span>. Input may be unsorted and must not be mutated.</p>
+    <textarea id="code" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="run">Run tests</button>
+      <button class="ghost" id="reset">Reset</button>
+      <span class="pill" id="score">-/-</span>
+      <span style="flex:1"></span>
+      <span class="mono" style="font-size:12px;color:var(--mute)">Replay a candidate:</span>
+      <button class="ghost" data-replay="pray">Paste &amp; pray</button>
+      <button class="ghost" data-replay="method">Methodical</button>
+    </div>
+    <div class="tests" id="tests"></div>
+    <h2 style="margin-top:16px">Walkthrough note (what did you change and why?)</h2>
+    <textarea id="note" style="height:64px" placeholder="Short explanation, like a recorded walkthrough."></textarea>
+    <div class="row"><button id="submit">Submit &amp; grade trajectory</button></div>
+  </section>
+
+  <section style="display:grid;gap:18px;align-content:start">
+    <div class="card">
+      <h2>AI assistant (scripted, synthetic)</h2>
+      <div class="chat" id="chat"><div class="msg">Ask me anything about the task. Try questions mentioning sorting, touching intervals, or mutation. Vague questions get vague answers.</div></div>
+      <input type="text" id="q" placeholder="e.g. why does [[1,4],[4,5]] not merge?">
+      <div class="row"><button id="ask">Ask</button></div>
+    </div>
+    <div class="card">
+      <h2>Trajectory <span id="evn" class="pill">0 events</span></h2>
+      <div class="tl" id="tl"><div class="empty" style="padding:8px 12px">Nothing yet. Run the tests to start.</div></div>
+    </div>
+  </section>
+</main>
+
+<div id="report"></div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Litmus (YC S26). Not affiliated with Litmus. All candidates, suggestions and scores here are synthetic and computed locally in your browser; the grading rules are a toy heuristic, not a validated assessment.</footer>
+
+<script>
+const STARTER = `function mergeIntervals(iv) {
+  const out = [];
+  for (const cur of iv) {
+    const last = out[out.length - 1];
+    if (last && cur[0] < last[1]) last[1] = Math.max(last[1], cur[1]);
+    else out.push(cur);
+  }
+  return out;
+}`;
+const SOLUTION = `function mergeIntervals(iv) {
+  const sorted = iv.map(p => [p[0], p[1]]).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (const cur of sorted) {
+    const last = out[out.length - 1];
+    if (last && cur[0] <= last[1]) last[1] = Math.max(last[1], cur[1]);
+    else out.push(cur);
+  }
+  return out;
+}`;
+
+const TESTS = [
+  ['empty input', [], [], 0],
+  ['basic overlap', [[1,3],[2,6],[8,10],[15,18]], [[1,6],[8,10],[15,18]]],
+  ['touching endpoints', [[1,4],[4,5]], [[1,5]]],
+  ['unsorted input', [[8,10],[1,3],[2,6]], [[1,6],[8,10]]],
+  ['nested interval', [[1,10],[2,3]], [[1,10]]],
+  ['multi-digit starts', [[2,3],[10,12],[11,15]], [[2,3],[10,15]]],
+  ['does not mutate input', [[5,6],[1,2],[2,3]], [[1,3],[5,6]], 1],
+];
+
+const $ = id => document.getElementById(id);
+let ev = [], t0 = null, last = null;
+
+function runTests(src) {
+  let fn;
+  try { fn = new Function(src + '\n;return mergeIntervals;')(); }
+  catch (e) { return { err: String(e), res: [], pass: 0 }; }
+  const res = TESTS.map(([name, inp, exp, chkMut]) => {
+    const copy = JSON.parse(JSON.stringify(inp));
+    try {
+      const out = fn(copy);
+      let ok = JSON.stringify(out) === JSON.stringify(exp);
+      if (chkMut) ok = ok && JSON.stringify(copy) === JSON.stringify(inp);
+      return { name, ok, note: ok ? '' : (chkMut && JSON.stringify(copy) !== JSON.stringify(inp) ? 'input was mutated' : 'got ' + JSON.stringify(out)) };
+    } catch (e) { return { name, ok: false, note: String(e) }; }
+  });
+  return { res, pass: res.filter(r => r.ok).length };
+}
+
+function fmt(ms) { const s = Math.round(ms / 1000); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+
+function add(type, text, extra = {}) {
+  const now = Date.now();
+  if (t0 === null) t0 = now;
+  ev.push({ type, text, t: now - t0, ...extra });
+  renderTL();
+}
+
+function renderTL(hl = []) {
+  $('evn').textContent = ev.length + ' events';
+  $('tl').innerHTML = ev.length ? ev.map((e, i) =>
+    `<div class="ev ${e.type}${hl.includes(i) ? ' hl' : ''}" data-i="${i}"><time>${fmt(e.t)}</time>${esc(e.text)}</div>`).join('')
+    : '<div class="empty" style="padding:8px 12px">Nothing yet. Run the tests to start.</div>';
+  $('tl').scrollTop = 1e6;
+}
+function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+function showTests(r) {
+  $('tests').innerHTML = r.err ? `<div class="t f">syntax error: ${esc(r.err)}</div>` :
+    r.res.map(x => `<div class="t ${x.ok ? 'p' : 'f'}">${x.ok ? 'PASS' : 'FAIL'} ${esc(x.name)} ${x.note ? '<span style="opacity:.7">- ' + esc(x.note) + '</span>' : ''}</div>`).join('');
+  $('score').textContent = r.pass + '/' + TESTS.length + ' passing';
+}
+
+// --- live actions
+$('code').value = STARTER;
+let editTimer = null, lastSnap = STARTER;
+$('code').addEventListener('input', () => {
+  clearTimeout(editTimer);
+  editTimer = setTimeout(commitEdit, 900);
+});
+function commitEdit() {
+  const cur = $('code').value;
+  if (cur === lastSnap) return;
+  const d = cur.length - lastSnap.length;
+  lastSnap = cur;
+  const prev = ev[ev.length - 1];
+  const msg = `edited code (${d >= 0 ? '+' : ''}${d} chars)`;
+  if (prev && prev.type === 'edit') { prev.text = msg; renderTL(); } else add('edit', msg);
+}
+function doRun() {
+  commitEdit();
+  const r = runTests($('code').value);
+  showTests(r);
+  add('run', r.err ? 'ran tests: syntax error' : `ran tests: ${r.pass}/${TESTS.length} passing`, { pass: r.pass });
+  return r;
+}
+$('run').onclick = doRun;
+$('reset').onclick = () => { $('code').value = STARTER; lastSnap = STARTER; ev = []; t0 = null; $('tests').innerHTML = ''; $('score').textContent = '-/-'; $('report').innerHTML = ''; $('note').value = ''; renderTL(); };
+
+// --- scripted assistant: replies depend on what you ask; one suggestion is subtly wrong on purpose
+const PATCH = {
+  badsort: { label: 'iv.sort()', apply: c => c.replace('for (const cur of iv)', 'for (const cur of iv.sort())') },
+  sort: { label: 'numeric sort on a copy', apply: c => c.replace('const out = [];', 'const sorted = iv.map(p => [p[0], p[1]]).sort((a, b) => a[0] - b[0]);\n  const out = [];').replace('of iv)', 'of sorted)') },
+  touch: { label: '< to <=', apply: c => c.replace('cur[0] < last[1]', 'cur[0] <= last[1]') },
+  copy: { label: 'copy each pair', apply: c => c.replace('out.push(cur)', 'out.push([cur[0], cur[1]])') },
+  all: { label: 'full rewrite', apply: () => SOLUTION },
+};
+function reply(q) {
+  const s = q.toLowerCase();
+  if (/numeric|comparator|a\[0\]|\(a, ?b\)/.test(s)) return ['A numeric comparator on a copy avoids both the string-order trap and mutation.', 'sort'];
+  if (/sort|order/.test(s)) return ['Sort the intervals first. Quick fix: call iv.sort() before the loop.', 'badsort'];
+  if (/touch|adjacent|equal|boundary|\[1, ?4\]|merge/.test(s)) return ['Touching intervals share an endpoint, so the comparison should be inclusive.', 'touch'];
+  if (/mutat|copy|input|side effect/.test(s)) return ['You push the caller\'s arrays into the output and then edit them. Push copies instead.', 'copy'];
+  return ['Here is a full rewrite that should handle everything.', 'all'];
+}
+$('ask').onclick = () => {
+  const q = $('q').value.trim(); if (!q) return;
+  const [txt, key] = reply(q), p = PATCH[key];
+  const chat = $('chat');
+  chat.insertAdjacentHTML('beforeend', `<div class="msg me">${esc(q)}</div>`);
+  const div = document.createElement('div'); div.className = 'msg';
+  div.innerHTML = `${esc(txt)}<pre>${esc(p.label)}</pre><button class="ghost">Apply suggestion</button>`;
+  div.querySelector('button').onclick = e => {
+    commitEdit();
+    const before = $('code').value, after = p.apply(before);
+    if (after === before) { e.target.textContent = 'could not apply'; return; }
+    $('code').value = after; lastSnap = after;
+    add('accept', `accepted AI suggestion: ${p.label}`, { key });
+    e.target.disabled = true;
+  };
+  chat.appendChild(div); chat.scrollTop = 1e6;
+  add('ask', `asked AI: "${q.length > 48 ? q.slice(0, 48) + '...' : q}"`, { q });
+  $('q').value = '';
+};
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') $('ask').click(); });
+
+// --- trajectory scoring: each dimension returns evidence pointing at event indexes
+function grade(events, pass, note) {
+  const idx = (f) => events.map((e, i) => f(e) ? i : -1).filter(i => i >= 0);
+  const isChange = e => e.type === 'edit' || e.type === 'accept';
+  const dims = [];
+
+  const corr = pass / TESTS.length * 100;
+  dims.push({ name: 'Correctness', w: .30, s: corr, notes: [{ t: `Final code passes ${pass}/${TESTS.length} hidden-style tests.`, ev: idx(e => e.type === 'submit') }] });
+
+  // verification: every batch of changes should be followed by a run before submit
+  let pending = false, ver = 0, unver = 0, unverIdx = [], verIdx = [];
+  events.forEach((e, i) => {
+    if (isChange(e)) { if (!pending) unverIdx.push(i); pending = true; }
+    else if (e.type === 'run' && pending) { ver++; pending = false; verIdx.push(i); unverIdx.pop(); }
+    else if (e.type === 'submit' && pending) { unver++; }
+  });
+  const firstChange = events.findIndex(isChange), firstRun = events.findIndex(e => e.type === 'run');
+  const baseline = firstRun >= 0 && (firstChange < 0 || firstRun < firstChange);
+  const batches = ver + unver;
+  const vr = batches ? ver / batches : 0;
+  const vNotes = [];
+  vNotes.push(baseline ? { t: 'Ran the tests before changing anything: diagnosed first.', ev: [firstRun] } : { t: 'Changed code before ever running the tests.', ev: firstChange >= 0 ? [firstChange] : [] });
+  vNotes.push(batches ? { t: `${ver} of ${batches} change batches were verified by a run${unver ? '; the last batch shipped unverified' : ''}.`, ev: unver ? unverIdx.concat(idx(e => e.type === 'submit')) : verIdx } : { t: 'No code changes were made.', ev: [] });
+  dims.push({ name: 'Verification discipline', w: .25, s: Math.round(vr * 70 + (baseline ? 30 : 0)), notes: vNotes });
+
+  // AI direction
+  const accepts = idx(e => e.type === 'accept'), asks = idx(e => e.type === 'ask'), subm = events.findIndex(e => e.type === 'submit');
+  const okAcc = accepts.filter(i => events.slice(i + 1).some(e => e.type === 'run'));
+  const spec = asks.filter(i => events[i].q.length >= 25 && /test|\[|sort|touch|equal|mutat|boundary|adjacent|order|copy|why/i.test(events[i].q));
+  const parts = [], aNotes = [];
+  if (asks.length) { parts.push(spec.length / asks.length * 100); aNotes.push({ t: `${spec.length} of ${asks.length} prompts were specific (named a symptom or concept).`, ev: asks }); }
+  if (accepts.length) { parts.push(okAcc.length / accepts.length * 100); aNotes.push({ t: `${okAcc.length} of ${accepts.length} accepted AI suggestions were checked with a run afterward.`, ev: accepts }); }
+  if (accepts.some(i => events[i].key === 'badsort')) aNotes.push({ t: 'Accepted the lexicographic iv.sort() suggestion (a planted trap): the grader looks at whether it was caught later.', ev: accepts.filter(i => events[i].key === 'badsort') });
+  if (!parts.length) aNotes.push({ t: 'No AI use. Scored neutral; Trace Bench measures direction, not usage.', ev: [] });
+  dims.push({ name: 'Directing the AI', w: .20, s: parts.length ? Math.round(parts.reduce((a, b) => a + b) / parts.length) : 70, notes: aNotes });
+
+  // recovery from regressions
+  const runs = idx(e => e.type === 'run');
+  let drop = -1;
+  for (let k = 1; k < runs.length; k++) if (events[runs[k]].pass < events[runs[k - 1]].pass) drop = runs[k];
+  const lastPass = runs.length ? events[runs[runs.length - 1]].pass : 0;
+  const peak = Math.max(0, ...runs.map(i => events[i].pass));
+  let rec;
+  if (drop < 0) rec = { s: 85, notes: [{ t: runs.length > 1 ? 'No regressions across runs: steady forward progress.' : 'Too few runs to see an iteration pattern.', ev: runs }] };
+  else rec = lastPass >= peak ? { s: 100, notes: [{ t: 'A change made tests worse, and the candidate recovered to the best result.', ev: [drop] }] } : { s: 15, notes: [{ t: 'A change made tests worse and it never recovered.', ev: [drop] }] };
+  dims.push({ name: 'Recovery', w: .10, s: rec.s, notes: rec.notes });
+
+  // comprehension from the walkthrough note
+  const words = note.trim() ? note.trim().split(/\s+/).length : 0;
+  const hits = [/sort|order/i, /equal|touch|adjacent|boundary|<=|inclusive/i, /mutat|copy|side effect/i].filter(r => r.test(note)).length;
+  dims.push({ name: 'Comprehension', w: .15, s: Math.round(Math.min(100, hits / 3 * 70 + Math.min(words, 20) / 20 * 30)), notes: [{ t: words ? `Walkthrough names ${hits} of 3 root causes (ordering, endpoint rule, mutation) in ${words} words.` : 'No walkthrough note: cannot tell whether the candidate understood the fix.', ev: [] }] });
+
+  const total = Math.round(dims.reduce((a, d) => a + d.s * d.w, 0));
+  return { dims, total, outputOnly: Math.round(corr) };
+}
+
+function showReport(g, who) {
+  const verdict = g.total >= g.outputOnly - 10 ? 'Output score and trajectory score agree: the path backs up the result.'
+    : `Same output, different story: the trajectory is ${g.outputOnly - g.total} points weaker than the output suggests.`;
+  $('report').innerHTML = `<div class="card">
+    <h2>Trajectory report - ${esc(who)}</h2>
+    <div class="cmp">
+      <div><div class="big">${g.outputOnly}<small> / 100</small></div><div class="mono" style="font-size:12px;color:var(--mute)">OUTPUT-ONLY GRADE (tests passed)</div></div>
+      <div><div class="big" style="color:var(--acc)">${g.total}<small> / 100</small></div><div class="mono" style="font-size:12px;color:var(--mute)">TRAJECTORY GRADE (weighted)</div></div>
+    </div>
+    <p class="verdict">${verdict} <span style="color:var(--mute)">Click any note to highlight its evidence in the timeline.</span></p>
+    ${g.dims.map((d, i) => `<div class="dim"><div class="hd"><span>${d.name} <span style="color:var(--mute);font-weight:400">x${Math.round(d.w * 100)}%</span></span><span>${d.s}</span></div>
+      <div class="bar"><i style="width:${d.s}%"></i></div>
+      ${d.notes.map((n, j) => `<div class="note" data-d="${i}" data-n="${j}">${esc(n.t)} <b>${n.ev.length ? '[' + n.ev.length + ' event' + (n.ev.length > 1 ? 's' : '') + ']' : ''}</b></div>`).join('')}</div>`).join('')}
+  </div>`;
+  document.querySelectorAll('.note').forEach(el => el.onclick = () => renderTL(g.dims[el.dataset.d].notes[el.dataset.n].ev));
+  $('report').scrollIntoView({ behavior: 'smooth' });
+}
+
+$('submit').onclick = () => {
+  commitEdit();
+  if (!ev.length) { alert('Do something first: run the tests, edit, or ask the assistant.'); return; }
+  const r = runTests($('code').value);
+  showTests(r);
+  add('submit', `submitted: ${r.pass}/${TESTS.length} passing`);
+  showReport(grade(ev, r.pass, $('note').value), 'live session');
+};
+
+// --- replays: pre-recorded synthetic trajectories (pass counts match what the code really scores)
+const REPLAYS = {
+  pray: {
+    who: 'Candidate A "paste & pray"', code: SOLUTION, note: 'Fixed it.',
+    ev: [
+      { type: 'ask', t: 4000, text: 'asked AI: "fix it"', q: 'fix it' },
+      { type: 'accept', t: 9000, text: 'accepted AI suggestion: full rewrite', key: 'all' },
+      { type: 'submit', t: 14000, text: 'submitted: 7/7 passing' },
+    ],
+  },
+  method: {
+    who: 'Candidate B "methodical"', code: SOLUTION,
+    note: 'Three root causes: pairs were not sorted by start, touching endpoints need <= so [1,4],[4,5] merge, and the loop mutated caller arrays. I used a numeric comparator on a copy.',
+    ev: [
+      { type: 'run', t: 20000, text: 'ran tests: 3/7 passing', pass: 3 },
+      { type: 'ask', t: 61000, text: 'asked AI: "why does [[1,4],[4,5]] not merge?"', q: 'why does [[1,4],[4,5]] not merge?' },
+      { type: 'accept', t: 80000, text: 'accepted AI suggestion: < to <=', key: 'touch' },
+      { type: 'run', t: 90000, text: 'ran tests: 4/7 passing', pass: 4 },
+      { type: 'ask', t: 125000, text: 'asked AI: "iv.sort() order"', q: 'sort order' },
+      { type: 'accept', t: 140000, text: 'accepted AI suggestion: iv.sort()', key: 'badsort' },
+      { type: 'run', t: 150000, text: 'ran tests: 3/7 passing', pass: 3 },
+      { type: 'edit', t: 200000, text: 'edited code (+58 chars)' },
+      { type: 'run', t: 215000, text: 'ran tests: 6/7 passing', pass: 6 },
+      { type: 'edit', t: 250000, text: 'edited code (+22 chars)' },
+      { type: 'run', t: 262000, text: 'ran tests: 7/7 passing', pass: 7 },
+      { type: 'submit', t: 280000, text: 'submitted: 7/7 passing' },
+    ],
+  },
+};
+document.querySelectorAll('[data-replay]').forEach(b => b.onclick = () => {
+  const r = REPLAYS[b.dataset.replay];
+  ev = r.ev.map(e => ({ ...e })); t0 = 0;
+  $('code').value = r.code; lastSnap = r.code; $('note').value = r.note;
+  showTests(runTests(r.code)); renderTL();
+  showReport(grade(ev, runTests(r.code).pass, r.note), r.who);
+});
+renderTL();
+</script>
+</body>
+</html>

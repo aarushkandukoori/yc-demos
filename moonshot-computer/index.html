@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Open Loop Ledger - a toy ambient-listening pipeline</title>
+<style>
+:root{--bg:#14171c;--panel:#1c2027;--line:#2b313b;--ink:#e8e6df;--mute:#8d95a3;--amber:#f2b84b;--teal:#5fd1b5;--rose:#ef7b8a;--blue:#7aa7ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:auto}
+h1{margin:0;font-size:26px;letter-spacing:-.02em}
+h1 span{color:var(--amber)}
+header p{margin:6px 0 0;color:var(--mute);max-width:720px}
+main{max-width:1100px;margin:auto;padding:16px 24px 40px;display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--mute);display:flex;justify-content:space-between;align-items:center}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+button{background:#262c36;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--amber)}
+button.primary{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:600}
+button.on{border-color:var(--rose);color:var(--rose)}
+.wave{display:flex;align-items:center;gap:2px;height:34px;margin-bottom:10px}
+.wave i{flex:1;background:var(--teal);border-radius:2px;height:4px;transition:height .12s}
+.wave.paused i{background:var(--line)}
+#stream{height:300px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px}
+.chunk{border-left:3px solid var(--line);padding:6px 10px;background:#181c22;border-radius:0 8px 8px 0;animation:in .25s}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+.chunk small{color:var(--mute);display:block;font-size:11px}
+.chunk mark{background:none;color:var(--amber);border-bottom:1px dashed var(--amber)}
+.chunk .x{float:right;color:var(--mute);cursor:pointer;font-size:12px}
+.chunk .x:hover{color:var(--rose)}
+form{display:flex;gap:8px;margin-top:12px}
+input{flex:1;background:#12151a;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;font:inherit}
+.loop{display:flex;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#181c22;cursor:pointer}
+.loop.closed{opacity:.5;text-decoration:line-through}
+.loop .who{font-size:11px;color:var(--blue)}
+.loop .age{margin-left:auto;font-size:11px;color:var(--mute);white-space:nowrap}
+.loop.stale{border-color:var(--rose)}
+.empty{color:var(--mute);font-style:italic}
+#nudges .nudge{background:#2a2412;border:1px solid #5a4818;border-radius:10px;padding:10px;margin-bottom:8px;animation:in .3s}
+#nudges b{color:var(--amber)}
+svg{width:100%;height:90px;display:block}
+.legend{display:flex;justify-content:space-between;color:var(--mute);font-size:12px;margin-top:4px}
+.stat{display:flex;gap:16px;color:var(--mute);font-size:12px;margin-top:8px;flex-wrap:wrap}
+.stat b{color:var(--ink)}
+footer{max-width:1100px;margin:auto;padding:16px 24px 32px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+.full{grid-column:1/-1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Open Loop <span>Ledger</span></h1>
+  <p>A toy of the ambient-listening idea: speech arrives in short chunks, and a tiny rule-based extractor turns casual talk into promises, deadlines and mood. Nothing leaves this page. All sample speech is synthetic.</p>
+</header>
+<main>
+  <section>
+    <h2><span>1 / Listening stream</span><span id="clock">day 1, 08:00</span></h2>
+    <div class="wave" id="wave"></div>
+    <div class="bar">
+      <button class="primary" id="play">Play the day</button>
+      <button id="step">Next chunk</button>
+      <button id="pause">Pause listening</button>
+      <button id="reset">Reset</button>
+    </div>
+    <div id="stream"></div>
+    <form id="form">
+      <input id="say" placeholder='Say something, e.g. "I promised Dana I would send the deck by Friday"' autocomplete="off">
+      <button>Speak</button>
+    </form>
+    <div class="stat"><span>chunks <b id="s-chunks">0</b></span><span>max chunk <b>30s</b></span><span>promises caught <b id="s-prom">0</b></span><span>deleted <b id="s-del">0</b></span></div>
+  </section>
+
+  <section>
+    <h2><span>2 / Open loops</span><span id="loopcount"></span></h2>
+    <div id="loops"></div>
+    <h2 style="margin-top:14px">3 / Proactive nudges</h2>
+    <div id="nudges"></div>
+  </section>
+
+  <section class="full">
+    <h2><span>4 / Mood trend (word-list score per chunk)</span><span id="trendlabel"></span></h2>
+    <svg id="chart" viewBox="0 0 600 90" preserveAspectRatio="none"></svg>
+    <div class="legend"><span>stressed</span><span>neutral</span><span>upbeat</span></div>
+  </section>
+</main>
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Moonshot (YC S26). Not affiliated with Moonshot.
+  <br>How it works: each chunk goes through (a) commitment patterns like "I'll / I promised / remind me / need to", (b) a person and deadline tagger, (c) closure detection ("sent it", "done with") that retires a loop, and (d) a word-list mood score. Everything shown is recomputed from the stored chunks, so deleting a chunk deletes whatever it caused. Click a loop to toggle it by hand.
+</footer>
+
+<script>
+(function(){
+const SCRIPT = [
+ ["08:05","Ugh, slept badly again. I am already behind on the investor update and I am worried."],
+ ["08:40","Coffee with Maya later. I promised Maya I would send her the intro to Jordan by Friday."],
+ ["09:30","Standup was fine. Remind me to renew the passport, the appointment slot is closing."],
+ ["11:10","Great news, the pilot users loved the new onboarding. Really happy with how it turned out."],
+ ["12:30","Lunch was good. I should call my mom this weekend, I keep forgetting."],
+ ["14:15","Honestly this deadline is stressing me out. Too many things, I am overwhelmed."],
+ ["15:00","I need to email Priya about the contract redline before tomorrow."],
+ ["16:20","Okay, sent the intro to Jordan, done with that one."],
+ ["17:45","Tired and anxious again, third night in a row I am worried about the update."],
+ ["19:10","Dinner with Sam was lovely. I will bring the board game next time."],
+ ["21:00","Finally finished the investor update, submitted it. Relieved."]
+];
+const POS="great happy loved lovely good relieved excited glad proud fun nice fine".split(" ");
+const NEG="ugh stress anxious worried overwhelmed tired behind bad awful badly".split(" ");
+const PROMISE=[/\bi promised ([a-z]+) i would (.+)/i,/\bi (?:need|have|got) to (.+)/i,/\bi (?:should|must) (.+)/i,/\bremind me to (.+)/i,/\bi(?:'ll| will) (.+)/i];
+const CLOSE=/\b(sent|finished|submitted|done with|called|renewed|emailed)\b/i;
+const DAYS=["monday","tuesday","wednesday","thursday","friday","saturday","sunday","tomorrow","tonight","weekend"];
+const STOP=new Set("the a an to and of my her his our it that this with for on in at by i is be".split(" "));
+const NOTNAME=["Okay","Great","Honestly","Lunch","Coffee","Standup","Finally","Dinner","Ugh","Tired","Remind","Say","Really","Too"];
+const STORE=[]; let loops=[], idx=0, timer=null, paused=false, deleted=0, nid=0;
+const nudged=new Set();
+const $=id=>document.getElementById(id);
+const EMPTY_NUDGE='<div class="empty">Nudges appear when a loop goes stale or a mood trend turns.</div>';
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+// waveform
+const wave=$("wave");
+for(let i=0;i<48;i++)wave.appendChild(document.createElement("i"));
+setInterval(()=>{
+  [...wave.children].forEach((b,i)=>{
+    b.style.height=paused?"4px":(4+Math.random()*28*(.4+.6*Math.abs(Math.sin(Date.now()/700+i/4))))+"px";
+  });
+},140);
+
+const words=t=>t.toLowerCase().replace(/[^a-z' ]/g," ").split(/\s+/).filter(Boolean);
+function score(t){
+  let s=0;
+  words(t).forEach(x=>{
+    if(POS.includes(x))s++;
+    if(NEG.some(n=>x.startsWith(n)))s--;
+  });
+  return Math.max(-3,Math.min(3,s));
+}
+const keywords=t=>words(t).filter(w=>!STOP.has(w)&&w.length>3);
+const deadline=t=>DAYS.find(d=>t.toLowerCase().includes(d))||null;
+function who(t){
+  const m=t.match(/\b(?:to|with|for|call|email|promised)\s+([A-Z][a-z]+)/);
+  if(m&&!NOTNAME.includes(m[1]))return m[1];
+  return (t.match(/\b[A-Z][a-z]{2,}\b/g)||[]).find(n=>!NOTNAME.includes(n))||null;
+}
+
+// one pass over a chunk: does it retire a loop? does it open one? what is the mood?
+function analyze(c){
+  const closed=[];
+  if(CLOSE.test(c.text)){
+    const kw=new Set(keywords(c.text));
+    loops.forEach(l=>{
+      if(!l.closed&&(l.kw.some(k=>kw.has(k))||(l.who&&c.text.includes(l.who)))){l.closed=true;closed.push(l)}
+    });
+  }
+  let found=null;
+  if(!closed.length){
+    for(const re of PROMISE){
+      const m=c.text.match(re);
+      if(m){
+        const task=(m[2]||m[1]).replace(/[.!?]+$/,"");
+        found={task:cap(task),who:who(c.text),due:deadline(c.text),kw:keywords(task),at:c.i,closed:false};
+        c.hit=m[0];break;
+      }
+    }
+  }
+  if(found)loops.push(found);
+  c.mood=score(c.text);
+  return {found,closed};
+}
+
+// derived state is always rebuilt from stored chunks, so deleting a chunk deletes what it caused
+function recompute(announce){
+  loops=[];
+  const events=STORE.map((c,i)=>{c.i=i;c.hit=null;return analyze(c)});
+  const last=events[events.length-1];
+  if(announce&&last){
+    if(last.found)nudge("Caught a promise","You said <b>"+esc(last.found.task)+"</b>"+(last.found.who?" (re: "+esc(last.found.who)+")":"")+(last.found.due?", due "+last.found.due:"")+". Keeping it open.");
+    last.closed.forEach(l=>nudge("Loop closed","<b>"+esc(l.task)+"</b> looks done. Retiring it."));
+    staleNudges();
+    trendNudge();
+  }
+  render();
+}
+function staleNudges(){
+  const n=STORE.length;
+  loops.filter(l=>!l.closed&&n-l.at>=4).forEach(l=>{
+    const key="s"+l.task;
+    if(nudged.has(key))return;
+    nudged.add(key);
+    nudge("Still open","<b>"+esc(l.task)+"</b> came up "+(n-l.at)+" chunks ago and nothing since suggests it happened."+(l.due?" Deadline hint: "+l.due+".":""));
+  });
+}
+function trendNudge(){
+  const m=STORE.map(c=>c.mood);
+  if(m.length<4)return;
+  if(m.slice(-3).every(x=>x<0)){
+    const key="t"+m.length;
+    if(nudged.has(key))return;
+    nudged.add(key);
+    nudge("Mood trend","Your last 3 chunks all lean stressed. Worth blocking 30 quiet minutes?");
+  }
+}
+function nudge(title,html){
+  const box=$("nudges");
+  if(box.querySelector(".empty"))box.innerHTML="";
+  const d=document.createElement("div");
+  d.className="nudge";
+  d.innerHTML="<b>"+title+"</b> - "+html;
+  box.prepend(d);
+  while(box.children.length>5)box.lastChild.remove();
+}
+
+function render(){
+  const st=$("stream");
+  st.innerHTML="";
+  STORE.forEach(c=>{
+    const d=document.createElement("div");
+    d.className="chunk";
+    d.style.borderLeftColor=c.mood>0?"var(--teal)":c.mood<0?"var(--rose)":"var(--line)";
+    let t=esc(c.text);
+    if(c.hit)t=t.replace(esc(c.hit),m=>"<mark>"+m+"</mark>");
+    d.innerHTML='<span class="x" title="Delete this chunk and everything derived from it">delete</span><small>'+c.time+" - chunk #"+c.id+" - mood "+(c.mood>0?"+":"")+c.mood+"</small>"+t;
+    d.querySelector(".x").onclick=()=>{STORE.splice(c.i,1);deleted++;recompute(false)};
+    st.appendChild(d);
+  });
+  st.scrollTop=st.scrollHeight;
+
+  const lp=$("loops"),n=STORE.length;
+  if(!loops.length)lp.innerHTML='<div class="empty">Nothing yet. Press play or speak a promise.</div>';
+  else{
+    lp.innerHTML="";
+    [...loops].sort((a,b)=>a.closed-b.closed).forEach(l=>{
+      const stale=!l.closed&&n-l.at>=4;
+      const d=document.createElement("div");
+      d.className="loop"+(l.closed?" closed":"")+(stale?" stale":"");
+      d.innerHTML="<div><div>"+esc(l.task)+'</div><div class="who">'+(l.who?esc(l.who)+" - ":"")+(l.due?"due "+l.due:"no deadline heard")+'</div></div><div class="age">'+(l.closed?"closed":stale?"stale":"open")+"</div>";
+      d.onclick=()=>{l.closed=!l.closed;render()};
+      lp.appendChild(d);
+    });
+  }
+  $("loopcount").textContent=loops.filter(l=>!l.closed).length+" open / "+loops.length+" total";
+  $("s-chunks").textContent=n;
+  $("s-prom").textContent=loops.length;
+  $("s-del").textContent=deleted;
+  $("clock").textContent=n?STORE[n-1].time:"day 1, 08:00";
+  chart();
+}
+
+function chart(){
+  const svg=$("chart"),m=STORE.map(c=>c.mood);
+  if(m.length<2){
+    svg.innerHTML='<text x="10" y="50" fill="#8d95a3" font-size="13">needs two chunks</text>';
+    $("trendlabel").textContent="";
+    return;
+  }
+  const W=600,H=90,x=i=>10+i*(W-20)/(m.length-1),y=v=>H/2-v*(H/2-10)/3;
+  let p="";
+  m.forEach((v,i)=>{p+=(i?"L":"M")+x(i).toFixed(1)+" "+y(v).toFixed(1)});
+  svg.innerHTML='<line x1="0" x2="600" y1="45" y2="45" stroke="#2b313b" stroke-dasharray="4"/><path d="'+p+'" fill="none" stroke="#f2b84b" stroke-width="2.5" vector-effect="non-scaling-stroke"/>'+
+    m.map((v,i)=>'<circle cx="'+x(i)+'" cy="'+y(v)+'" r="3.5" fill="'+(v>0?"#5fd1b5":v<0?"#ef7b8a":"#8d95a3")+'"/>').join("");
+  const avg=m.reduce((a,b)=>a+b,0)/m.length;
+  const recent=m.slice(-3).reduce((a,b)=>a+b,0)/Math.min(3,m.length);
+  $("trendlabel").textContent="avg "+avg.toFixed(2)+" / recent "+recent.toFixed(2)+(recent<avg-.5?" - dipping":recent>avg+.5?" - lifting":"");
+}
+
+function ingest(time,text){
+  if(paused)return false;
+  STORE.push({id:++nid,time,text,i:STORE.length});
+  recompute(true);
+  return true;
+}
+function next(){
+  if(idx>=SCRIPT.length){stop();return}
+  const [t,x]=SCRIPT[idx];
+  if(ingest(t,x))idx++;
+}
+function stop(){clearInterval(timer);timer=null;$("play").textContent="Play the day"}
+
+$("play").onclick=()=>{
+  if(timer){stop();return}
+  $("play").textContent="Stop";
+  timer=setInterval(next,1800);
+};
+$("step").onclick=next;
+$("pause").onclick=()=>{
+  paused=!paused;
+  $("pause").textContent=paused?"Resume listening":"Pause listening";
+  $("pause").classList.toggle("on",paused);
+  wave.classList.toggle("paused",paused);
+};
+$("reset").onclick=()=>{
+  stop();
+  STORE.length=0;loops=[];idx=0;deleted=0;
+  nudged.clear();
+  $("nudges").innerHTML=EMPTY_NUDGE;
+  render();
+};
+$("form").onsubmit=e=>{
+  e.preventDefault();
+  const v=$("say").value.trim();
+  if(!v)return;
+  const d=new Date();
+  const t=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  if(!ingest(t,v.slice(0,300)))nudge("Paused","Listening is paused, so that sentence was never captured.");
+  $("say").value="";
+};
+$("nudges").innerHTML=EMPTY_NUDGE;
+render();
+})();
+</script>
+</body>
+</html>
