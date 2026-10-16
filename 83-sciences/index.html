@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Failure Ledger - a toy demo</title>
+<style>
+:root{--bg:#10120f;--panel:#181b16;--line:#2b3026;--ink:#e8e6dc;--dim:#8f9585;--acc:#d9a441;--ok:#7fc77a;--bad:#e0654f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+header{padding:28px 28px 8px;max-width:1200px;margin:auto}
+h1{font:600 26px/1.2 Georgia,serif;margin:0 0 6px;letter-spacing:.2px}
+h1 span{color:var(--acc)}
+.sub{color:var(--dim);max-width:760px}
+main{max-width:1200px;margin:auto;padding:16px 28px 40px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+h2{margin:0 0 4px;font:600 12px/1 inherit;letter-spacing:1.5px;text-transform:uppercase;color:var(--acc)}
+.hint{color:var(--dim);font-size:12px;margin:0 0 12px}
+.notes{max-height:290px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.note{padding:7px 10px;border-bottom:1px solid var(--line);font-size:12.5px}
+.note:last-child{border:0}
+.note small{color:var(--dim);display:block}
+.t{background:#3a3016;color:#f2c866;border-radius:3px;padding:0 2px}
+.h{background:#183a2e;color:#7fe0b8;border-radius:3px;padding:0 2px}
+.o-ok{background:#1d3a1a;color:var(--ok);border-radius:3px;padding:0 2px}
+.o-bad{background:#43201a;color:var(--bad);border-radius:3px;padding:0 2px}
+.o-mid{background:#3a3516;color:#e6d36a;border-radius:3px;padding:0 2px}
+.rowin{display:flex;gap:8px;margin-top:10px}
+input[type=text]{flex:1;background:#0d0f0c;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit}
+button{background:var(--acc);color:#1a1405;border:0;border-radius:6px;padding:8px 12px;font:600 13px inherit;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:hover{filter:brightness(1.12)}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+th,td{text-align:left;padding:3px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:400}
+.wrap{position:relative}
+canvas{width:100%;height:auto;border-radius:6px;border:1px solid var(--line);cursor:crosshair;display:block}
+#tip{position:absolute;pointer-events:none;background:#000c;border:1px solid var(--line);padding:3px 7px;border-radius:4px;font-size:12px;display:none;white-space:nowrap}
+.ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+label{color:var(--dim);cursor:pointer;user-select:none}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.stat{background:#0d0f0c;border:1px solid var(--line);border-radius:6px;padding:8px}
+.stat b{display:block;font-size:18px;color:var(--ink)}
+.stat span{color:var(--dim);font-size:11px}
+.verdict{border-left:3px solid var(--acc);padding:6px 10px;background:#0d0f0c;margin-top:10px;font-size:12.5px;min-height:56px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--dim);margin-top:6px}
+footer{max-width:1200px;margin:auto;padding:10px 28px 34px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Failure <span>Ledger</span></h1>
+  <p class="sub">A toy of one idea: the runs a lab throws away still carry information. Messy notebook lines are parsed into structured records, then a surrogate model learns from <em>every</em> run, failures included, and picks the next experiment. All data below is synthetic.</p>
+</header>
+<main>
+  <section>
+    <h2>1 / Notebook, as written</h2>
+    <p class="hint">Free text in, structured record out. Highlights show what the parser extracted. Add your own line (try: "Fired at 905 C for 4 hrs, trace secondary phase").</p>
+    <div class="notes" id="notes"></div>
+    <div class="rowin">
+      <input type="text" id="free" placeholder="Type a messy lab note with a temperature, a duration and an outcome...">
+      <button id="addNote">Parse + add</button>
+    </div>
+    <div id="parseMsg" class="hint" style="margin-top:6px"></div>
+    <table><thead><tr><th>#</th><th>T (C)</th><th>time (h)</th><th>score</th><th>class</th></tr></thead><tbody id="rows"></tbody></table>
+  </section>
+
+  <section>
+    <h2>2 / What the data says about phase purity</h2>
+    <p class="hint">Predicted purity over furnace temperature and hold time. Hover to read, click to select a condition.</p>
+    <div class="stats">
+      <div class="stat"><b id="sN">0</b><span>runs logged</span></div>
+      <div class="stat"><b id="sF">0</b><span>would be discarded</span></div>
+      <div class="stat"><b id="sB">-</b><span>best purity seen</span></div>
+      <div class="stat"><b id="sU">-</b><span>mean map uncertainty</span></div>
+    </div>
+    <div class="wrap"><canvas id="cv" width="640" height="400"></canvas><div id="tip"></div></div>
+    <div class="legend"><span>&#9679; success</span><span>&#10005; failure / discarded</span><span>&#9733; suggested next run</span><span id="sel"></span></div>
+    <div class="ctl">
+      <label><input type="checkbox" id="pubOnly"> publication view (hide failed runs from the model)</label>
+    </div>
+    <div class="ctl">
+      <button id="suggest">Run suggested experiment</button>
+      <button class="ghost" id="runSel">Run at selected point</button>
+      <button class="ghost" id="reset">Reset</button>
+    </div>
+    <div class="verdict" id="verdict"></div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by 83 Sciences (YC S26). Not affiliated with 83 Sciences.</footer>
+
+<script>
+// ---------- config ----------
+const TMIN = 600, TMAX = 1100, HMIN = 1, HMAX = 12;
+const BW = 0.12;          // kernel bandwidth in normalized units
+const PRIOR = 0.3, PRIOR_W = 0.05, KAPPA = 0.35;
+const GW = 50, GH = 32;
+
+// ---------- seeded rng ----------
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let R = rng(83);
+
+// ---------- hidden "physics" (the thing the toy lab is probing) ----------
+function truth(T, h){
+  const a = Math.exp(-(((T-855)/55)**2) - (((h-6.5)/2.2)**2));       // main pocket
+  const b = 0.55*Math.exp(-(((T-1010)/35)**2) - (((h-2.5)/1.2)**2)); // small narrow pocket
+  return Math.min(0.99, a + b);
+}
+function measure(T, h){ return Math.max(0, Math.min(0.99, truth(T,h) + (R()-0.5)*0.12)); }
+
+// ---------- note writer (for simulated runs and seed data) ----------
+const OK = ["phase-pure, sharp XRD peaks","single phase by XRD","clean pattern, sharp peaks"];
+const MID = ["trace secondary phase","minor impurity peak near 31 deg","some unreacted precursor"];
+const LOW = ["mixed phases, messy XRD","secondary phase dominates","amorphous hump, no clear peaks"];
+const DEAD = ["pellet cracked, discarded","melted into the crucible, failed","no peaks at all, bad batch"];
+const pick = a => a[Math.floor(R()*a.length)];
+const WHO = ["AK","MR","JL","DS"];
+function writeNote(T, h, s){
+  const out = s>0.75?pick(OK):s>0.45?pick(MID):s>0.15?pick(LOW):pick(DEAD);
+  const f = [
+    `${T} C, ${h} h, air. ${out}.`,
+    `Fired at ${T}C for ${h} hrs - ${out}`,
+    `${WHO[Math.floor(R()*4)]}: furnace ${T} deg C / ${h} hours, ${out}`
+  ];
+  return pick(f);
+}
+
+// ---------- parser: messy text -> structured record ----------
+const RE_T = /(\d{3,4})\s*(?:°|deg(?:rees)?)?\s*C\b/i;
+const RE_H = /(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hours?)\b/i;
+const OUTCOMES = [
+  [/phase-pure|single phase|sharp (?:xrd )?peaks|clean pattern/i, 0.9, "ok"],
+  [/amorphous|no (?:clear )?peaks|cracked|melted|failed|discard|bad batch/i, 0.04, "bad"],
+  [/trace|minor impurity|unreacted/i, 0.55, "mid"],
+  [/mixed phases|secondary phase dominates|messy/i, 0.25, "mid"]
+];
+function parse(text){
+  const mt = text.match(RE_T), mh = text.match(RE_H);
+  if(!mt || !mh) return null;
+  const T = +mt[1], h = +mh[1];
+  if(T<TMIN||T>TMAX||h<HMIN||h>HMAX) return null;
+  let score = 0.2, cls = "mid", om = null;
+  for(const [re,sc,c] of OUTCOMES){ const m = text.match(re); if(m){score=sc;cls=c;om=m[0];break} }
+  const pct = text.match(/(\d{1,3})\s*%/);               // explicit purity wins
+  if(pct){ score = Math.min(1, +pct[1]/100); cls = score>0.75?"ok":score>0.15?"mid":"bad"; om = pct[0]; }
+  return {T,h,score,cls,tm:mt[0],hm:mh[0],om};
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+function highlight(text, p){
+  let s = esc(text);
+  s = s.replace(esc(p.tm), x=>`<span class="t">${x}</span>`);
+  s = s.replace(esc(p.hm), x=>`<span class="h">${x}</span>`);
+  if(p.om) s = s.replace(esc(p.om), x=>`<span class="o-${p.cls}">${x}</span>`);
+  return s;
+}
+
+// ---------- surrogate: kernel regression + data-density uncertainty ----------
+let runs = [];            // {text, T,h,score,cls}
+let pub = false, sel = null, star = null;
+const nT = T => (T-TMIN)/(TMAX-TMIN), nH = h => (h-HMIN)/(HMAX-HMIN);
+const isWin = r => r.cls !== "bad" && r.score >= 0.5;
+function used(){ return pub ? runs.filter(isWin) : runs; }
+function predict(T, h){
+  const u = nT(T), v = nH(h);
+  let sw = PRIOR_W, sy = PRIOR_W*PRIOR;
+  for(const r of used()){
+    const d2 = (nT(r.T)-u)**2 + (nH(r.h)-v)**2;
+    const w = Math.exp(-d2/(2*BW*BW));
+    sw += w; sy += w*r.score;
+  }
+  const mean = sy/sw;
+  const unc = 1/(1+ (sw-PRIOR_W)*2.5);
+  return {mean, unc, ucb: mean + KAPPA*unc};
+}
+
+// ---------- rendering ----------
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height, PADL=44, PADB=30, PW=W-PADL-8, PH=H-PADB-8;
+function ramp(x){ // dark -> teal -> green -> amber
+  const stops=[[16,22,20],[22,70,66],[96,160,110],[236,196,92]];
+  x=Math.max(0,Math.min(0.999,x))*3; const i=Math.floor(x), f=x-i;
+  return stops[i].map((c,k)=>Math.round(c+(stops[i+1][k]-c)*f));
+}
+const px = T => PADL + nT(T)*PW, py = h => 8 + (1-nH(h))*PH;
+function bestCell(){
+  let b=null;
+  for(let i=0;i<GW;i++)for(let j=0;j<GH;j++){
+    const T=TMIN+(i+.5)/GW*(TMAX-TMIN), h=HMIN+(j+.5)/GH*(HMAX-HMIN), p=predict(T,h);
+    if(!b||p.ucb>b.ucb) b={T:Math.round(T/5)*5,h:Math.round(h*2)/2,ucb:p.ucb,mean:p.mean,unc:p.unc};
+  }
+  return b;
+}
+function draw(){
+  ctx.clearRect(0,0,W,H); let usum=0;
+  const cw=PW/GW, ch=PH/GH;
+  for(let i=0;i<GW;i++)for(let j=0;j<GH;j++){
+    const T=TMIN+(i+.5)/GW*(TMAX-TMIN), h=HMIN+(j+.5)/GH*(HMAX-HMIN), p=predict(T,h);
+    usum+=p.unc;
+    const c=ramp(p.mean);
+    const fade = 0.45+0.55*(1-p.unc);               // unexplored areas look washed out
+    ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${fade})`;
+    ctx.fillRect(PADL+i*cw, 8+(GH-1-j)*ch, cw+.5, ch+.5);
+  }
+  ctx.strokeStyle="#2b3026"; ctx.lineWidth=1; ctx.strokeRect(PADL,8,PW,PH);
+  ctx.fillStyle="#8f9585"; ctx.font="11px monospace";
+  for(let T=600;T<=1100;T+=100){ctx.fillText(T,px(T)-12,H-14)}
+  for(let h=2;h<=12;h+=2){ctx.fillText(h,PADL-24,py(h)+4)}
+  ctx.fillText("furnace temp (C)",PADL+PW/2-45,H-2);
+  ctx.save();ctx.translate(11,8+PH/2+30);ctx.rotate(-Math.PI/2);ctx.fillText("hold (h)",0,0);ctx.restore();
+  for(const r of runs){
+    const hidden = pub && !isWin(r);
+    const x=px(r.T), y=py(r.h);
+    ctx.globalAlpha = hidden?0.35:1;
+    if(!isWin(r)){
+      ctx.strokeStyle="#e0654f";ctx.lineWidth=2;ctx.beginPath();
+      ctx.moveTo(x-4,y-4);ctx.lineTo(x+4,y+4);ctx.moveTo(x+4,y-4);ctx.lineTo(x-4,y+4);ctx.stroke();
+    } else {
+      ctx.fillStyle=r.score>0.75?"#7fc77a":"#e6d36a";ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fill();
+      ctx.strokeStyle="#000";ctx.lineWidth=1;ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+  if(star){ctx.fillStyle="#fff";ctx.font="18px sans-serif";ctx.fillText("★",px(star.T)-7,py(star.h)+6)}
+  if(sel){ctx.strokeStyle="#fff";ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.strokeRect(px(sel.T)-8,py(sel.h)-8,16,16);ctx.setLineDash([])}
+  return usum/(GW*GH);
+}
+function render(msg){
+  star=bestCell();
+  const mu=draw();
+  const nb=document.getElementById("notes"); nb.innerHTML="";
+  runs.forEach((r,i)=>{
+    const d=document.createElement("div");d.className="note";
+    d.innerHTML=`${highlight(r.text,r)}<small>entry ${i+1}</small>`;nb.appendChild(d);
+  });
+  nb.scrollTop=nb.scrollHeight;
+  const first=Math.max(0,runs.length-6);
+  document.getElementById("rows").innerHTML=runs.slice(first).map((r,k)=>
+    `<tr><td>${first+k+1}</td><td>${r.T}</td><td>${r.h}</td><td>${r.score.toFixed(2)}</td><td>${r.cls==="bad"?"discard":r.cls==="ok"?"keep":"borderline"}</td></tr>`).join("");
+  const fails=runs.filter(r=>r.score<0.5).length;
+  document.getElementById("sN").textContent=runs.length;
+  document.getElementById("sF").textContent=fails+" ("+Math.round(100*fails/Math.max(1,runs.length))+"%)";
+  document.getElementById("sB").textContent=Math.max(0,...runs.map(r=>r.score)).toFixed(2);
+  document.getElementById("sU").textContent=mu.toFixed(2);
+  document.getElementById("sel").textContent=sel?`selected: ${sel.T} C / ${sel.h} h`:"";
+  document.getElementById("verdict").innerHTML = msg || explain();
+}
+function explain(){
+  const s=star;
+  const base=`Next best run: <b>${s.T} C for ${s.h} h</b> (predicted ${s.mean.toFixed(2)}, uncertainty ${s.unc.toFixed(2)}).`;
+  if(pub) return base+` <span style="color:var(--bad)">Publication view: the model never saw the failures, so every unexplored corner looks promising and it keeps proposing dead zones. Untick to see failures carve the map.</span>`;
+  return base+` Failed runs push nearby predictions down, so the model stops proposing dead zones and spends runs where it is both promising and unexplored.`;
+}
+
+// ---------- actions ----------
+function addRun(text){
+  const p=parse(text);
+  if(!p) return null;
+  runs.push({text,...p}); return p;
+}
+function simulate(T,h){
+  const s=measure(T,h);
+  return addRun(writeNote(T,h,s));
+}
+function seed(){
+  R=rng(83); runs=[]; sel=null;
+  const pts=[[650,3],[700,9],[740,5],[780,2],[790,8],[820,11],[860,6],[880,4],[920,9],[950,6],[980,3],[1040,10],[1070,5],[760,6],[900,2],[1020,2]];
+  pts.forEach(([T,h])=>simulate(T,h));
+  document.getElementById("parseMsg").textContent="";
+  render();
+}
+document.getElementById("addNote").onclick=()=>{
+  const inp=document.getElementById("free"), msg=document.getElementById("parseMsg");
+  const p=addRun(inp.value.trim());
+  if(!p){msg.textContent="Could not find a temperature (600-1100 C) and a duration (1-12 h). Try: 905 C for 4 hrs, trace secondary phase";return}
+  msg.textContent=`Parsed: ${p.T} C, ${p.h} h, outcome "${p.om||"none found"}" -> score ${p.score.toFixed(2)} (${p.cls})`;
+  inp.value="";render();
+};
+document.getElementById("free").addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("addNote").click()});
+document.getElementById("suggest").onclick=()=>{
+  const s=bestCell(), p=simulate(s.T,s.h);
+  render(`Ran <b>${s.T} C / ${s.h} h</b> in the toy lab. Model expected ${s.mean.toFixed(2)}, got <b>${p.score.toFixed(2)}</b> (${isWin(p)?"logged as a success":"a failure, and now it counts too"}).`);
+};
+document.getElementById("runSel").onclick=()=>{
+  if(!sel){document.getElementById("verdict").textContent="Click the map first to select a condition.";return}
+  const p=simulate(sel.T,sel.h);
+  render(`Ran <b>${sel.T} C / ${sel.h} h</b>: score <b>${p.score.toFixed(2)}</b>.`);
+};
+document.getElementById("reset").onclick=seed;
+document.getElementById("pubOnly").onchange=e=>{pub=e.target.checked;render()};
+
+// ---------- canvas interaction ----------
+function pos(e){
+  const r=cv.getBoundingClientRect(), x=(e.clientX-r.left)*W/r.width, y=(e.clientY-r.top)*H/r.height;
+  if(x<PADL||x>PADL+PW||y<8||y>8+PH) return null;
+  return {T:Math.round((TMIN+(x-PADL)/PW*(TMAX-TMIN))/5)*5, h:Math.round((HMIN+(1-(y-8)/PH)*(HMAX-HMIN))*2)/2, cx:e.clientX-r.left, cy:e.clientY-r.top};
+}
+cv.addEventListener("mousemove",e=>{
+  const p=pos(e), tip=document.getElementById("tip");
+  if(!p){tip.style.display="none";return}
+  const q=predict(p.T,p.h);
+  tip.style.display="block";tip.style.left=(p.cx+12)+"px";tip.style.top=(p.cy+12)+"px";
+  tip.textContent=`${p.T} C, ${p.h} h: purity ~${q.mean.toFixed(2)}, unc ${q.unc.toFixed(2)}`;
+});
+cv.addEventListener("mouseleave",()=>document.getElementById("tip").style.display="none");
+cv.addEventListener("click",e=>{const p=pos(e);if(p){sel={T:p.T,h:p.h};render()}});
+
+seed();
+</script>
+</body>
+</html>

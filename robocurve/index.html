@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trialyard - audit a robot policy by trial count</title>
+<style>
+:root{
+  --bg:#14161a;--panel:#1c1f25;--line:#2c313a;--ink:#e8e6df;--mute:#8d93a0;
+  --a:#f2b441;--b:#5fd0c3;--c:#c58cf0;--bad:#ef6a5b;--ok:#8fd16a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{padding:28px 28px 8px;max-width:1120px;margin:auto}
+h1{font:600 26px/1.2 Georgia,serif;margin:0 0 6px;letter-spacing:.2px}
+header p{margin:0;color:var(--mute);max-width:760px}
+main{max-width:1120px;margin:auto;padding:16px 28px 40px;display:grid;grid-template-columns:380px 1fr;gap:18px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{font:600 12px/1 ui-monospace,monospace;text-transform:uppercase;letter-spacing:1.5px;color:var(--mute);margin:0 0 12px}
+label{display:block;margin:10px 0 4px;color:var(--mute);font-size:12px}
+select,input[type=number]{width:100%;background:#101216;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px;font:inherit}
+input[type=range]{width:100%;accent-color:var(--a)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+button{background:#262b33;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--a)}
+button.go{background:var(--a);color:#1a1405;border-color:var(--a);font-weight:700}
+button:disabled{opacity:.5;cursor:wait}
+canvas{width:100%;background:#101216;border-radius:8px;border:1px solid var(--line);display:block}
+.legend{display:flex;gap:14px;margin-top:8px;color:var(--mute);font-size:12px;flex-wrap:wrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.lb{display:grid;grid-template-columns:110px 1fr 150px;gap:10px;align-items:center;margin:10px 0}
+.axis{position:relative;height:22px;background:repeating-linear-gradient(90deg,transparent 0 9.9%,#2c313a 9.9% 10%);border-radius:4px}
+.ci{position:absolute;top:8px;height:6px;border-radius:3px;opacity:.55}
+.pt{position:absolute;top:3px;width:4px;height:16px;border-radius:2px;transform:translateX(-2px)}
+.claim{position:absolute;top:0;width:0;height:22px;border-left:2px dashed var(--bad)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.verdict{margin-top:14px;padding:12px;border-radius:8px;background:#101216;border-left:3px solid var(--mute)}
+.verdict.sep{border-color:var(--ok)}
+.verdict.no{border-color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--mute);font-weight:400}
+.pass{color:var(--ok)}
+.fail{color:var(--bad)}
+.reel{display:flex;gap:3px;flex-wrap:wrap;margin-top:6px}
+.reel i{width:9px;height:14px;border-radius:2px;background:var(--bad);opacity:.8}
+.reel i.p{background:var(--ok)}
+.reel i.hl{outline:2px solid var(--a);outline-offset:1px}
+.stack{display:flex;flex-direction:column;gap:18px}
+footer{max-width:1120px;margin:auto;padding:16px 28px 30px;color:var(--mute);font-size:12px;border-top:1px solid var(--line)}
+.small{font-size:12px;color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Trialyard</h1>
+  <p>A demo reel shows a policy's best moment. An audit shows its rate, with error bars. Run synthetic physical trials below and watch how many attempts it takes before two policies can honestly be told apart.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Eval config</h2>
+    <label>Task</label>
+    <select id="task"></select>
+    <div class="small" id="taskDesc" style="margin-top:6px"></div>
+    <label>Policies under test</label>
+    <div id="pols" class="small"></div>
+    <label>Scene perturbation (object placement jitter): <b id="jv">0.40</b></label>
+    <input type="range" id="jitter" min="0" max="1" step="0.05" value="0.4">
+    <label>Seed</label>
+    <input type="number" id="seed" value="7">
+    <label>Batch size (trials per policy)</label>
+    <select id="batch"><option>5</option><option selected>10</option><option>25</option><option>50</option></select>
+    <div class="row">
+      <button class="go" id="run">Run batch</button>
+      <button id="run1">Run 1 (animated)</button>
+      <button id="reset">Reset</button>
+    </div>
+    <div class="row">
+      <button id="exp">Download trace JSON</button>
+    </div>
+    <p class="small" style="margin-top:14px">All data is synthetic. Each trial draws a grasp error from a seeded RNG; the policy's noise grows with scene jitter at a policy-specific rate. Same seed + same config = same traces.</p>
+  </section>
+
+  <div class="stack">
+    <section class="card">
+      <h2>Grasp scatter - every trial, not just the good ones</h2>
+      <canvas id="cv" width="760" height="360"></canvas>
+      <div class="legend" id="lg"></div>
+    </section>
+
+    <section class="card">
+      <h2>Audited success rate (Wilson 95% interval)</h2>
+      <div id="lb"></div>
+      <div class="small">Dashed red line at 100% appears when a policy has a 3+ trial winning streak - the claim a cherry-picked reel could make.</div>
+      <div class="verdict" id="verdict"></div>
+    </section>
+
+    <section class="card">
+      <h2>Trial strip - green pass, red fail, outlined = the cherry-picked reel</h2>
+      <div id="strips"></div>
+    </section>
+
+    <section class="card">
+      <h2>Latest trace log</h2>
+      <table>
+        <thead><tr><th>#</th><th>policy</th><th>obj offset</th><th>grasp err</th><th>tol</th><th>result</th></tr></thead>
+        <tbody id="log"></tbody>
+      </table>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Robocurve (YC S26). Not affiliated with Robocurve.</footer>
+
+<script>
+// ---------- config (synthetic) ----------
+const TASKS = {
+  pick:   {name: 'Pick mug from table', tol: 0.085, desc: 'Grasp must land within 8.5 cm of the handle.'},
+  drawer: {name: 'Open drawer',         tol: 0.065, desc: 'Tighter tolerance: the handle slot is narrow (6.5 cm).'},
+  fold:   {name: 'Fold towel',          tol: 0.050, desc: 'Deformable object, 5 cm tolerance. Hard for everyone.'}
+};
+const POLS = [
+  {id: 'policy-alpha', col: '--a', base: 0.030, sens: 0.040, desc: 'precise, brittle under jitter'},
+  {id: 'policy-beta',  col: '--b', base: 0.042, sens: 0.012, desc: 'looser, robust under jitter'},
+  {id: 'policy-gamma', col: '--c', base: 0.055, sens: 0.020, desc: 'mid-pack'}
+];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+
+// ---------- seeded RNG ----------
+function mulberry(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(r) {
+  let u = 0;
+  while (!u) u = r();
+  const v = r();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// ---------- stats ----------
+function wilson(k, n, z = 1.96) {
+  if (!n) return [0, 1, 0];
+  const p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d;
+  const h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+  return [Math.max(0, c - h), Math.min(1, c + h), p];
+}
+function longestRun(arr) {
+  let best = 0, bs = 0, cur = 0, cs = 0;
+  arr.forEach((v, i) => {
+    if (v) { if (!cur) cs = i; cur++; if (cur > best) { best = cur; bs = cs; } }
+    else cur = 0;
+  });
+  return [best, bs];
+}
+// trials per arm to separate p1 vs p2 at 95% confidence / 80% power (two-proportion z)
+function needN(p1, p2) {
+  const d = Math.abs(p1 - p2);
+  if (d < 0.005) return Infinity;
+  const pb = (p1 + p2) / 2, za = 1.96, zb = 0.84;
+  const top = za * Math.sqrt(2 * pb * (1 - pb)) + zb * Math.sqrt(p1 * (1 - p1) + p2 * (1 - p2));
+  return Math.ceil(top * top / (d * d));
+}
+
+// ---------- state ----------
+let S, rng;
+function fresh() {
+  S = {trials: [], counter: 0};
+  POLS.forEach(p => S[p.id] = []);
+  rng = mulberry(+$('seed').value || 1);
+  render();
+}
+function runTrial(pol) {
+  const T = TASKS[$('task').value], j = +$('jitter').value;
+  // object lands at a jittered position (meters from nominal)
+  const ox = gauss(rng) * 0.04 * j, oy = gauss(rng) * 0.04 * j;
+  // grasp error: policy noise that grows with jitter, plus partial pass-through of the offset
+  const sd = pol.base + pol.sens * j * 3;
+  const ex = gauss(rng) * sd + ox * 0.6, ey = gauss(rng) * sd + oy * 0.6;
+  const err = Math.hypot(ex, ey);
+  const t = {n: ++S.counter, pol: pol.id, ox, oy, ex, ey, err, tol: T.tol,
+             ok: err <= T.tol, task: $('task').value, jitter: j};
+  S.trials.push(t);
+  S[pol.id].push(t);
+  return t;
+}
+
+// ---------- rendering ----------
+const cv = $('cv'), ctx = cv.getContext('2d');
+function drawScatter(hl) {
+  const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2, sc = 1650; // px per meter
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = '#22262d'; ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  const tol = TASKS[$('task').value].tol;
+  ctx.setLineDash([6, 5]); ctx.strokeStyle = '#8d93a0'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, tol * sc, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#8d93a0'; ctx.font = '11px monospace';
+  ctx.fillText('tolerance ' + (tol * 100).toFixed(1) + ' cm', cx + tol * sc * 0.72, cy - tol * sc * 0.72 - 6);
+  ctx.strokeStyle = '#e8e6df';
+  ctx.beginPath(); ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8); ctx.stroke();
+  S.trials.forEach(t => {
+    const p = POLS.find(q => q.id === t.pol);
+    const x = cx + t.ex * sc, y = cy + t.ey * sc;
+    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7);
+    ctx.fillStyle = css(p.col); ctx.globalAlpha = t.ok ? 0.9 : 0.35; ctx.fill();
+    ctx.globalAlpha = 1;
+    if (!t.ok) {
+      ctx.strokeStyle = css('--bad'); ctx.lineWidth = 1.5; ctx.beginPath();
+      ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke();
+    }
+  });
+  if (hl) {
+    ctx.strokeStyle = hl.ok ? css('--ok') : css('--bad'); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx + hl.ex * sc, cy + hl.ey * sc, hl.r || 10, 0, 7); ctx.stroke();
+  }
+}
+function computeStats() {
+  return POLS.map(p => {
+    const a = S[p.id], k = a.filter(t => t.ok).length, [lo, hi, pt] = wilson(k, a.length);
+    const [run, start] = longestRun(a.map(t => t.ok));
+    return {p, a, k, n: a.length, lo, hi, pt, run, start};
+  });
+}
+function render(hl) {
+  drawScatter(hl);
+  $('lg').innerHTML = POLS.map(p => `<span><span class="dot" style="background:var(${p.col})"></span>${p.id}</span>`).join('') + '<span>x = missed</span>';
+  const stats = computeStats();
+  $('lb').innerHTML = stats.map(s => `
+    <div class="lb">
+      <div style="color:var(${s.p.col})">${s.p.id}</div>
+      <div class="axis">
+        <div class="ci" style="background:var(${s.p.col});left:${s.lo * 100}%;width:${(s.hi - s.lo) * 100}%"></div>
+        ${s.n ? `<div class="pt" style="background:var(${s.p.col});left:${s.pt * 100}%"></div>` : ''}
+        ${s.run >= 3 ? `<div class="claim" style="left:calc(100% - 2px)"></div>` : ''}
+      </div>
+      <div class="num">${s.n ? (s.pt * 100).toFixed(0) + '%' : '-'} <span class="small">[${(s.lo * 100).toFixed(0)}-${(s.hi * 100).toFixed(0)}] n=${s.n}</span></div>
+    </div>`).join('');
+
+  // verdict: best vs runner-up
+  const V = $('verdict'); V.className = 'verdict';
+  const ready = stats.filter(s => s.n > 0).sort((x, y) => y.pt - x.pt);
+  if (ready.length < 2) { V.textContent = 'Run a batch to get an audited ranking.'; }
+  else {
+    const [A, B] = ready;
+    if (A.lo > B.hi) {
+      V.classList.add('sep');
+      V.innerHTML = `<b>${A.p.id} > ${B.p.id}</b> - intervals do not overlap at n=${A.n}/${B.n}. Safe to call this a real gap (${(A.pt * 100).toFixed(0)}% vs ${(B.pt * 100).toFixed(0)}%).`;
+    } else {
+      const need = needN(A.pt, B.pt);
+      V.classList.add('no');
+      V.innerHTML = `<b>Can't rank ${A.p.id} over ${B.p.id} yet.</b> Intervals overlap at n=${A.n}/${B.n}. At the observed gap you'd need ~${isFinite(need) ? need : 'many thousand'} trials per policy for 80% power.`
+        + (A.run >= 3 ? ` Meanwhile a reel of ${A.p.id}'s best ${A.run}-in-a-row would look flawless.` : '');
+    }
+  }
+
+  $('strips').innerHTML = stats.map(s => `
+    <div class="small" style="margin-top:8px;color:var(${s.p.col})">${s.p.id} - best streak ${s.run}</div>
+    <div class="reel">${s.a.map((t, i) =>
+      `<i class="${t.ok ? 'p' : ''} ${s.run >= 2 && i >= s.start && i < s.start + s.run ? 'hl' : ''}"></i>`).join('')
+      || '<span class="small">no trials</span>'}</div>`).join('');
+
+  $('log').innerHTML = S.trials.slice(-8).reverse().map(t => `
+    <tr><td>${t.n}</td>
+    <td style="color:var(${POLS.find(p => p.id === t.pol).col})">${t.pol}</td>
+    <td>${(t.ox * 100).toFixed(1)}, ${(t.oy * 100).toFixed(1)} cm</td>
+    <td>${(t.err * 100).toFixed(1)} cm</td>
+    <td>${(t.tol * 100).toFixed(1)} cm</td>
+    <td class="${t.ok ? 'pass' : 'fail'}">${t.ok ? 'PASS' : 'FAIL'}</td></tr>`).join('');
+}
+
+// ---------- actions ----------
+function runBatch() {
+  const n = +$('batch').value;
+  for (let i = 0; i < n; i++) POLS.forEach(p => runTrial(p));
+  render();
+}
+function runOne() {
+  const btn = $('run1'); btn.disabled = true;
+  const all = S.trials;
+  const queue = POLS.map(p => runTrial(p));
+  const base = all.length - queue.length;
+  let i = 0;
+  (function step() {
+    if (i >= queue.length) { S.trials = all; btn.disabled = false; render(); return; }
+    const t = queue[i++];
+    S.trials = all.slice(0, base + i - 1); // reveal one policy at a time
+    let r = 26;
+    (function ring() {
+      t.r = r; render(t); r -= 2;
+      if (r > 6) requestAnimationFrame(ring); else setTimeout(step, 120);
+    })();
+  })();
+}
+function exportJSON() {
+  const data = {seed: +$('seed').value, task: $('task').value, jitter: +$('jitter').value, trials: S.trials};
+  const blob = new Blob([JSON.stringify(data, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'trialyard-traces.json'; a.click();
+}
+
+// ---------- init ----------
+$('task').innerHTML = Object.entries(TASKS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+function syncTask() { $('taskDesc').textContent = TASKS[$('task').value].desc; }
+$('pols').innerHTML = POLS.map(p => `<div><span class="dot" style="background:var(${p.col})"></span>${p.id} - ${p.desc}</div>`).join('');
+$('task').onchange = () => { syncTask(); fresh(); };
+$('seed').onchange = fresh;
+$('jitter').oninput = e => { $('jv').textContent = (+e.target.value).toFixed(2); };
+$('jitter').onchange = fresh;
+$('run').onclick = runBatch;
+$('run1').onclick = runOne;
+$('reset').onclick = fresh;
+$('exp').onclick = exportJSON;
+syncTask(); fresh(); runBatch();
+</script>
+</body>
+</html>
