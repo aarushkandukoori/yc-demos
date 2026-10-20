@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signature Reversal Bench - a toy drug repurposing ranker</title>
+<style>
+:root {
+  --bg: #0f1417;
+  --panel: #171e23;
+  --line: #27323a;
+  --ink: #e6edf0;
+  --mute: #8a9aa4;
+  --up: #e8825a;
+  --dn: #4fb6a8;
+  --acc: #d9c36a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header { padding: 28px 32px 8px; max-width: 1180px; margin: auto; }
+h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
+header p { margin: 0; color: var(--mute); max-width: 760px; }
+main {
+  max-width: 1180px;
+  margin: auto;
+  padding: 16px 32px;
+  display: grid;
+  grid-template-columns: 300px 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--mute);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.dis {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 8px 10px;
+  border-radius: 7px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.dis small { display: block; color: var(--mute); }
+.dis.on { border-color: var(--acc); background: #1f2a2e; }
+.mod { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
+.mod input[type=range] { flex: 1; }
+.mod span.v { width: 30px; text-align: right; color: var(--mute); font-variant-numeric: tabular-nums; }
+label.chk { display: flex; gap: 8px; align-items: center; margin-top: 10px; color: var(--mute); cursor: pointer; }
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.row:hover { background: #1d262c; }
+.row.sel { border-color: var(--acc); background: #1f2a2e; }
+.rk { width: 22px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.nm { width: 116px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { flex: 1; height: 10px; background: #0f1417; border-radius: 5px; position: relative; overflow: hidden; }
+.bar i { position: absolute; top: 0; bottom: 0; left: 0; background: var(--dn); border-radius: 5px; transition: width .25s; }
+.sc { width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.tag { font-size: 10px; padding: 1px 6px; border-radius: 9px; border: 1px solid var(--line); color: var(--mute); }
+.tag.new { color: var(--acc); border-color: var(--acc); }
+.tag.tox { color: var(--up); border-color: var(--up); }
+#gene { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.mc { font-size: 10px; color: var(--mute); text-align: center; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell { height: 22px; border-radius: 3px; margin-bottom: 3px; cursor: pointer; }
+.cell.off { opacity: .2; }
+#tip { min-height: 42px; margin-top: 10px; color: var(--mute); font-size: 13px; }
+.leg { display: flex; gap: 14px; font-size: 12px; color: var(--mute); margin-top: 8px; flex-wrap: wrap; }
+.leg b { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.stat { display: flex; gap: 18px; margin: 4px 0 12px; }
+.stat div { font-size: 12px; color: var(--mute); }
+.stat strong { display: block; font-size: 20px; color: var(--ink); }
+.wide { grid-column: 2 / span 2; }
+@media (max-width: 1000px) { .wide { grid-column: auto; } }
+footer { max-width: 1180px; margin: 8px auto 36px; padding: 0 32px; color: var(--mute); font-size: 12px; }
+footer hr { border: 0; border-top: 1px solid var(--line); margin-bottom: 14px; }
+button.sm {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--mute);
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  margin-top: 8px;
+}
+button.sm:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Signature Reversal Bench</h1>
+  <p>A toy repurposing engine. A disease pushes gene expression one way; a good candidate drug pushes it back. Pick a disease, weight the biology you trust, mute genes you doubt, or dial in your own molecule. The ranking recomputes live. All data below is synthetic.</p>
+</header>
+<main>
+  <section>
+    <h2>1. Disease</h2>
+    <div id="diseases"></div>
+    <h2 style="margin-top:18px">2. Trust per pathway</h2>
+    <div id="mods"></div>
+    <label class="chk"><input type="checkbox" id="tox" checked> penalize toxicity-pathway hits</label>
+    <label class="chk"><input type="checkbox" id="hide"> hide drugs already approved for this disease</label>
+    <button class="sm" id="reset">reset everything</button>
+  </section>
+
+  <section>
+    <h2>3. Ranked candidates</h2>
+    <div class="stat">
+      <div><strong id="n1">0</strong>candidates</div>
+      <div><strong id="n2">0</strong>repurposing hits</div>
+      <div><strong id="n3">0</strong>flagged tox</div>
+    </div>
+    <div id="rank"></div>
+  </section>
+
+  <section>
+    <h2>4. Why this drug?</h2>
+    <div id="why" style="font-weight:600;margin-bottom:8px"></div>
+    <div id="gene"></div>
+    <div class="leg">
+      <span><b style="background:var(--up)"></b>up</span>
+      <span><b style="background:var(--dn)"></b>down</span>
+      <span>per pathway: top cell disease, bottom cell drug</span>
+    </div>
+    <div id="tip">Click a gene cell to mute it and watch the ranking shift. Hover for per-gene numbers.</div>
+  </section>
+
+  <section class="wide">
+    <h2>5. Design your own molecule</h2>
+    <p style="margin:0 0 8px;color:var(--mute)">Set how hard a hypothetical compound pushes each pathway. It joins the ranking as "Your molecule" so you can see what profile a winner would need.</p>
+    <div id="custom" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px 18px"></div>
+    <button class="sm" id="auto">set to the exact opposite of this disease</button>
+  </section>
+
+  <section class="wide">
+    <h2>How the score works</h2>
+    <p style="margin:0;color:var(--mute)">For each drug, reversal = <code>-cos(disease, drug)</code> over the genes left on, each scaled by its pathway weight. Drugs that strongly push the apoptosis or mitochondria pathways upward take a safety penalty. This is a connectivity-map style heuristic on invented numbers, a demo of the mechanic and nothing more.</p>
+  </section>
+</main>
+<footer><hr>Independent demo built by Aarush Kandukoori, inspired by Atlas Discovery (YC S26). Not affiliated with Atlas Discovery.</footer>
+
+<script>
+// ---------- synthetic data ----------
+const MODS = ["Inflam", "Fibrosis", "Prolif", "Apoptosis", "Lipid", "Mitochon", "Interfer", "Hypoxia"];
+const G = 5; // genes per module
+const GENES = MODS.flatMap((m, i) =>
+  Array.from({ length: G }, (_, j) => ({ id: m.slice(0, 3).toUpperCase() + (j + 1), mod: i })));
+const TOXMODS = new Set([3, 5]); // apoptosis + mitochondria treated as safety-liability pathways
+
+// seeded PRNG so every visit sees the same world
+function rng(seed) {
+  return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+}
+// expand 8 pathway loadings into 40 noisy per-gene values
+function sig(loads, seed, noise) {
+  const r = rng(seed);
+  return GENES.map(g => loads[g.mod] * (0.6 + 0.8 * r()) + (r() - .5) * noise);
+}
+
+const DISEASES = [
+  { name: "Idiopathic fibrosis",   note: "scarring, inflammation",     loads: [.6, 1, .5, -.2, 0, 0, .1, .7] },
+  { name: "Psoriatic disease",     note: "interferon + proliferation", loads: [.9, 0, .8, -.4, .1, 0, .9, 0] },
+  { name: "Fatty liver (MASH)",    note: "lipid + fibrosis",           loads: [.4, .6, 0, 0, 1, -.6, 0, .2] },
+  { name: "Triple-neg breast ca.", note: "proliferation, hypoxia",     loads: [0, .1, 1, -.8, .2, .3, 0, .9] },
+  { name: "Neuroinflammation",     note: "inflammation + mito stress", loads: [1, 0, 0, .4, 0, -.8, .5, .1] }
+];
+DISEASES.forEach((d, i) => d.sig = sig(d.loads, 900 + i * 13, .4));
+
+// [name, pathway loadings, approved-for label]
+const DRUGS = [
+  ["Pirfenex",   [-.5, -1, -.3, 0, 0, 0, 0, -.4],      "Idiopathic fibrosis"],
+  ["Nintedrel",  [-.2, -.9, -.7, .1, 0, 0, 0, -.5],    "Idiopathic fibrosis"],
+  ["Tofacitrol", [-.9, 0, -.4, 0, 0, 0, -.9, 0],       "Psoriatic disease"],
+  ["Apremil",    [-.8, 0, -.2, 0, 0, 0, -.5, 0],       "Psoriatic disease"],
+  ["Resmetrol",  [-.2, -.5, 0, 0, -1, .6, 0, 0],       "Fatty liver (MASH)"],
+  ["Lanifex",    [0, -.2, 0, 0, -.9, 0, 0, -.2],       "Fatty liver (MASH)"],
+  ["Olaparex",   [0, 0, -.6, .8, 0, .2, 0, -.7],       "Triple-neg breast ca."],
+  ["Metformax",  [-.3, -.4, -.5, 0, -.4, .5, 0, -.4],  "Type 2 diabetes"],
+  ["Dexamor",    [-1, -.3, -.2, .1, 0, 0, -.4, 0],     "Asthma"],
+  ["Statidex",   [-.4, -.2, 0, 0, -.8, .1, 0, 0],      "Hyperlipidemia"],
+  ["Rapamex",    [-.3, -.4, -.9, .2, 0, .4, 0, -.8],   "Transplant rejection"],
+  ["Colchimine", [-.7, -.3, -.3, .3, 0, .2, 0, 0],     "Gout"],
+  ["Hydroxar",   [-.5, 0, 0, 0, 0, 0, -.8, 0],         "Lupus"],
+  ["Cisplax",    [0, 0, -.9, 1, 0, .8, 0, 0],          "Testicular cancer"],
+  ["Doxorel",    [.1, 0, -.8, .9, 0, .9, 0, 0],        "Lymphoma"],
+  ["Sildaran",   [-.1, -.3, 0, 0, 0, -.2, 0, -.6],     "Pulmonary hypertension"],
+  ["Pioglix",    [-.4, -.5, 0, 0, -.7, -.1, 0, 0],     "Type 2 diabetes"],
+  ["Minocra",    [-.6, -.2, -.1, 0, 0, -.3, -.2, 0],   "Acne"]
+].map((d, i) => ({ name: d[0], sig: sig(d[1], 100 + i * 7, .5), label: d[2] }));
+
+// ---------- state ----------
+let dis = 0, sel = null;
+let w = MODS.map(() => 1);
+let muted = new Set();
+let mine = MODS.map(() => 0); // custom molecule pathway loadings
+
+function allDrugs() {
+  const out = DRUGS.slice();
+  if (mine.some(v => v !== 0)) out.push({ name: "Your molecule", sig: sig(mine, 4242, 0.1), label: "(hypothetical)" });
+  return out;
+}
+
+// ---------- scoring ----------
+function score(drug) {
+  const D = DISEASES[dis].sig;
+  const W = GENES.map((g, i) => muted.has(i) ? 0 : w[g.mod]);
+  let dot = 0, nd = 0, ng = 0, toxPen = 0;
+  const contrib = [];
+  GENES.forEach((g, i) => {
+    const a = D[i] * W[i], b = drug.sig[i] * W[i];
+    dot += a * b; nd += a * a; ng += b * b;
+    contrib.push(-a * b);
+    if (TOXMODS.has(g.mod) && b > .6) toxPen += b;
+  });
+  const cos = dot / (Math.sqrt(nd * ng) || 1);
+  const tox = toxPen / (G * 2);
+  const penalty = $("tox").checked ? tox * .5 : 0;
+  return { val: -cos - penalty, cos, tox, contrib, flagged: tox > .18 };
+}
+
+// ---------- render ----------
+const $ = id => document.getElementById(id);
+function color(v) {
+  const a = Math.min(1, Math.abs(v) / 1.1);
+  return v > 0 ? `rgba(232,130,90,${.15 + .85 * a})` : `rgba(79,182,168,${.15 + .85 * a})`;
+}
+
+function renderDiseases() {
+  $("diseases").innerHTML = DISEASES.map((d, i) =>
+    `<button class="dis ${i == dis ? "on" : ""}" data-i="${i}">${d.name}<small>${d.note}</small></button>`).join("");
+  $("diseases").querySelectorAll("button").forEach(b => b.onclick = () => {
+    dis = +b.dataset.i; sel = null; renderAll();
+  });
+}
+
+function renderMods() {
+  $("mods").innerHTML = MODS.map((m, i) =>
+    `<div class="mod"><label style="width:70px">${m}</label>
+     <input type="range" min="0" max="2" step=".1" value="${w[i]}" data-i="${i}">
+     <span class="v">${w[i].toFixed(1)}</span></div>`).join("");
+  $("mods").querySelectorAll("input").forEach(el => el.oninput = () => {
+    w[+el.dataset.i] = +el.value;
+    el.nextElementSibling.textContent = (+el.value).toFixed(1);
+    renderRank(); renderGenes();
+  });
+}
+
+function renderCustom() {
+  $("custom").innerHTML = MODS.map((m, i) =>
+    `<div class="mod"><label style="width:62px">${m}</label>
+     <input type="range" min="-1" max="1" step=".1" value="${mine[i]}" data-i="${i}">
+     <span class="v">${mine[i].toFixed(1)}</span></div>`).join("");
+  $("custom").querySelectorAll("input").forEach(el => el.oninput = () => {
+    mine[+el.dataset.i] = +el.value;
+    el.nextElementSibling.textContent = (+el.value).toFixed(1);
+    renderRank(); renderGenes();
+  });
+}
+
+function ranked() {
+  let list = allDrugs().map(d => ({ d, s: score(d), onLabel: d.label === DISEASES[dis].name }));
+  if ($("hide").checked) list = list.filter(x => !x.onLabel);
+  return list.sort((a, b) => b.s.val - a.s.val);
+}
+
+function renderRank() {
+  const list = ranked();
+  if (sel === null || !list.find(x => x.d.name === sel)) sel = list[0] && list[0].d.name;
+  const mx = Math.max(.01, ...list.map(x => Math.abs(x.s.val)));
+  $("rank").innerHTML = list.map((x, i) => {
+    const pct = Math.max(0, x.s.val) / mx * 100;
+    const hit = !x.onLabel && x.s.val > .35;
+    return `<div class="row ${x.d.name == sel ? "sel" : ""}" data-n="${x.d.name}">
+      <span class="rk">${i + 1}</span><span class="nm">${x.d.name}</span>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <span class="sc">${x.s.val.toFixed(2)}</span>
+      ${x.onLabel ? '<span class="tag">on-label</span>' : (hit ? '<span class="tag new">repurpose</span>' : "")}
+      ${x.s.flagged ? '<span class="tag tox">tox</span>' : ""}</div>`;
+  }).join("");
+  $("rank").querySelectorAll(".row").forEach(r => r.onclick = () => { sel = r.dataset.n; renderRank(); renderGenes(); });
+  $("n1").textContent = list.length;
+  $("n2").textContent = list.filter(x => !x.onLabel && x.s.val > .35).length;
+  $("n3").textContent = list.filter(x => x.s.flagged).length;
+}
+
+function renderGenes() {
+  const drug = allDrugs().find(d => d.name === sel);
+  if (!drug) { $("gene").innerHTML = ""; return; }
+  const s = score(drug);
+  $("why").textContent = `${drug.name} (approved for: ${drug.label}) - reversal ${s.val.toFixed(2)}`;
+  let html = "";
+  MODS.forEach((m, mi) => {
+    html += `<div><div class="mc">${m}</div>`;
+    GENES.forEach((g, i) => {
+      if (g.mod !== mi) return;
+      const off = muted.has(i) ? "off" : "";
+      html += `<div class="cell ${off}" data-i="${i}" style="background:${color(DISEASES[dis].sig[i])}"></div>` +
+              `<div class="cell ${off}" data-i="${i}" style="background:${color(drug.sig[i])};margin-bottom:8px"></div>`;
+    });
+    html += "</div>";
+  });
+  $("gene").innerHTML = html;
+  $("gene").querySelectorAll(".cell").forEach(c => {
+    c.onclick = () => {
+      const i = +c.dataset.i;
+      muted.has(i) ? muted.delete(i) : muted.add(i);
+      renderRank(); renderGenes();
+    };
+    c.onmouseenter = () => {
+      const i = +c.dataset.i, g = GENES[i], ct = s.contrib[i];
+      $("tip").textContent = `${g.id} (${MODS[g.mod]}): disease ${DISEASES[dis].sig[i].toFixed(2)}, ` +
+        `drug ${drug.sig[i].toFixed(2)} - ${ct > 0 ? "reverses" : "worsens"} the signal here (${ct.toFixed(2)}).`;
+    };
+  });
+}
+
+function renderAll() { renderDiseases(); renderMods(); renderCustom(); renderRank(); renderGenes(); }
+
+$("tox").onchange = $("hide").onchange = () => { renderRank(); renderGenes(); };
+$("reset").onclick = () => { w = MODS.map(() => 1); mine = MODS.map(() => 0); muted.clear(); renderAll(); };
+$("auto").onclick = () => {
+  mine = DISEASES[dis].loads.map(v => Math.max(-1, Math.min(1, -v)));
+  sel = "Your molecule"; renderCustom(); renderRank(); renderGenes();
+};
+renderAll();
+</script>
+</body>
+</html>

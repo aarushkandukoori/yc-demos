@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cheapest-Plan Solver - an ICHRA toy</title>
+<style>
+:root{--bg:#f5f1e8;--ink:#1d2433;--mut:#6b7385;--card:#fffdf8;--line:#e2dccb;--acc:#c4501b;--ok:#1f7a5a;--bad:#b3261e;--blue:#2b5fa8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 32px 8px;max-width:1180px;margin:auto}
+h1{font:600 28px/1.15 Georgia,"Times New Roman",serif;margin:0 0 6px;letter-spacing:-.3px}
+header p{margin:0;color:var(--mut);max-width:760px}
+main{max-width:1180px;margin:auto;padding:16px 32px 28px;display:grid;grid-template-columns:380px 1fr;gap:20px}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:12px 16px}header{padding:20px 16px 4px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+h2{font:600 12px/1 ui-sans-serif,system-ui;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:0 0 12px}
+.emp{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:#fff;transition:.12s}
+.emp:hover{border-color:#cbbf9f}
+.emp.sel{border-color:var(--acc);box-shadow:0 0 0 2px #c4501b22}
+.emp .top{display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.emp .sub{color:var(--mut);font-size:12px;margin-top:2px;display:flex;justify-content:space-between}
+.save{color:var(--ok);font-weight:600}
+.row{display:grid;grid-template-columns:110px 1fr 56px;gap:8px;align-items:center;margin:9px 0}
+.row label{color:var(--mut);font-size:12px}
+.row output{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+input[type=range]{width:100%;accent-color:var(--acc)}
+input[type=text]{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff}
+button{font:inherit;font-weight:600;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:7px 12px;border-radius:8px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button:hover{opacity:.88}
+.btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:700px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi b{display:block;font:600 22px Georgia,serif;font-variant-numeric:tabular-nums}
+.kpi span{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.07em}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);text-align:right;padding:6px;border-bottom:1px solid var(--line)}
+td{padding:7px 6px;text-align:right;border-bottom:1px solid #efe9d9}
+th:first-child,td:first-child{text-align:left}
+tr.win td{background:#1f7a5a14;font-weight:600}
+tr.bench td:first-child::after{content:" (benchmark)";color:var(--mut);font-weight:400;font-size:11px}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:99px;background:var(--ok);color:#fff;margin-left:6px;vertical-align:1px}
+.bar{height:6px;border-radius:3px;background:#e9e2cf;position:relative;min-width:70px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--blue)}
+tr.win .bar i{background:var(--ok)}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.note{color:var(--mut);font-size:12px;margin-top:8px}
+.why{background:#1f7a5a12;border-left:3px solid var(--ok);padding:8px 12px;border-radius:0 8px 8px 0;margin-top:12px}
+.stack{display:grid;gap:16px;align-content:start}
+pre{background:#1d2433;color:#e8e2d0;padding:12px;border-radius:8px;overflow:auto;font-size:12px;margin:10px 0 0;max-height:260px}
+footer{max-width:1180px;margin:4px auto 0;padding:14px 32px 32px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cheapest-plan solver</h1>
+  <p>A toy of the core idea behind an ICHRA decision layer: for each employee, price every plan on <em>total expected cost</em> (premiums plus what they will actually pay out of pocket), not sticker premium. Pick someone, change their age, household or expected care, and watch the winner flip. All plans and people below are synthetic.</p>
+</header>
+<main>
+  <section class="stack">
+    <div class="card">
+      <h2>Team (synthetic)</h2>
+      <div id="roster"></div>
+      <div class="btns"><button id="add">+ Add employee</button><button class="ghost" id="reset">Reset</button></div>
+    </div>
+    <div class="card" id="editor"></div>
+    <div class="card">
+      <h2>Employer allowance</h2>
+      <div class="row"><label>Monthly / head</label><input type="range" id="allow" min="0" max="900" step="10"><output id="allowv"></output></div>
+      <div class="note">Fixed-dollar contribution, ICHRA style. The employee can pick any plan; employer cost stays capped at this amount.</div>
+    </div>
+  </section>
+  <section>
+    <div class="kpis" id="kpis"></div>
+    <div class="card" style="margin-bottom:16px">
+      <h2 id="ptitle">Plans</h2>
+      <table id="ptable"></table>
+      <div class="why" id="why"></div>
+      <div class="btns"><button class="ghost" id="json">Show decision record (JSON)</button></div>
+      <pre id="jsonout" hidden></pre>
+    </div>
+    <div class="card">
+      <h2>Total yearly cost vs. medical spend</h2>
+      <div id="chart"></div>
+      <div class="legend" id="legend"></div>
+      <div class="note">Each line is one plan: 12 premiums + cost sharing + drug copays at a given allowed-spend level. The dashed vertical line is this person's expected-spend slider; the dot is the cheapest plan at that point. Crossovers are where "cheap premium" stops being cheap.</div>
+    </div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Insurf (YC S26). Not affiliated with Insurf. Plans, prices and people are made-up sample data and are not insurance advice.</footer>
+
+<script>
+// ---- synthetic plan catalog (monthly premium for a 21-year-old, individual deductible/OOP max) ----
+const PLANS = [
+  {id:'bz', name:'Bronze HDHP',       base:238, ded:7000, oop:9200, coins:0.40, rx:45, color:'#8a6d3b'},
+  {id:'bp', name:'Bronze Plus',       base:271, ded:5200, oop:8700, coins:0.30, rx:35, color:'#b8894a'},
+  {id:'sv', name:'Silver Standard',   base:352, ded:4600, oop:8000, coins:0.30, rx:30, color:'#6b7385', bench:true},
+  {id:'sx', name:'Silver Enhanced',   base:381, ded:2400, oop:6500, coins:0.25, rx:25, color:'#2b5fa8'},
+  {id:'gd', name:'Gold Select',       base:431, ded:1500, oop:5200, coins:0.20, rx:15, color:'#c4501b'},
+  {id:'gp', name:'Gold Low-Deductible',base:516, ded:500,  oop:3600, coins:0.10, rx:10, color:'#1f7a5a'},
+];
+// ACA-like 3:1 age curve
+const ageFactor = a => a<=21 ? 1 : Math.min(3, 1 + (a-21)*0.0455 + Math.max(0,a-50)*0.01);
+// spend scenarios: multiplier of expected spend, probability (long right tail like real claims)
+const SCEN = [[0.05,.30],[0.25,.25],[0.6,.20],[1.5,.15],[4,.07],[12,.03]];
+const MEAN = SCEN.reduce((s,[m,p])=>s+m*p,0);
+
+const $ = id => document.getElementById(id);
+const usd = n => (n<0?'-':'')+'$'+Math.round(Math.abs(n)).toLocaleString();
+const esc = s => s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const SEED = [
+  {name:'Maya R.',  age:27, hh:1, spend:900,   meds:false},
+  {name:'Devon K.', age:41, hh:4, spend:6500,  meds:false},
+  {name:'Priya S.', age:34, hh:1, spend:14000, meds:true},
+  {name:'Walt H.',  age:58, hh:2, spend:3200,  meds:true},
+  {name:'Lena O.',  age:23, hh:1, spend:2500,  meds:false},
+];
+let emps = JSON.parse(JSON.stringify(SEED)), sel = 0, allow = 450;
+
+// household: primary at given age, spouse 3 years younger, children at 0.6 each (max 3 charged)
+function hhFactor(e){
+  let f = ageFactor(e.age);
+  if(e.hh>=2) f += ageFactor(Math.max(21,e.age-3));
+  if(e.hh>=3) f += 0.6*Math.min(3, e.hh-2);
+  return f;
+}
+// cost sharing for allowed spend S (family deductible and OOP max ~ 2x individual)
+function oopFor(p,e,S){
+  const k = e.hh>1 ? 2 : 1, ded = p.ded*k, cap = p.oop*k;
+  return S<=ded ? S : Math.min(cap, ded + p.coins*(S-ded));
+}
+function costAt(p,e,S){
+  const prem = p.base*hhFactor(e)*12;
+  const rx = e.meds ? p.rx*12*Math.min(e.hh,2) : 0;
+  const oop = oopFor(p,e,S);
+  return {prem, oop, rx, total:prem+oop+rx};
+}
+// expectation of cost-sharing over the skewed claims distribution
+function expected(p,e){
+  const unit = e.spend*e.hh/MEAN;
+  let oop = 0;
+  for(const [m,w] of SCEN) oop += w*oopFor(p,e,unit*m);
+  const c = costAt(p,e,0);
+  return {prem:c.prem, oop, rx:c.rx, total:c.prem+oop+c.rx};
+}
+function solve(e){
+  const rows = PLANS.map(p=>({p, ...expected(p,e)}));
+  const best = rows.reduce((a,b)=>b.total<a.total?b:a);
+  const bench = rows.find(r=>r.p.bench);
+  const cheapPrem = rows.reduce((a,b)=>b.prem<a.prem?b:a);
+  return {rows, best, bench, cheapPrem, saving:bench.total-best.total};
+}
+
+// ---- rendering ----
+function renderRoster(){
+  $('roster').innerHTML = emps.map((e,i)=>{
+    const r = solve(e);
+    return `<div class="emp ${i===sel?'sel':''}" data-i="${i}">
+      <div class="top"><span>${esc(e.name)}</span><span class="save">${r.saving>0?'saves '+usd(r.saving)+'/yr':'benchmark is best'}</span></div>
+      <div class="sub"><span>Age ${e.age} · household ${e.hh}${e.meds?' · Rx':''}</span><span>${r.best.p.name}</span></div></div>`;
+  }).join('');
+  document.querySelectorAll('.emp').forEach(el=>el.onclick=()=>{sel=+el.dataset.i;render()});
+}
+
+function renderEditor(){
+  const e = emps[sel];
+  $('editor').innerHTML = `<h2>Edit employee</h2>
+    <div class="row"><label>Name</label><input type="text" id="f_name" value="${esc(e.name)}"><span></span></div>
+    <div class="row"><label>Age</label><input type="range" id="f_age" min="18" max="64" value="${e.age}"><output id="o_age">${e.age}</output></div>
+    <div class="row"><label>Household size</label><input type="range" id="f_hh" min="1" max="6" value="${e.hh}"><output id="o_hh">${e.hh}</output></div>
+    <div class="row"><label>Care / person / yr</label><input type="range" id="f_spend" min="0" max="40000" step="250" value="${e.spend}"><output id="o_spend" style="font-size:12px">${usd(e.spend)}</output></div>
+    <div class="row"><label>Monthly prescriptions</label><input type="checkbox" id="f_meds" ${e.meds?'checked':''}><span></span></div>
+    <div class="btns"><button class="ghost" id="del">Remove</button></div>
+    <div class="note">"Care" is average allowed charges per person per year. The solver spreads it over a skewed claims distribution: most years are cheap, a few are catastrophic.</div>`;
+  const bind = (id,key,fmt)=>$(id).oninput=ev=>{
+    e[key] = +ev.target.value;
+    $('o_'+key).textContent = fmt(e[key]);
+    update();
+  };
+  bind('f_age','age',x=>x); bind('f_hh','hh',x=>x); bind('f_spend','spend',usd);
+  $('f_name').oninput = ev=>{e.name = ev.target.value||'Unnamed'; renderRoster()};
+  $('f_meds').onchange = ev=>{e.meds = ev.target.checked; update()};
+  $('del').onclick = ()=>{ if(emps.length>1){emps.splice(sel,1); sel=Math.max(0,sel-1); render()} };
+}
+
+function renderKpis(){
+  let bench=0, best=0, emp=0, switched=0;
+  for(const e of emps){
+    const r = solve(e);
+    bench += r.bench.total; best += r.best.total;
+    emp += Math.min(allow*12, r.best.prem);
+    if(r.best.p.id!==r.bench.p.id) switched++;
+  }
+  const k = (v,l)=>`<div class="kpi"><span>${l}</span><b>${v}</b></div>`;
+  $('kpis').innerHTML =
+    k(usd(bench-best),'Savings / yr vs benchmark')+
+    k(usd((bench-best)/emps.length),'Per employee')+
+    k(switched+' / '+emps.length,'Moved off benchmark')+
+    k(usd(emp),'Employer spend (capped)');
+}
+
+function renderTable(){
+  const e = emps[sel], r = solve(e);
+  $('ptitle').textContent = e.name+' - every plan, priced on expected total cost';
+  const max = Math.max(...r.rows.map(x=>x.total));
+  $('ptable').innerHTML = `<tr><th>Plan</th><th>Premium</th><th>Exp. cost-share</th><th>Rx</th><th>Expected total</th><th style="width:90px"></th></tr>`+
+    r.rows.slice().sort((a,b)=>a.total-b.total).map(x=>`<tr class="${x===r.best?'win':''} ${x.p.bench?'bench':''}">
+      <td>${x.p.name}${x===r.best?'<span class="tag">best</span>':''}</td><td>${usd(x.prem)}</td><td>${usd(x.oop)}</td><td>${usd(x.rx)}</td><td>${usd(x.total)}</td>
+      <td><div class="bar"><i style="width:${(x.total/max*100).toFixed(0)}%"></i></div></td></tr>`).join('');
+  const b = r.best, c = r.cheapPrem;
+  let why;
+  if(b.p.id===c.p.id) why = `<b>${b.p.name}</b> has both the lowest premium and the lowest expected total. With ${usd(e.spend)} of expected care, nothing richer pays for itself.`;
+  else why = `Cheapest sticker price is <b>${c.p.name}</b> (${usd(c.prem)}/yr), but at ${usd(e.spend)} expected care it costs ${usd(c.total)} all-in. <b>${b.p.name}</b> costs ${usd(b.prem-c.prem)} more in premium and still wins by ${usd(c.total-b.total)}.`;
+  if(r.saving>0) why += ` Versus the benchmark silver plan that saves ${usd(r.saving)}/yr.`;
+  const er = Math.min(allow*12, b.prem);
+  why += `<br>Employer pays ${usd(er)} toward premium; the employee covers ${usd(b.prem-er)} of premium plus expected cost-sharing.`;
+  $('why').innerHTML = why;
+  const rec = {employee:e.name, inputs:{age:e.age, household:e.hh, expectedCarePerPerson:e.spend, monthlyRx:e.meds},
+    recommended:b.p.name, expectedAnnualTotal:Math.round(b.total), benchmarkTotal:Math.round(r.bench.total),
+    employerContribution:Math.round(er),
+    ranking:r.rows.slice().sort((a,b)=>a.total-b.total).map(x=>({plan:x.p.name, total:Math.round(x.total)})),
+    note:'synthetic demo data'};
+  $('jsonout').textContent = JSON.stringify(rec, null, 2);
+}
+
+function renderChart(){
+  const e = emps[sel], W=720, H=300, L=56, R=14, T=14, B=34;
+  const xMax = Math.max(60000, e.spend*e.hh*1.5);
+  const xs = Array.from({length:61}, (_,i)=>i/60*xMax);
+  const data = PLANS.map(p=>({p, pts:xs.map(x=>costAt(p,e,x).total)}));
+  const yMax = Math.max(...data.flatMap(d=>d.pts))*1.05;
+  const X = v=>L+v/xMax*(W-L-R), Y = v=>T+(1-v/yMax)*(H-T-B);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cost curves per plan">`;
+  for(let i=0;i<=4;i++){
+    const v = yMax*i/4;
+    s += `<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e8e2d0"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="10" fill="#6b7385">${usd(v)}</text>`;
+  }
+  for(let i=0;i<=4;i++){
+    const v = xMax*i/4;
+    s += `<text x="${X(v)}" y="${H-18}" text-anchor="middle" font-size="10" fill="#6b7385">${usd(v)}</text>`;
+  }
+  s += `<text x="${(L+W-R)/2}" y="${H-3}" text-anchor="middle" font-size="10" fill="#6b7385">household allowed medical spend in the year</text>`;
+  const r = solve(e);
+  for(const d of data){
+    const win = d.p.id===r.best.p.id;
+    s += `<polyline fill="none" stroke="${d.p.color}" stroke-width="${win?3:1.6}" opacity="${win?1:.75}" points="${d.pts.map((y,i)=>X(xs[i]).toFixed(1)+','+Y(y).toFixed(1)).join(' ')}"/>`;
+  }
+  const sx = e.spend*e.hh;
+  const at = PLANS.map(p=>({p, t:costAt(p,e,sx).total})).reduce((a,b)=>b.t<a.t?b:a);
+  s += `<line x1="${X(sx)}" x2="${X(sx)}" y1="${T}" y2="${H-B}" stroke="#1d2433" stroke-dasharray="4 4"/>`;
+  s += `<circle cx="${X(sx)}" cy="${Y(at.t)}" r="5" fill="${at.p.color}" stroke="#fff" stroke-width="2"/></svg>`;
+  $('chart').innerHTML = s;
+  $('legend').innerHTML = PLANS.map(p=>`<span><i style="background:${p.color}"></i>${p.name}</span>`).join('');
+}
+
+function update(){ renderRoster(); renderKpis(); renderTable(); renderChart(); }
+function render(){ renderEditor(); update(); }
+
+$('allow').value = allow; $('allowv').textContent = usd(allow);
+$('allow').oninput = ev=>{allow = +ev.target.value; $('allowv').textContent = usd(allow); update()};
+$('add').onclick = ()=>{
+  emps.push({name:'New hire '+(emps.length+1), age:20+Math.floor(Math.random()*40), hh:1+Math.floor(Math.random()*3), spend:Math.round(Math.random()*12)*500, meds:Math.random()<.3});
+  sel = emps.length-1; render();
+};
+$('reset').onclick = ()=>{
+  emps = JSON.parse(JSON.stringify(SEED)); sel = 0; allow = 450;
+  $('allow').value = 450; $('allowv').textContent = usd(450); render();
+};
+$('json').onclick = ()=>{
+  const o = $('jsonout'); o.hidden = !o.hidden;
+  $('json').textContent = o.hidden ? 'Show decision record (JSON)' : 'Hide decision record';
+};
+render();
+</script>
+</body>
+</html>
