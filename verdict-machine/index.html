@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pre-execution policy gate - toy demo</title>
+<style>
+:root{--bg:#f4f1ea;--card:#fffdf8;--ink:#1d2320;--mute:#6b736e;--line:#ddd7c8;--ok:#1f7a4d;--hold:#b36b00;--block:#b3261e;--acc:#23405a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 6px}
+h1{margin:0;font-size:22px;letter-spacing:-.01em}
+header p{margin:4px 0 0;color:var(--mute);max-width:760px}
+main{display:grid;grid-template-columns:330px 1fr 300px;gap:16px;padding:16px 28px 28px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+label{display:block;font-size:12px;color:var(--mute);margin:10px 0 3px}
+select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--acc)}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:#fff;padding:8px 12px}
+button.ghost{background:transparent;color:var(--acc)}
+button:hover{opacity:.88}
+button:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.pol{border-top:1px solid var(--line);padding:9px 0}
+.pol:first-of-type{border-top:0}
+.pol b{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600}
+.pol small{color:var(--mute);display:block}
+.val{font-variant-numeric:tabular-nums;color:var(--acc);font-weight:600}
+.verdict{border-radius:10px;padding:16px;color:#fff;margin-bottom:12px;transition:background .2s}
+.verdict.ALLOW{background:var(--ok)}.verdict.HOLD{background:var(--hold)}.verdict.BLOCK{background:var(--block)}
+.verdict.IDLE{background:#8a918c}
+.verdict .big{font-size:28px;font-weight:700;letter-spacing:.02em}
+.verdict .sub{opacity:.92}
+.check{display:grid;grid-template-columns:62px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.check:first-child{border-top:0}
+.tag{font-size:11px;font-weight:700;text-align:center;border-radius:4px;padding:3px 0;height:20px;color:#fff}
+.tag.PASS{background:var(--ok)}.tag.HOLD{background:var(--hold)}.tag.BLOCK{background:var(--block)}
+.check span{color:var(--mute);display:block;font-size:12.5px}
+.meter{height:8px;background:#e9e4d6;border-radius:4px;overflow:hidden;margin-top:4px}
+.meter i{display:block;height:100%;background:var(--acc);transition:width .3s}
+.meter i.hot{background:var(--block)}
+.wal{padding:8px 0;border-top:1px solid var(--line)}
+.wal:first-of-type{border-top:0}
+.wal div{display:flex;justify-content:space-between}
+.log{max-height:260px;overflow:auto;font-size:12.5px}
+.log div{padding:5px 0;border-top:1px solid var(--line);display:flex;gap:8px}
+.log em{font-style:normal;font-weight:700;width:48px;flex:none}
+.log .ALLOW em{color:var(--ok)}.log .HOLD em{color:var(--hold)}.log .BLOCK em{color:var(--block)}
+.note{color:var(--mute);font-size:12px;margin-top:8px}
+footer{padding:14px 0 28px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line);margin:0 28px}
+code{background:#ece7d9;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pre-execution policy gate</h1>
+  <p>A toy model of checking a proposed on-chain transaction against an institution's live policies <em>before</em> it is signed. Edit the policies on the left, propose a transaction, and watch the verdict change. All wallets, counterparties and numbers are synthetic.</p>
+</header>
+<main>
+  <section class="card" id="policies">
+    <h2>Active policies</h2>
+    <div class="pol"><b>Per-transaction cap <span class="val" id="v-cap"></span></b>
+      <input type="range" id="cap" min="50000" max="5000000" step="50000" value="1000000">
+      <small>Above cap: BLOCK on hot wallets, HOLD elsewhere.</small></div>
+    <div class="pol"><b>24h outflow ceiling <span class="val" id="v-vel"></span></b>
+      <input type="range" id="vel" min="500000" max="20000000" step="250000" value="5000000">
+      <small>Rolling outflow per wallet. Exceeding it: BLOCK.</small></div>
+    <div class="pol"><b>Counterparty risk limit <span class="val" id="v-risk"></span></b>
+      <input type="range" id="risk" min="10" max="100" step="5" value="60">
+      <small>Unlisted or high-score destinations: HOLD / BLOCK.</small></div>
+    <div class="pol"><b>Quorum above <span class="val" id="v-quo"></span></b>
+      <input type="range" id="quo" min="0" max="2000000" step="50000" value="250000">
+      <small>Needs 2 approvals or the tx is held.</small></div>
+    <div class="pol"><b>Block unlimited approvals <input type="checkbox" id="noinf" checked></b>
+      <small>Token approvals with no spend limit.</small></div>
+    <div class="pol"><b>Business-hours window <input type="checkbox" id="hours" checked></b>
+      <small>Hot-wallet sends outside 08:00-18:00 are held.</small></div>
+    <div class="pol"><b>Screening list <input type="checkbox" id="screen" checked></b>
+      <small>Flagged / mixer-linked destinations are blocked.</small></div>
+    <div class="row" style="margin-top:10px"><button class="ghost" id="reset">Reset outflow</button></div>
+  </section>
+
+  <section>
+    <div class="verdict IDLE" id="verdict"><div class="big">NO TRANSACTION</div><div class="sub">Propose one on the right, or load a scenario below.</div></div>
+    <div class="card">
+      <h2>Policy evaluation</h2>
+      <div id="checks"><span class="note">Nothing evaluated yet.</span></div>
+      <div class="row" style="margin-top:12px"><button id="exec" disabled>Sign &amp; broadcast</button><span class="note" id="execnote" style="align-self:center;margin:0"></span></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2>Scenarios</h2>
+      <div class="row" id="scen"></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2>Decision log</h2>
+      <div class="log" id="log"><span class="note">Empty.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>Propose transaction</h2>
+      <label>From wallet</label><select id="from"></select>
+      <label>Action</label>
+      <select id="kind"><option value="transfer">Transfer</option><option value="approve">Token approval (limited)</option><option value="approve-inf">Token approval (unlimited)</option></select>
+      <label>Destination</label><select id="to"></select>
+      <label>Amount (USD) <span class="val" id="v-amt"></span></label>
+      <input type="range" id="amt" min="1000" max="3000000" step="1000" value="120000">
+      <label>Approvals collected</label>
+      <select id="appr"><option>1</option><option>2</option><option>3</option></select>
+      <label>Local time (hour) <span class="val" id="v-hr"></span></label>
+      <input type="range" id="hr" min="0" max="23" value="11">
+      <div class="row" style="margin-top:12px"><button id="eval">Evaluate</button></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2>Environment model</h2>
+      <div id="wallets"></div>
+      <div class="note">Bars show rolling 24h outflow against the ceiling.</div>
+    </div>
+  </section>
+</main>
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Verdict Machine (YC S26). Not affiliated with Verdict Machine.
+  <br>Toy rules in plain JS, no network calls, no real chain data. Policies are evaluated in <code>evaluate()</code>.
+</footer>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>'$'+Math.round(n).toLocaleString('en-US');
+const WALLETS={
+  hot:{name:'Hot - settlement ops',hot:true,out:310000},
+  warm:{name:'Warm - client payouts',hot:true,out:1200000},
+  cold:{name:'Cold - treasury vault',hot:false,out:0}
+};
+// risk: 0 safe..100 bad; listed: on the institution's allowlist; flagged: screening hit
+const CP={
+  custodian:{name:'Prime custodian (allowlisted)',risk:8,listed:true,flagged:false},
+  exch:{name:'Regulated exchange deposit',risk:22,listed:true,flagged:false},
+  otc:{name:'New OTC desk (first seen)',risk:48,listed:false,flagged:false},
+  dex:{name:'Unaudited DEX router',risk:74,listed:false,flagged:false},
+  mixer:{name:'Mixer-linked address',risk:96,listed:false,flagged:true}
+};
+const SCEN=[
+ {t:'Routine custodian move',f:'hot',k:'transfer',to:'custodian',a:90000,ap:1,h:11},
+ {t:'Large payout, one signer',f:'warm',k:'transfer',to:'exch',a:600000,ap:1,h:14},
+ {t:'Unlimited approval to DEX',f:'hot',k:'approve-inf',to:'dex',a:1000,ap:2,h:10},
+ {t:'3am send to new OTC',f:'hot',k:'transfer',to:'otc',a:80000,ap:2,h:3},
+ {t:'Drain to mixer',f:'cold',k:'transfer',to:'mixer',a:2400000,ap:3,h:12}
+];
+const state={last:null,log:[]};
+const P=()=>({cap:+$('cap').value,vel:+$('vel').value,risk:+$('risk').value,quo:+$('quo').value,
+  noinf:$('noinf').checked,hours:$('hours').checked,screen:$('screen').checked});
+const tx=()=>({from:$('from').value,kind:$('kind').value,to:$('to').value,amt:+$('amt').value,appr:+$('appr').value,hr:+$('hr').value});
+
+function evaluate(t,p){
+  const w=WALLETS[t.from],c=CP[t.to],r=[];
+  const amt=t.kind==='transfer'?t.amt:0;
+  const add=(name,res,why)=>r.push({name,res,why});
+  // 1 screening
+  if(p.screen) c.flagged?add('Screening','BLOCK',c.name+' matches a flagged-address list.'):add('Screening','PASS','No screening hits on destination.');
+  else add('Screening','PASS','Policy disabled.');
+  // 2 counterparty
+  if(c.risk>p.risk) add('Counterparty risk',c.listed?'HOLD':'BLOCK','Risk '+c.risk+' exceeds limit '+p.risk+(c.listed?' (allowlisted, route to review).':' and destination is not allowlisted.'));
+  else if(!c.listed) add('Counterparty risk','HOLD','Risk '+c.risk+' is within limit but destination is unlisted - first-seen address.');
+  else add('Counterparty risk','PASS','Allowlisted, risk '+c.risk+'.');
+  // 3 per-tx cap
+  if(amt>p.cap) add('Per-tx cap',w.hot?'BLOCK':'HOLD',fmt(amt)+' exceeds cap '+fmt(p.cap)+' on a '+(w.hot?'hot':'cold')+' wallet.');
+  else add('Per-tx cap','PASS',fmt(amt)+' within '+fmt(p.cap)+'.');
+  // 4 velocity
+  const after=w.out+amt;
+  if(after>p.vel) add('24h outflow','BLOCK','Would bring outflow to '+fmt(after)+' against ceiling '+fmt(p.vel)+'.');
+  else add('24h outflow','PASS','Outflow after: '+fmt(after)+' of '+fmt(p.vel)+'.');
+  // 5 approvals
+  if(t.kind==='approve-inf') p.noinf?add('Token approval','BLOCK','Unlimited allowance lets the spender drain the token balance.'):add('Token approval','HOLD','Unlimited allowance permitted by config, flagged for review.');
+  else add('Token approval','PASS',t.kind==='approve'?'Bounded allowance.':'Not an approval.');
+  // 6 quorum
+  if(amt>p.quo&&t.appr<2) add('Quorum','HOLD','Above '+fmt(p.quo)+' needs 2 approvals; has '+t.appr+'.');
+  else add('Quorum','PASS',amt>p.quo?t.appr+' approvals collected.':'Below quorum threshold.');
+  // 7 hours
+  const off=t.hr<8||t.hr>=18;
+  if(p.hours&&w.hot&&off) add('Time window','HOLD',String(t.hr).padStart(2,'0')+':00 is outside 08:00-18:00 for a hot wallet.');
+  else add('Time window','PASS','Within allowed window.');
+  const v=r.some(x=>x.res==='BLOCK')?'BLOCK':r.some(x=>x.res==='HOLD')?'HOLD':'ALLOW';
+  return {v:v,r:r,amt:amt,after:after};
+}
+
+function render(res,t){
+  const el=$('verdict');
+  el.className='verdict '+res.v;
+  const bl=res.r.filter(x=>x.res==='BLOCK').length,ho=res.r.filter(x=>x.res==='HOLD').length;
+  const sub={ALLOW:'All 7 policies pass. Safe to sign.',BLOCK:bl+' blocking rule'+(bl>1?'s':'')+' fired. Do not sign.',HOLD:ho+' rule'+(ho>1?'s':'')+' need human review before signing.'}[res.v];
+  el.innerHTML='<div class="big">'+res.v+'</div><div class="sub">'+(t.kind==='transfer'?fmt(t.amt):'Approval')+' from '+WALLETS[t.from].name+' to '+CP[t.to].name+'. '+sub+'</div>';
+  const order={BLOCK:0,HOLD:1,PASS:2};
+  $('checks').innerHTML=[...res.r].sort((a,b)=>order[a.res]-order[b.res]).map(x=>'<div class="check"><div class="tag '+x.res+'">'+x.res+'</div><div><b>'+x.name+'</b><span>'+x.why+'</span></div></div>').join('');
+  $('exec').disabled=res.v!=='ALLOW';
+  $('execnote').textContent=res.v==='ALLOW'?'':res.v==='HOLD'?'Held: change inputs or policies to proceed.':'Blocked by policy.';
+}
+
+function run(log){
+  const t=tx(),res=evaluate(t,P());
+  state.last={t:t,res:res};
+  render(res,t);
+  if(log!==false){
+    state.log.unshift({v:res.v,txt:(t.kind==='transfer'?fmt(t.amt):'approval')+' '+WALLETS[t.from].name.split(' ')[0]+' -> '+CP[t.to].name.split(' (')[0]});
+    state.log=state.log.slice(0,30);
+    renderLog();
+  }
+}
+function renderLog(){
+  $('log').innerHTML=state.log.length?state.log.map(l=>'<div class="'+l.v+'"><em>'+l.v+'</em><span>'+l.txt+'</span></div>').join(''):'<span class="note">Empty.</span>';
+}
+function renderWallets(){
+  const p=P();
+  $('wallets').innerHTML=Object.values(WALLETS).map(w=>{
+    const pct=Math.min(100,w.out/p.vel*100);
+    return '<div class="wal"><div><b>'+w.name+'</b><span>'+fmt(w.out)+'</span></div><div class="meter"><i class="'+(pct>85?'hot':'')+'" style="width:'+pct+'%"></i></div></div>';
+  }).join('');
+}
+function labels(){
+  const p=P();
+  $('v-cap').textContent=fmt(p.cap);$('v-vel').textContent=fmt(p.vel);$('v-risk').textContent=p.risk;
+  $('v-quo').textContent=fmt(p.quo);$('v-amt').textContent=fmt($('amt').value);
+  $('v-hr').textContent=String($('hr').value).padStart(2,'0')+':00';
+  renderWallets();
+}
+
+// setup
+$('from').innerHTML=Object.entries(WALLETS).map(([k,w])=>'<option value="'+k+'">'+w.name+'</option>').join('');
+$('to').innerHTML=Object.entries(CP).map(([k,c])=>'<option value="'+k+'">'+c.name+' - risk '+c.risk+'</option>').join('');
+$('scen').innerHTML=SCEN.map((s,i)=>'<button class="ghost" data-i="'+i+'">'+s.t+'</button>').join('');
+$('scen').onclick=e=>{
+  const i=e.target.dataset.i;if(i===undefined)return;
+  const s=SCEN[i];
+  $('from').value=s.f;$('kind').value=s.k;$('to').value=s.to;$('amt').value=s.a;$('appr').value=s.ap;$('hr').value=s.h;
+  labels();run();
+};
+// live re-evaluation as policies or inputs change (not logged, so the log shows deliberate evaluations)
+document.querySelectorAll('input[type=range],input[type=checkbox]').forEach(el=>el.addEventListener('input',()=>{
+  labels();if(state.last)run(false);
+}));
+['from','kind','to','appr'].forEach(id=>$(id).addEventListener('change',()=>{if(state.last)run(false);}));
+$('eval').onclick=()=>run();
+$('exec').onclick=()=>{
+  const l=state.last;if(!l||l.res.v!=='ALLOW')return;
+  WALLETS[l.t.from].out+=l.res.amt;
+  state.log.unshift({v:'ALLOW',txt:'broadcast - outflow now '+fmt(WALLETS[l.t.from].out)});
+  renderLog();labels();run(false);
+  $('execnote').textContent='Broadcast (simulated). Outflow updated and re-checked.';
+};
+$('reset').onclick=()=>{WALLETS.hot.out=310000;WALLETS.warm.out=1200000;WALLETS.cold.out=0;labels();if(state.last)run(false);};
+labels();
+</script>
+</body>
+</html>

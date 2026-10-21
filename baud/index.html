@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multiplier-free matmul: a log-domain toy</title>
+<style>
+:root{--bg:#0d1117;--panel:#151b24;--line:#263041;--tx:#d7dee9;--dim:#8493a8;--hi:#7be0b0;--warn:#f2b35e;--bad:#ef6f7e;--blue:#6fa8ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+main{max-width:1080px;margin:0 auto;padding:28px 18px 8px}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:-.3px}
+h1 span{color:var(--hi)}
+.sub{color:var(--dim);max-width:760px;margin:0 0 20px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.c12{grid-column:span 12}.c7{grid-column:span 7}.c5{grid-column:span 5}.c6{grid-column:span 6}.c4{grid-column:span 4}
+@media(max-width:820px){.c7,.c5,.c6,.c4{grid-column:span 12}}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:1.4px;color:var(--dim);margin:0 0 10px;font-weight:600}
+.controls{display:flex;flex-wrap:wrap;gap:18px;align-items:end}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--dim)}
+label b{color:var(--tx);font-weight:600}
+input[type=range]{width:190px;accent-color:var(--hi)}
+select,button{background:#1c2430;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+button:hover,select:hover{border-color:var(--hi)}
+button.primary{background:var(--hi);color:#07140e;border-color:var(--hi);font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{background:#10151d;border:1px solid var(--line);border-radius:8px;padding:10px}
+.stat small{display:block;color:var(--dim);font-size:11px}
+.stat strong{font-size:20px}
+.good{color:var(--hi)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+canvas{width:100%;display:block;background:#10151d;border:1px solid var(--line);border-radius:8px}
+.trace{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}
+.trace i{color:var(--dim);font-style:normal}
+.bits{letter-spacing:1px}
+.bits em{font-style:normal;color:var(--warn)}
+.bits u{text-decoration:none;color:var(--blue)}
+.hm{display:grid;gap:2px}
+.hm div{height:26px;border-radius:3px;font-size:10px;display:flex;align-items:center;justify-content:center;color:#fff;cursor:default}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--dim);margin-top:8px;flex-wrap:wrap}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;background:var(--c)}
+p.note{color:var(--dim);font-size:12px;margin:10px 0 0}
+footer{max-width:1080px;margin:18px auto 30px;padding:14px 18px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Multiply with <span>adders</span>: a log-domain toy</h1>
+  <p class="sub">A multiplier grows with the square of its bit width; an adder grows linearly. If numbers live in the log domain, a * b becomes an integer add of two exponent codes. This page runs real dot products both ways, so you can see what the swap costs in accuracy and saves in silicon. Synthetic data, toy cost model.</p>
+
+  <div class="card c12" style="margin-bottom:14px">
+    <div class="controls">
+      <label>Fraction bits F <b id="vF"></b><input id="F" type="range" min="1" max="8" value="4"></label>
+      <label>Vector length N <b id="vN"></b><input id="N" type="range" min="4" max="256" value="64"></label>
+      <label>Value distribution
+        <select id="dist"><option value="gauss">Gaussian (weights)</option><option value="heavy">Heavy tail (activations)</option><option value="uni">Uniform</option></select>
+      </label>
+      <label>LUT precision
+        <select id="lutb"><option value="6">6 bit</option><option value="10" selected>10 bit</option><option value="16">16 bit</option></select>
+      </label>
+      <button class="primary" id="reseed">Resample data</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card c12">
+      <h2>1 / Dot product, both ways</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="card c7">
+      <h2>2 / Every product: exact vs adder-only</h2>
+      <canvas id="scatter" height="300"></canvas>
+      <p class="note">Each dot is one a*b. On the diagonal means identical. Click a dot to trace it below.</p>
+    </div>
+
+    <div class="card c5">
+      <h2>3 / Trace one multiply</h2>
+      <label>Pair # <b id="vP"></b><input id="P" type="range" min="0" max="63" value="0"></label>
+      <div class="trace" id="trace" style="margin-top:12px"></div>
+      <p class="note">Exponent codes are fixed-point log2 values. The multiply is the integer add on the "sum" line. The ROM lookup turns the fractional part back into a linear mantissa.</p>
+    </div>
+
+    <div class="card c6">
+      <h2>4 / Sweep: accuracy vs area as F changes</h2>
+      <canvas id="sweep" height="260"></canvas>
+      <div class="legend"><span style="--c:var(--hi)">median product error %</span><span style="--c:var(--warn)">area vs same-width multiplier %</span></div>
+    </div>
+
+    <div class="card c6">
+      <h2>5 / A tiny layer: y = W x (8x8)</h2>
+      <div style="display:flex;gap:14px;flex-wrap:wrap">
+        <div style="flex:1;min-width:210px"><div class="hm" id="hmExact" style="grid-template-columns:repeat(1,1fr)"></div></div>
+        <div style="flex:1;min-width:210px"><div class="hm" id="hmErr" style="grid-template-columns:repeat(1,1fr)"></div></div>
+      </div>
+      <div class="legend"><span style="--c:#3b6ea8">y exact</span><span style="--c:var(--bad)">|y exact - y adder-only|</span></div>
+      <p class="note" id="layerNote"></p>
+    </div>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Baud (YC S26). Not affiliated with Baud.<br>
+This is a classic logarithmic-number-system sketch written from scratch for illustration. It is not Baud's number format, hardware, or compiler. Area numbers come from a crude gate-count model, not a real synthesis run.</footer>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const EXP_INT=5; // signed integer bits of log2|x|, range [-16,16)
+let seed=7, data=null, picked=0;
+
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){return Math.sqrt(-2*Math.log(1-r()))*Math.cos(2*Math.PI*r())}
+function draw(r,kind){
+  if(kind==='uni')return r()*2-1;
+  if(kind==='heavy'){const g=gauss(r);return g*Math.exp(0.9*gauss(r))*0.5}
+  return gauss(r)*0.5;
+}
+
+// ---- log-domain number: sign + fixed-point log2 magnitude code ----
+function encode(x,F){
+  if(x===0)return{z:true,s:0,q:0};
+  let q=Math.round(Math.log2(Math.abs(x))*(1<<F));
+  const lim=(1<<(EXP_INT-1+F))-1;
+  q=Math.max(-lim-1,Math.min(lim,q));
+  return{z:false,s:x<0?1:0,q};
+}
+function decode(c,F){return c.z?0:(c.s?-1:1)*Math.pow(2,c.q/(1<<F))}
+// multiplier-free product: sign xor, integer add, ROM lookup of 2^(frac)
+function lutTable(F,bits){
+  const n=1<<F,t=[],sc=Math.pow(2,bits);
+  for(let i=0;i<n;i++)t.push(Math.round(Math.pow(2,i/n)*sc)/sc);
+  return t;
+}
+function lnsMul(a,b,F,lut){
+  if(a.z||b.z)return{v:0,sum:0,ip:0,fp:0,s:0};
+  const sum=a.q+b.q, n=1<<F;
+  const ip=Math.floor(sum/n), fp=sum-ip*n; // shift amount, ROM address
+  const s=a.s^b.s;
+  return{v:(s?-1:1)*lut[fp]*Math.pow(2,ip),sum,ip,fp,s};
+}
+
+// ---- toy cost model (full-adder-cell equivalents) ----
+function costs(F,lutBits){
+  const W=1+EXP_INT+F;
+  const mult=W*W;                               // array multiplier ~ W^2 cells
+  const add=W+W/2;                              // exponent adder + sign/shift glue
+  const rom=(1<<F)*lutBits*0.08;                // ROM bit ~ 0.08 cell
+  const lns=add+rom;
+  return{W,mult,lns,ratio:lns/mult};
+}
+
+function build(){
+  const F=+$('F').value,N=+$('N').value,dist=$('dist').value,lb=+$('lutb').value;
+  const r=rng(seed);
+  const A=[],B=[];
+  for(let i=0;i<N;i++){A.push(draw(r,dist));B.push(draw(r,dist))}
+  const W=[];
+  for(let i=0;i<64;i++)W.push(draw(r,dist));
+  const X=[];for(let i=0;i<8;i++)X.push(draw(r,dist));
+  data={A,B,W,X,F,N,dist,lb};
+}
+
+function run(F,lb){
+  const {A,B}=data,lut=lutTable(F,lb);
+  const ex=[],ap=[];let se=0,sa=0;
+  for(let i=0;i<A.length;i++){
+    const p=A[i]*B[i];
+    const m=lnsMul(encode(A[i],F),encode(B[i],F),F,lut).v;
+    ex.push(p);ap.push(m);se+=p;sa+=m;
+  }
+  return{ex,ap,sumEx:se,sumAp:sa};
+}
+function medianRelErr(F,lb){
+  const {A,B}=data,lut=lutTable(F,lb),e=[];
+  for(let i=0;i<A.length;i++){
+    const p=A[i]*B[i];if(p===0)continue;
+    const m=lnsMul(encode(A[i],F),encode(B[i],F),F,lut).v;
+    e.push(Math.abs(m-p)/Math.abs(p));
+  }
+  e.sort((a,b)=>a-b);
+  return e.length?e[e.length>>1]*100:0;
+}
+function fmt(x,d){return (Math.abs(x)<1e-3&&x!==0)?x.toExponential(2):x.toFixed(d===undefined?4:d)}
+function cls(pct){return pct<2?'good':pct<8?'warn':'bad'}
+
+// ---- render ----
+function renderStats(res){
+  const {F,N,lb}=data,c=costs(F,lb);
+  const dotErr=Math.abs(res.sumAp-res.sumEx)/(Math.abs(res.sumEx)||1)*100;
+  const med=medianRelErr(F,lb);
+  const fit=(1/c.ratio);
+  const rows=[
+    ['exact dot(a,b)',fmt(res.sumEx),''],
+    ['adder-only dot',fmt(res.sumAp),''],
+    ['dot error',dotErr.toFixed(2)+'%',cls(dotErr)],
+    ['median product error',med.toFixed(2)+'%',cls(med)],
+    ['multiplies / adds',`0 / ${N} + ${N}`,'good'],
+    ['code width',c.W+' bit',''],
+    ['area vs '+c.W+'-bit multiplier',(c.ratio*100).toFixed(0)+'%',c.ratio<0.6?'good':'warn'],
+    ['units per same die area',fit.toFixed(1)+'x',fit>1.5?'good':'warn']
+  ];
+  $('stats').innerHTML='';
+  rows.forEach(([k,v,cl])=>{
+    const d=document.createElement('div');d.className='stat';
+    const s=document.createElement('small');s.textContent=k;
+    const b=document.createElement('strong');b.textContent=v;if(cl)b.className=cl;
+    d.append(s,b);$('stats').append(d);
+  });
+}
+
+let dots=[];
+function renderScatter(res){
+  const cv=$('scatter'),ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth,h=300;cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  let m=0;for(const v of res.ex)m=Math.max(m,Math.abs(v));for(const v of res.ap)m=Math.max(m,Math.abs(v));
+  m=(m||1)*1.08;
+  const pad=28,sx=v=>pad+(v+m)/(2*m)*(w-2*pad),sy=v=>h-pad-(v+m)/(2*m)*(h-2*pad);
+  ctx.strokeStyle='#263041';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(sx(-m),sy(0));ctx.lineTo(sx(m),sy(0));ctx.moveTo(sx(0),sy(-m));ctx.lineTo(sx(0),sy(m));ctx.stroke();
+  ctx.strokeStyle='#4a5a73';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(sx(-m),sy(-m));ctx.lineTo(sx(m),sy(m));ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#8493a8';ctx.font='11px monospace';
+  ctx.fillText('exact a*b ->',w-pad-80,sy(0)-6);ctx.fillText('adder-only',sx(0)+6,pad-12);
+  dots=[];
+  res.ex.forEach((e,i)=>{
+    const x=sx(e),y=sy(res.ap[i]);dots.push([x,y]);
+    ctx.fillStyle=i===picked?'#f2b35e':'rgba(123,224,176,.65)';
+    ctx.beginPath();ctx.arc(x,y,i===picked?5:2.6,0,7);ctx.fill();
+  });
+}
+$('scatter').addEventListener('click',ev=>{
+  const r=ev.target.getBoundingClientRect(),x=ev.clientX-r.left,y=ev.clientY-r.top;
+  let best=-1,bd=1e9;dots.forEach(([dx,dy],i)=>{const d=(dx-x)**2+(dy-y)**2;if(d<bd){bd=d;best=i}});
+  if(best>=0&&bd<400){picked=best;$('P').value=best;refresh(false)}
+});
+
+function bin(v,n){let s=(v<0?(v+(1<<n)):v).toString(2);while(s.length<n)s='0'+s;return s}
+function renderTrace(){
+  const {A,B,F,lb}=data,i=Math.min(picked,A.length-1),lut=lutTable(F,lb);
+  const a=encode(A[i],F),b=encode(B[i],F),m=lnsMul(a,b,F,lut);
+  const n=EXP_INT+F+1;
+  $('vP').textContent=i;
+  const rows=[
+    ['a',fmt(A[i])],['b',fmt(B[i])],
+    ['a code',`<span class="bits"><em>${a.s}</em> ${bin(a.q,n)}</span>`],
+    ['b code',`<span class="bits"><em>${b.s}</em> ${bin(b.q,n)}</span>`],
+    ['sign',`${a.s} xor ${b.s} = ${m.s}`],
+    ['sum (the "multiply")',`${a.q} + ${b.q} = ${m.sum}`],
+    ['split',`shift ${m.ip}, ROM[${m.fp}] = ${lut[m.fp]?lut[m.fp].toFixed(4):'-'}`],
+    ['adder-only a*b',fmt(m.v,5)],['exact a*b',fmt(A[i]*B[i],5)],
+    ['rel. error',(A[i]*B[i]?Math.abs(m.v-A[i]*B[i])/Math.abs(A[i]*B[i])*100:0).toFixed(2)+'%']
+  ];
+  $('trace').innerHTML='';
+  rows.forEach(([k,v])=>{
+    const l=document.createElement('i');l.textContent=k;
+    const d=document.createElement('span');
+    if(v.indexOf('<')===0)d.innerHTML=v;else d.textContent=v;  // v is built only from numbers above
+    $('trace').append(l,d);
+  });
+}
+
+function renderSweep(){
+  const cv=$('sweep'),ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth,h=260;cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const pad=32,pts=[];
+  for(let f=1;f<=8;f++){pts.push({f,err:medianRelErr(f,data.lb),area:costs(f,data.lb).ratio*100})}
+  const ymax=Math.max(40,...pts.map(p=>p.area),...pts.map(p=>p.err))*1.1;
+  const bx=f=>pad+(f-0.5)/8*(w-pad-10),by=v=>h-pad-v/ymax*(h-pad-12);
+  ctx.strokeStyle='#263041';ctx.fillStyle='#8493a8';ctx.font='11px monospace';
+  for(let g=0;g<=4;g++){const v=ymax*g/4;ctx.beginPath();ctx.moveTo(pad,by(v));ctx.lineTo(w-10,by(v));ctx.stroke();ctx.fillText(v.toFixed(0),2,by(v)+4)}
+  const line=(key,col)=>{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();pts.forEach((p,i)=>{const x=bx(p.f),y=by(p[key]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+    pts.forEach(p=>{ctx.fillStyle=p.f===data.F?'#fff':col;ctx.beginPath();ctx.arc(bx(p.f),by(p[key]),p.f===data.F?5:3,0,7);ctx.fill()})};
+  line('err','#7be0b0');line('area','#f2b35e');
+  ctx.fillStyle='#8493a8';pts.forEach(p=>ctx.fillText('F='+p.f,bx(p.f)-11,h-12));
+}
+
+function renderLayer(){
+  const {W,X,F,lb}=data,lut=lutTable(F,lb);
+  const xc=X.map(v=>encode(v,F));
+  const yEx=[],yAp=[];
+  for(let r=0;r<8;r++){
+    let e=0,a=0;
+    for(let c=0;c<8;c++){e+=W[r*8+c]*X[c];a+=lnsMul(encode(W[r*8+c],F),xc[c],F,lut).v}
+    yEx.push(e);yAp.push(a);
+  }
+  const err=yEx.map((v,i)=>Math.abs(v-yAp[i]));
+  const mx=Math.max(...yEx.map(Math.abs),1e-9),me=Math.max(...err,1e-9);
+  const fill=(el,vals,colorFn,labelFn)=>{
+    el.innerHTML='';
+    vals.forEach((v,i)=>{const d=document.createElement('div');d.style.background=colorFn(v);d.textContent=labelFn(v);d.title='row '+i+': '+v.toFixed(5);el.append(d)});
+  };
+  fill($('hmExact'),yEx,v=>{const t=Math.abs(v)/mx;return v>=0?`rgba(59,110,168,${.25+.75*t})`:`rgba(120,90,170,${.25+.75*t})`},v=>v.toFixed(2));
+  fill($('hmErr'),err,v=>`rgba(239,111,126,${.12+.88*Math.min(1,v/Math.max(me,0.02))})`,v=>v.toFixed(3));
+  let top=0;for(let i=0;i<8;i++)if(yEx[i]*yAp[i]<0)top++;
+  const agree=yEx.map((v,i)=>Math.sign(v)===Math.sign(yAp[i])).filter(Boolean).length;
+  const argE=yEx.indexOf(Math.max(...yEx)),argA=yAp.indexOf(Math.max(...yAp));
+  $('layerNote').textContent=`64 weight*activation products, zero multipliers. Signs agree on ${agree}/8 outputs; argmax ${argE===argA?'unchanged':'moved from row '+argE+' to row '+argA}.`;
+}
+
+function refresh(rebuild){
+  if(rebuild!==false)build();
+  const {F,N}=data;
+  $('vF').textContent=F;$('vN').textContent=N;
+  $('P').max=N-1;if(picked>=N)picked=N-1;$('P').value=picked;
+  const res=run(F,data.lb);
+  renderStats(res);renderScatter(res);renderTrace();renderSweep();renderLayer();
+}
+
+['F','N','dist','lutb'].forEach(id=>$(id).addEventListener('input',()=>refresh(true)));
+$('P').addEventListener('input',e=>{picked=+e.target.value;refresh(false)});
+$('reseed').addEventListener('click',()=>{seed=(seed*1664525+1013904223)>>>0;picked=0;refresh(true)});
+window.addEventListener('resize',()=>refresh(false));
+refresh(true);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Purge vs. Sink - in-tool contamination sandbox</title>
+<style>
+:root{--bg:#0e1116;--panel:#171b22;--line:#262c36;--tx:#d9dee7;--mut:#8b94a5;--a:#f2a65a;--b:#5ad1c0;--bad:#ef6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:22px 28px 6px;max-width:1100px;margin:auto}
+h1{margin:0 0 4px;font-size:22px;letter-spacing:.2px}
+header p{margin:0;color:var(--mut);max-width:760px}
+main{max-width:1100px;margin:auto;padding:14px 28px 30px;display:grid;gap:16px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h2{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);display:flex;justify-content:space-between}
+canvas{width:100%;display:block;background:#0a0d12;border-radius:6px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.stat{background:#10141a;border-radius:6px;padding:7px 9px}
+.stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--mut)}
+.ctl{display:grid;grid-template-columns:repeat(4,1fr);gap:14px 22px}
+label{display:block;font-size:12px;color:var(--mut)}
+label output{float:right;color:var(--tx);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--b)}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button{background:#222936;color:var(--tx);border:1px solid #333c4b;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
+button:hover{background:#2b3444}
+button.pri{background:var(--b);color:#06201c;border-color:var(--b);font-weight:600}
+.A{color:var(--a)}.B{color:var(--b)}
+.verdict{font-size:15px}
+.verdict em{font-style:normal;font-weight:700}
+.tag{font-size:11px;color:var(--mut);margin-top:6px}
+footer{max-width:1100px;margin:auto;padding:0 28px 28px;color:var(--mut);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+@media(max-width:800px){.row{grid-template-columns:1fr}.ctl,.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+<h1>Purge vs. Sink</h1>
+<p>Two identical wafer-tool mini-environments sit in the same dirty fab. The left one fights airborne molecular contamination (AMC) by flushing it out with nitrogen. The right one destroys it in place with a catalytic reactor. Open the doors and watch what each approach costs you.</p>
+</header>
+<main>
+<div class="row">
+  <section class="card">
+    <h2><span class="A">Chamber A - N&#8322; purge only</span><span id="aState">steady</span></h2>
+    <canvas id="cvA" width="520" height="220"></canvas>
+    <div class="stats">
+      <div class="stat"><b id="aC">0</b><span>AMC, ppb</span></div>
+      <div class="stat"><b id="aD">0</b><span>wafer dose, ppb&middot;s</span></div>
+      <div class="stat"><b id="aN">0</b><span>N&#8322; used, L</span></div>
+      <div class="stat"><b id="aM">0</b><span>est. film, &Aring;</span></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2><span class="B">Chamber B - in-tool destruction</span><span id="bState">steady</span></h2>
+    <canvas id="cvB" width="520" height="220"></canvas>
+    <div class="stats">
+      <div class="stat"><b id="bC">0</b><span>AMC, ppb</span></div>
+      <div class="stat"><b id="bD">0</b><span>wafer dose, ppb&middot;s</span></div>
+      <div class="stat"><b id="bN">0</b><span>N&#8322; used, L</span></div>
+      <div class="stat"><b id="bM">0</b><span>est. film, &Aring;</span></div>
+    </div>
+  </section>
+</div>
+
+<section class="card">
+  <h2><span>AMC concentration over time (log scale)</span><span id="spec">spec limit 1 ppb</span></h2>
+  <canvas id="plot" width="1040" height="240"></canvas>
+</section>
+
+<section class="card">
+  <h2><span>Controls</span><span>toy model, synthetic numbers</span></h2>
+  <div class="ctl">
+    <label>Purge flow (both) <output id="oPurge"></output><input id="purge" type="range" min="0" max="100" value="40"></label>
+    <label>Destruction rate k (B) <output id="oK"></output><input id="kd" type="range" min="0" max="100" value="45"></label>
+    <label>B purge reduction <output id="oRed"></output><input id="red" type="range" min="0" max="100" value="75"></label>
+    <label>Wafer outgassing <output id="oOut"></output><input id="outg" type="range" min="0" max="100" value="30"></label>
+    <label>Seal leakage from fab <output id="oLeak"></output><input id="leak" type="range" min="0" max="100" value="25"></label>
+    <label>Fab air AMC <output id="oFab"></output><input id="fab" type="range" min="0" max="100" value="40"></label>
+    <label>Sim speed <output id="oSpd"></output><input id="spd" type="range" min="1" max="20" value="6"></label>
+    <label>N&#8322; price ($/m&sup3;) <output id="oPrice"></output><input id="price" type="range" min="1" max="40" value="12"></label>
+  </div>
+  <div class="btns">
+    <button class="pri" id="door">Open both doors (5 s)</button>
+    <button id="slug">Inject contamination slug</button>
+    <button id="auto">Auto door cycle: off</button>
+    <button id="reset">Reset</button>
+  </div>
+  <div class="tag">B runs at a reduced purge flow (slider above) because the reactor is doing part of the cleaning. Everything else is identical between chambers.</div>
+</section>
+
+<section class="card verdict" id="verdict">Run the sim to compare.</section>
+
+<section class="card">
+  <h2><span>Model</span></h2>
+  <div class="tag" style="font-size:12.5px;line-height:1.6">
+  Each chamber is a well-mixed volume V. Concentration C (ppb) obeys
+  <code>dC/dt = S_out + q_leak&middot;(C_fab - C) - (Q_purge/V)&middot;C - k&middot;C</code>.
+  Purge is pure dilution: it needs several chamber volumes of N&#8322; to recover. The destruction term k is a first-order sink, so recovery
+  time is 1/(k + Q/V) no matter what the fab does. Door events swap a large fraction of the air with fab air for the door duration.
+  Wafer dose is the time integral of C; the film estimate assumes a fixed sticking coefficient. All parameters are invented for illustration and not calibrated to any real tool.
+  </div>
+</section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Aerogen Systems (YC S26). Not affiliated with Aerogen Systems.</footer>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const V=40;              // chamber volume, liters
+const SPEC=1;            // ppb limit
+const STICK=0.0004;      // angstrom per ppb*s (toy)
+const DT=0.05;           // integration step, sim seconds
+const HIST=600;          // plot points
+let t=0,doorUntil=-1,autoOn=false,nextAuto=0,slugs=[];
+
+function mk(){return {C:1,dose:0,N:0,hist:[],parts:[]};}
+let A=mk(),B=mk();
+
+const sliders=['purge','kd','red','outg','leak','fab','spd','price'];
+const fmt={
+  purge:v=>(v*0.6).toFixed(0)+' L/min',
+  kd:v=>(v*0.04).toFixed(2)+' /s',
+  red:v=>v+' %',
+  outg:v=>(v*0.0002).toFixed(3)+' ppb/s',
+  leak:v=>(v*0.0006).toFixed(3)+' /s',
+  fab:v=>(v*0.1).toFixed(1)+' ppb',
+  spd:v=>v+'x',
+  price:v=>'$'+v
+};
+const oid={purge:'oPurge',kd:'oK',red:'oRed',outg:'oOut',leak:'oLeak',fab:'oFab',spd:'oSpd',price:'oPrice'};
+function P(){
+  const g=k=>+$(k).value;
+  return {
+    Qa:g('purge')*0.6/60,                         // L/s
+    Qb:g('purge')*0.6/60*(1-g('red')/100),
+    k:g('kd')*0.04*0.1,                           // 1/s, scaled
+    S:g('outg')*0.01*0.02,                         // ppb/s
+    ql:g('leak')*0.0006,
+    Cf:g('fab')*0.1,
+    spd:g('spd'),
+    price:g('price')
+  };
+}
+function refreshLabels(){sliders.forEach(k=>$(oid[k]).textContent=fmt[k](+$(k).value));}
+sliders.forEach(k=>$(k).addEventListener('input',refreshLabels));
+refreshLabels();
+
+function step(ch,p,Q,k,doorOpen){
+  // door open: strong exchange with fab air (~0.5 volumes/s equivalent)
+  const ex=(p.ql+(doorOpen?0.35:0));
+  let slug=0;
+  for(const s of slugs){ if(!s.done[ch.id]){ s.done[ch.id]=true; ch.C+=s.amt; } }
+  const dC=p.S+ex*((doorOpen?p.Cf*4:p.Cf)-ch.C)-(Q/V)*ch.C-k*ch.C;
+  ch.C=Math.max(0.001,ch.C+dC*DT);
+  ch.dose+=ch.C*DT;
+  ch.N+=Q*DT;
+}
+A.id='a';B.id='b';
+
+function tick(){
+  const p=P();
+  const n=Math.max(1,Math.round(p.spd/(60*DT))); // steps per frame
+  for(let i=0;i<n;i++){
+    if(autoOn&&t>=nextAuto){doorUntil=t+5;nextAuto=t+45;}
+    const open=t<doorUntil;
+    step(A,p,p.Qa,0,open);
+    step(B,p,p.Qb,p.k,open);
+    t+=DT;
+    if(Math.round(t/DT)%10===0){
+      A.hist.push(A.C);B.hist.push(B.C);
+      if(A.hist.length>HIST){A.hist.shift();B.hist.shift();}
+    }
+  }
+  slugs=slugs.filter(s=>!(s.done.a&&s.done.b));
+  draw(A,$('cvA'),'#f2a65a',p);
+  draw(B,$('cvB'),'#5ad1c0',p);
+  plot();
+  stats(p);
+  requestAnimationFrame(tick);
+}
+
+function draw(ch,cv,col,p){
+  const c=cv.getContext('2d'),W=cv.width,H=cv.height,open=t<doorUntil;
+  c.clearRect(0,0,W,H);
+  // chamber walls
+  c.strokeStyle='#2e3644';c.lineWidth=2;c.strokeRect(10,10,W-20,H-20);
+  // door
+  c.fillStyle=open?'#ef6b6b':'#394252';
+  c.fillRect(W-14,open?30:10,6,open?H-60:H-20);
+  // wafer
+  c.fillStyle='#8b94a5';c.fillRect(W*0.3,H-60,W*0.4,6);
+  // film on wafer
+  const film=Math.min(12,ch.dose*STICK);
+  c.fillStyle=col;c.globalAlpha=.8;c.fillRect(W*0.3,H-60-film,W*0.4,film);c.globalAlpha=1;
+  // particles proportional to log concentration
+  const target=Math.min(220,Math.round(Math.log10(ch.C*10+1)*70));
+  while(ch.parts.length<target)ch.parts.push({x:20+Math.random()*(W-40),y:20+Math.random()*(H-90),vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2});
+  while(ch.parts.length>target)ch.parts.pop();
+  c.fillStyle=ch.C>SPEC?'#ef6b6b':col;
+  for(const q of ch.parts){
+    q.x+=q.vx+(Math.random()-.5);q.y+=q.vy+(Math.random()-.5);
+    if(q.x<16||q.x>W-18)q.vx*=-1;
+    if(q.y<16||q.y>H-70)q.vy*=-1;
+    c.beginPath();c.arc(q.x,q.y,2,0,6.3);c.fill();
+  }
+  // flow arrows / reactor glyph
+  c.font='11px sans-serif';c.fillStyle='#8b94a5';
+  const Q=ch===A?p.Qa:p.Qb;
+  c.fillText('N2 in: '+(Q*60).toFixed(1)+' L/min',18,H-14);
+  if(ch===B){
+    const g=c.createLinearGradient(0,0,0,1);
+    c.fillStyle='rgba(90,209,192,'+Math.min(.5,p.k*1.2)+')';
+    c.fillRect(W-110,16,90,22);c.fillStyle='#06201c';c.fillText('reactor k='+p.k.toFixed(2),W-104,31);
+  }
+  $(ch===A?'aState':'bState').textContent=open?'DOOR OPEN':(ch.C>SPEC?'above spec':'in spec');
+  $(ch===A?'aState':'bState').style.color=open||ch.C>SPEC?'#ef6b6b':'#8b94a5';
+}
+
+function plot(){
+  const cv=$('plot'),c=cv.getContext('2d'),W=cv.width,H=cv.height;
+  c.clearRect(0,0,W,H);
+  const lo=Math.log10(0.01),hi=Math.log10(1000);
+  const Y=v=>H-24-(Math.log10(Math.max(v,0.01))-lo)/(hi-lo)*(H-34);
+  c.font='11px sans-serif';c.strokeStyle='#222833';c.fillStyle='#8b94a5';c.lineWidth=1;
+  for(let e=-2;e<=3;e++){const y=Y(Math.pow(10,e));c.beginPath();c.moveTo(40,y);c.lineTo(W,y);c.stroke();c.fillText(Math.pow(10,e)+'',4,y+4);}
+  c.strokeStyle='#ef6b6b';c.setLineDash([5,4]);c.beginPath();c.moveTo(40,Y(SPEC));c.lineTo(W,Y(SPEC));c.stroke();c.setLineDash([]);
+  [[A,'#f2a65a'],[B,'#5ad1c0']].forEach(([ch,col])=>{
+    c.strokeStyle=col;c.lineWidth=2;c.beginPath();
+    ch.hist.forEach((v,i)=>{const x=40+i/(HIST-1)*(W-44);i?c.lineTo(x,Y(v)):c.moveTo(x,Y(v));});
+    c.stroke();
+  });
+  // door shading marker on right edge
+  if(t<doorUntil){c.fillStyle='rgba(239,107,107,.15)';c.fillRect(W-30,0,30,H-24);}
+}
+
+function stats(p){
+  const f=(x,d)=>x.toFixed(d);
+  $('aC').textContent=f(A.C,A.C<10?2:0);$('bC').textContent=f(B.C,B.C<10?2:0);
+  $('aD').textContent=f(A.dose,0);$('bD').textContent=f(B.dose,0);
+  $('aN').textContent=f(A.N,0);$('bN').textContent=f(B.N,0);
+  $('aM').textContent=f(A.dose*STICK,2);$('bM').textContent=f(B.dose*STICK,2);
+  const costA=A.N/1000*p.price,costB=B.N/1000*p.price;
+  const ratio=A.dose>0?A.dose/Math.max(1,B.dose):1;
+  const nsave=A.N>0?(1-B.N/A.N)*100:0;
+  $('verdict').innerHTML='Over <b>'+t.toFixed(0)+' s</b>: chamber B saw <em class="B">'+ratio.toFixed(1)+'x lower</em> wafer dose while using <em class="B">'+nsave.toFixed(0)+'%</em> less nitrogen. '+
+   'N&#8322; spend A $'+costA.toFixed(2)+' vs B $'+costB.toFixed(2)+' (per tool, this window). '+
+   (A.dose<B.dose?'<br><span style="color:#ef6b6b">Destruction rate is too low or purge cut too deep - B is losing.</span>':'');
+}
+
+$('door').onclick=()=>{doorUntil=t+5;};
+$('slug').onclick=()=>{slugs.push({amt:15,done:{}});};
+$('auto').onclick=()=>{autoOn=!autoOn;nextAuto=t+2;$('auto').textContent='Auto door cycle: '+(autoOn?'on':'off');};
+$('reset').onclick=()=>{A=mk();B=mk();A.id='a';B.id='b';t=0;doorUntil=-1;slugs=[];};
+
+// warm start: run to steady state with no door, no history
+(function(){const p=P();for(let i=0;i<4000;i++){step(A,p,p.Qa,0,false);step(B,p,p.Qb,p.k,false);}A.dose=B.dose=A.N=B.N=0;})();
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
