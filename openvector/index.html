@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sentry Lens - describe a rule, watch a camera act on it</title>
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--line:#262d38;--ink:#e6e9ee;--dim:#8b95a5;--acc:#5eead4;--warn:#fbbf24;--bad:#f87171;--ok:#86efac}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:18px 24px 6px}
+h1{font-size:20px;margin:0;letter-spacing:.2px}
+h1 span{color:var(--acc)}
+header p{margin:4px 0 0;color:var(--dim);max-width:760px}
+main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:16px;padding:12px 24px 20px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:0 0 8px;font-weight:600}
+canvas{width:100%;height:auto;display:block;border-radius:6px;background:#0a0d12;cursor:crosshair}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+button{background:#1f2630;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:#134e4a;border-color:var(--acc)}
+button.go{background:var(--acc);color:#04201c;border-color:var(--acc);font-weight:600}
+.stat{margin-left:auto;color:var(--dim);font-variant-numeric:tabular-nums;font-size:12px}
+.stat b{color:var(--acc)}
+textarea{width:100%;background:#0a0d12;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit;resize:vertical;min-height:58px}
+textarea:focus{outline:1px solid var(--acc)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chips button{font-size:12px;color:var(--dim);padding:4px 8px}
+.rule{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px;background:#11161d}
+.rule.hot{border-color:var(--warn)}
+.rule .tags{margin-top:5px;display:flex;gap:5px;flex-wrap:wrap}
+.tag{font:11px ui-monospace,Menlo,monospace;padding:2px 6px;border-radius:4px;background:#1f2630;color:var(--acc)}
+.tag.a{color:var(--warn)}
+.rule .x{float:right;padding:0 6px;color:var(--dim)}
+.err{color:var(--bad);font-size:13px}
+#log{height:230px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace}
+.ev{border-left:2px solid var(--acc);padding:3px 8px;margin-bottom:6px;background:#11161d;border-radius:0 4px 4px 0}
+.ev .t{color:var(--dim)}
+.ev pre{margin:2px 0 0;white-space:pre-wrap;color:#b8c2d1}
+.ev.email{border-color:var(--warn)}.ev.call{border-color:var(--bad)}.ev.pos{border-color:var(--ok)}
+.legacy{font:12px ui-monospace,Menlo,monospace;background:#001b12;color:#7dffb2;border-radius:6px;padding:8px;min-height:92px;white-space:pre-wrap}
+.right{display:flex;flex-direction:column;gap:16px}
+footer{padding:14px 24px 26px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+.hint{color:var(--dim);font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Sentry</span> Lens <small style="color:var(--dim);font-weight:400">/ toy: plain English to camera rule to action</small></h1>
+  <p>A simulated overhead camera watches a small shop floor. Type what should be watched, and the page compiles your sentence into a rule, runs it against synthetic detections every frame, and fires actions. Everything here is fake data running in your browser.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Camera 01 - simulated feed</h2>
+    <canvas id="cv" width="760" height="420"></canvas>
+    <div class="bar">
+      <button id="bStall">Jam the belt</button>
+      <button id="bPerson">Add walker</button>
+      <button id="bClear">Clear people</button>
+      <button id="bPause">Pause</button>
+      <span class="stat">simulated inference <b id="ms">--</b> ms &middot; <b id="fps">--</b> fps &middot; <b id="nd">0</b> objects</span>
+    </div>
+    <div class="hint">Click empty floor to drop a standing person there. Click a person or box to remove it. Zones: <b>counter</b>, <b>press</b> (restricted), <b>belt</b>, <b>dock</b>.</div>
+  </section>
+  <div class="right">
+    <section class="card">
+      <h2>Describe a task</h2>
+      <textarea id="txt" spellcheck="false" placeholder="e.g. If a customer waits at the counter for 4 seconds, text the manager and update the POS"></textarea>
+      <div class="chips" id="chips"></div>
+      <div class="bar" style="margin-top:0"><button class="go" id="bAdd">Compile rule</button><span class="err" id="err"></span></div>
+      <div id="rules"></div>
+    </section>
+    <section class="card">
+      <h2>Actions fired</h2>
+      <div id="log"></div>
+    </section>
+    <section class="card">
+      <h2>Legacy app (operated by the agent)</h2>
+      <div class="legacy" id="legacy">idle. waiting for an action that needs the old POS screen.</div>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by OpenVector (YC S26). Not affiliated with OpenVector.</footer>
+
+<script>
+(function(){
+'use strict';
+const cv=document.getElementById('cv'),cx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const $=id=>document.getElementById(id);
+
+// ---------- world ----------
+const ZONES={
+  counter:{x:40,y:40,w:200,h:110,label:'COUNTER',c:'#5eead4'},
+  press:{x:520,y:40,w:200,h:130,label:'PRESS (restricted)',c:'#f87171'},
+  belt:{x:40,y:230,w:680,h:60,label:'BELT',c:'#fbbf24'},
+  dock:{x:300,y:340,w:260,h:64,label:'DOCK',c:'#a78bfa'}
+};
+const WALK=[[300,120],[460,120],[300,190],[620,200],[120,200],[440,330],[120,330],[640,120]];
+let nid=1,ents=[],jam=false,paused=false,last=performance.now(),frames=0,fpsT=last;
+
+const inRect=(e,z)=>e.x>=z.x&&e.x<=z.x+z.w&&e.y>=z.y&&e.y<=z.y+z.h;
+const pick=()=>WALK[Math.floor(Math.random()*WALK.length)];
+function person(x,y,walker){
+  return {id:nid++,cls:'person',x,y,vx:0,vy:0,speed:walker?55+Math.random()*25:0,
+    tgt:walker?pick():null,walker,conf:.9+Math.random()*.08,pause:0};
+}
+function box(x){return {id:nid++,cls:'box',x,y:260+(Math.random()*16-8),vx:70,vy:0,conf:.88+Math.random()*.1}}
+for(const p of [person(140,90,false),person(380,150,true)])ents.push(p);
+for(let x=60;x<700;x+=130)ents.push(box(x));
+
+function stepWorld(dt){
+  for(const e of ents){
+    if(e.cls==='box'){
+      e.vx=jam?0:70; e.x+=e.vx*dt;
+      if(e.x>ZONES.belt.x+ZONES.belt.w+20){e.x=ZONES.belt.x-20;e.y=260+(Math.random()*16-8)}
+    } else if(e.walker){
+      if(e.pause>0){e.pause-=dt;e.vx=e.vy=0;continue}
+      const dx=e.tgt[0]-e.x,dy=e.tgt[1]-e.y,d=Math.hypot(dx,dy);
+      if(d<4){e.pause=1+Math.random()*5;e.tgt=pick();e.vx=e.vy=0}
+      else{e.vx=dx/d*e.speed;e.vy=dy/d*e.speed;e.x+=e.vx*dt;e.y+=e.vy*dt}
+    }
+  }
+}
+// "stalled" means the tracked object's velocity is actually ~0
+const still=e=>Math.hypot(e.vx,e.vy)<2;
+
+// ---------- language -> rule compiler ----------
+const LEX={
+  cls:[[/\b(box|boxes|package|parcel|item|carton|pallet)s?\b/,'box'],
+       [/\b(person|people|customer|worker|someone|anyone|visitor|employee|staff|human|guest|shopper)s?\b/,'person']],
+  zone:[[/\b(counter|register|checkout|till|desk)\b/,'counter'],
+        [/\b(press|restricted|danger|red zone|machine|hazard)\b/,'press'],
+        [/\b(belt|conveyor|line|production)\b/,'belt'],
+        [/\b(dock|door|loading|bay)\b/,'dock']],
+  act:[[/\b(e-?mail|mail)\b/,'email'],[/\b(call|phone|ring)\b/,'call'],
+       [/\b(pos|crm|ticket|log|record|update)\b/,'pos'],
+       [/\b(webhook|trigger|post|notify|slack|text|sms|alert|page)\b/,'webhook']]
+};
+function compile(src){
+  const s=src.toLowerCase().replace(/[.,;]/g,' ');
+  const find=tbl=>{for(const [re,v] of tbl){if(re.test(s))return v}return null};
+  let cls=find(LEX.cls),zone=find(LEX.zone);
+  const stalled=/\b(stall|stalled|stuck|jam|jammed|stopped|stops|stop|not moving|idle|blocked)\b/.test(s);
+  const dwell=/\b(wait|waits|waiting|linger|loiter|stay|stays|staying|stand|standing|unattended|queue)\b/.test(s);
+  if(!cls&&/\b(belt|conveyor|production|cycle)\b/.test(s)&&stalled)cls='box';
+  if(!cls)return {error:'Could not tell what to look for. Mention a person, customer, or box.'};
+  if(!zone)zone=cls==='box'?'belt':'counter';
+  const m=s.match(/(\d+(?:\.\d+)?)\s*(s\b|sec|second|min)/);
+  let dur=m?parseFloat(m[1]):NaN; if(m&&m[2]==='min')dur*=60;
+  const needStill=stalled||(cls==='person'&&dwell);
+  if(cls==='box'&&!needStill)return {error:'Boxes move on the belt all the time. Say stalled, stuck, or stopped.'};
+  if(isNaN(dur))dur=needStill?3:0;
+  const acts=[];
+  for(const [re,v] of LEX.act)if(re.test(s)&&!acts.includes(v))acts.push(v);
+  if(!acts.length)acts.push('webhook');
+  return {id:nid++,src:src.trim(),cls,zone,still:needStill,dur,acts,timers:{},fired:{},count:0};
+}
+
+// ---------- rules + evaluation ----------
+const rules=[];
+function renderRules(){
+  const el=$('rules');el.innerHTML='';
+  rules.forEach(r=>{
+    const d=document.createElement('div');d.className='rule';d.id='r'+r.id;
+    const q=document.createElement('div');q.textContent='"'+r.src+'"';
+    const x=document.createElement('button');x.className='x';x.textContent='×';x.title='remove';
+    x.onclick=()=>{rules.splice(rules.indexOf(r),1);renderRules()};
+    const tg=document.createElement('div');tg.className='tags';
+    const add=(t,c,id)=>{const s=document.createElement('span');s.className='tag '+(c||'');s.textContent=t;if(id)s.id=id;tg.appendChild(s)};
+    add('detect: '+r.cls);add('zone: '+r.zone);
+    add(r.still?'state: not moving':'state: present');
+    add('hold: '+r.dur+'s');
+    r.acts.forEach(a=>add('do: '+a,'a'));
+    add('fired x'+r.count,'','c'+r.id);
+    d.append(x,q,tg);el.appendChild(d);
+  });
+}
+function evalRules(dt){
+  for(const r of rules){
+    const live=new Set();let hot=false;
+    for(const e of ents){
+      if(e.cls!==r.cls)continue;
+      const ok=inRect(e,ZONES[r.zone])&&(!r.still||still(e));
+      if(!ok){delete r.timers[e.id];delete r.fired[e.id];continue}
+      live.add(e.id);
+      r.timers[e.id]=(r.timers[e.id]||0)+dt;
+      hot=true;
+      if(r.timers[e.id]>=r.dur&&!r.fired[e.id]){r.fired[e.id]=1;r.count++;fire(r,e)}
+    }
+    for(const k in r.timers)if(!live.has(+k)){delete r.timers[k];delete r.fired[k]}
+    const node=$('r'+r.id);
+    if(node){node.classList.toggle('hot',hot);$('c'+r.id).textContent='fired x'+r.count}
+  }
+}
+
+// ---------- actions ----------
+const tickets=[];
+const ts=()=>new Date().toLocaleTimeString([], {hour12:false});
+function logEv(kind,title,body){
+  const d=document.createElement('div');d.className='ev '+kind;
+  const t=document.createElement('div');
+  const a=document.createElement('span');a.className='t';a.textContent=ts()+' ';
+  const b=document.createElement('b');b.textContent=title;t.append(a,b);
+  const p=document.createElement('pre');p.textContent=body;
+  d.append(t,p);const L=$('log');L.prepend(d);while(L.children.length>40)L.lastChild.remove();
+}
+function fire(r,e){
+  const where=ZONES[r.zone].label.split(' ')[0].toLowerCase();
+  const what=(r.still?(e.cls==='box'?'stalled box':'waiting person'):e.cls)+' #'+e.id+' at '+where;
+  const ev={type:'physical_event',camera:'cam-01',object:e.cls,id:e.id,zone:r.zone,held_s:+(r.timers[e.id]||0).toFixed(1),conf:+e.conf.toFixed(2)};
+  r.acts.forEach(a=>{
+    if(a==='webhook')logEv('webhook','POST /hooks/floor-alert',JSON.stringify(ev));
+    if(a==='email')logEv('email','email to ops@example.invalid','subject: '+what+'\nbody: Camera 01 saw this for '+ev.held_s+'s. Snapshot attached (synthetic).');
+    if(a==='call')logEv('call','outbound call (scripted)','"This is the floor monitor. We have a '+what+'. Please check Camera 01."');
+    if(a==='pos')runLegacy(what,r);
+  });
+}
+// toy "computer use": drives a fake keyboard-only POS screen step by step, no API involved
+let busy=Promise.resolve();
+function runLegacy(what,r){
+  const out=$('legacy');
+  busy=busy.then(async()=>{
+    const id='T-'+(1001+tickets.length);
+    const steps=['> focus window: POS v3.2 (no API)','> click [New Ticket]','> field Type = '+(r.cls==='box'?'LINE_STALL':'CUSTOMER_WAIT'),
+      '> field Note = "'+what+'"','> click [Save]','ok - '+id+' created'];
+    out.textContent='';
+    for(const s of steps){out.textContent+=s+'\n';await new Promise(res=>setTimeout(res,330))}
+    tickets.push(id);
+    logEv('pos','legacy POS updated',id+' | '+what+'\n(done through UI steps, not an API)');
+    out.textContent+='\ntickets today: '+tickets.join(', ');
+  });
+}
+
+// ---------- drawing ----------
+const MONO='10px ui-monospace,Menlo,monospace';
+function draw(now){
+  cx.fillStyle='#0a0d12';cx.fillRect(0,0,W,H);
+  cx.strokeStyle='#121821';cx.lineWidth=1;
+  for(let x=0;x<W;x+=40){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke()}
+  for(let y=0;y<H;y+=40){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke()}
+  const used=new Set(rules.map(r=>r.zone));
+  cx.font=MONO;
+  for(const k in ZONES){const z=ZONES[k],u=used.has(k);
+    cx.fillStyle=z.c+(u?'22':'0d');cx.fillRect(z.x,z.y,z.w,z.h);
+    cx.strokeStyle=z.c+(u?'cc':'55');cx.setLineDash([5,4]);cx.strokeRect(z.x,z.y,z.w,z.h);cx.setLineDash([]);
+    cx.fillStyle=z.c;cx.fillText(z.label,z.x+6,z.y+14);
+  }
+  const bz=ZONES.belt,off=jam?0:(now/40)%20;
+  cx.strokeStyle='#2a2f38';
+  for(let x=bz.x+off;x<bz.x+bz.w;x+=20){cx.beginPath();cx.moveTo(x,bz.y+2);cx.lineTo(x,bz.y+bz.h-2);cx.stroke()}
+  for(const e of ents){
+    const isP=e.cls==='person';
+    if(isP){cx.fillStyle='#cbd5e1';cx.beginPath();cx.arc(e.x,e.y,9,0,7);cx.fill();cx.fillStyle='#64748b';cx.beginPath();cx.arc(e.x,e.y,4,0,7);cx.fill()}
+    else{cx.fillStyle='#a16207';cx.fillRect(e.x-14,e.y-12,28,24)}
+    const bw=isP?30:40,bh=isP?30:34;
+    let hit=false,prog=0;
+    for(const r of rules){if(r.cls!==e.cls||r.timers[e.id]===undefined)continue;
+      hit=true;prog=Math.max(prog,r.dur?Math.min(1,r.timers[e.id]/r.dur):1)}
+    const col=hit?(prog>=1?'#f87171':'#fbbf24'):'#5eead4';
+    cx.strokeStyle=col;cx.lineWidth=hit?2:1;cx.strokeRect(e.x-bw/2,e.y-bh/2,bw,bh);cx.lineWidth=1;
+    cx.fillStyle=col;cx.font=MONO;
+    cx.fillText(e.cls+' '+e.conf.toFixed(2)+(still(e)?' still':''),e.x-bw/2,e.y-bh/2-3);
+    if(hit){cx.fillStyle='#0008';cx.fillRect(e.x-bw/2,e.y+bh/2+3,bw,4);cx.fillStyle=col;cx.fillRect(e.x-bw/2,e.y+bh/2+3,bw*prog,4)}
+  }
+  cx.fillStyle='#f87171';cx.beginPath();cx.arc(W-78,18,4,0,7);cx.fill();
+  cx.fillStyle='#8b95a5';cx.fillText('REC CAM-01',W-68,22);
+  if(paused){cx.fillStyle='#000a';cx.fillRect(0,0,W,H);cx.fillStyle='#e6e9ee';cx.font='20px sans-serif';cx.fillText('paused',W/2-30,H/2)}
+}
+
+// ---------- loop ----------
+function tick(now){
+  const dt=Math.min(.1,(now-last)/1000);last=now;
+  if(!paused){stepWorld(dt);evalRules(dt)}
+  draw(now);frames++;
+  if(now-fpsT>500){$('fps').textContent=Math.round(frames*1000/(now-fpsT));frames=0;fpsT=now;
+    $('ms').textContent=(38+Math.random()*14).toFixed(0);$('nd').textContent=ents.length}
+  requestAnimationFrame(tick);
+}
+
+// ---------- UI ----------
+const EXAMPLES=[
+  'If a customer waits at the counter for 4 seconds, text the manager and update the POS',
+  'When boxes stop moving on the belt for 3 seconds, trigger a webhook and email maintenance',
+  'If anyone enters the restricted press area, call the shift lead',
+  'Alert me when a person stands at the dock for 6 seconds'
+];
+EXAMPLES.forEach(s=>{const b=document.createElement('button');b.textContent=s.length>46?s.slice(0,44)+'...':s;b.title=s;
+  b.onclick=()=>{$('txt').value=s;$('txt').focus()};$('chips').appendChild(b)});
+function addRule(){
+  const v=$('txt').value.trim();if(!v){$('err').textContent='Type a sentence first.';return}
+  const r=compile(v);
+  if(r.error){$('err').textContent=r.error;return}
+  $('err').textContent='';rules.push(r);renderRules();$('txt').value='';
+}
+$('bAdd').onclick=addRule;
+$('txt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addRule()}});
+$('bStall').onclick=function(){jam=!jam;this.classList.toggle('on',jam);this.textContent=jam?'Clear the jam':'Jam the belt'};
+$('bPerson').onclick=()=>ents.push(person(ZONES.dock.x+130,H-10,true));
+$('bClear').onclick=()=>{ents=ents.filter(e=>e.cls!=='person')};
+$('bPause').onclick=function(){paused=!paused;this.classList.toggle('on',paused);this.textContent=paused?'Resume':'Pause'};
+cv.addEventListener('click',ev=>{
+  const b=cv.getBoundingClientRect(),x=(ev.clientX-b.left)*W/b.width,y=(ev.clientY-b.top)*H/b.height;
+  const i=ents.findIndex(e=>Math.abs(e.x-x)<18&&Math.abs(e.y-y)<18);
+  if(i>=0)ents.splice(i,1);else ents.push(person(x,y,false));
+});
+$('txt').value=EXAMPLES[0];addRule();
+requestAnimationFrame(t=>{last=t;tick(t)});
+})();
+</script>
+</body>
+</html>

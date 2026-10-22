@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Savings Ledger - identified vs realized (toy demo)</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d2321;--mute:#6b736f;--card:#fffdf8;--line:#ddd7c9;--green:#1f6f5a;--amber:#b7791f;--red:#b0392f;--blue:#2c5282}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 32px 8px;max-width:1120px;margin:auto}
+h1{font:600 26px/1.2 Georgia,"Times New Roman",serif;margin:0 0 6px}
+header p{margin:0;color:var(--mute);max-width:720px}
+main{max-width:1120px;margin:auto;padding:16px 32px 40px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi small{display:block;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+.kpi b{font:600 24px Georgia,serif}
+.kpi i{font-style:normal;font-size:12px;color:var(--mute)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.bar{height:26px;border-radius:6px;background:#ebe6d8;overflow:hidden;display:flex;margin:8px 0 4px}
+.bar span{display:block;height:100%;transition:width .4s}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mute)}
+.legend em{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;font-style:normal}
+.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.controls label{font-size:13px;color:var(--mute)}
+button{font:inherit;font-size:13px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:7px;padding:6px 12px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button.sm{padding:3px 9px;font-size:12px}
+button:disabled{opacity:.35;cursor:default}
+button:hover:not(:disabled){filter:brightness(1.2)}
+.tabs{display:flex;gap:6px;margin-left:auto}
+.tabs button{background:transparent;color:var(--ink);border-color:var(--line)}
+.tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:600;color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+td{padding:7px 8px;border-bottom:1px solid #eee8da;vertical-align:middle}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.done td{opacity:.55}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.ok{background:#dcefe8;color:var(--green)}
+.over{background:#f6e0dd;color:var(--red)}
+.off{background:#f7ebd2;color:var(--amber)}
+.rec{background:#dce6f4;color:var(--blue)}
+.log{font:12px/1.6 ui-monospace,Menlo,monospace;color:var(--mute);max-height:130px;overflow:auto;white-space:pre-wrap}
+.log div:first-child{color:var(--ink)}
+footer{max-width:1120px;margin:auto;padding:0 32px 32px;color:var(--mute);font-size:12px;border-top:1px solid var(--line);padding-top:16px}
+@media(max-width:760px){.kpis{grid-template-columns:1fr 1fr}main,header,footer{padding-left:14px;padding-right:14px}.hide-s{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Savings Ledger</h1>
+  <p>A toy model of the gap between <b>savings identified</b> and savings <b>realized</b>. Contracts say what you should pay. Invoices say what you did pay. Close the gap line by line, or bring untracked spend under a contract. All data is synthetic.</p>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panel">
+    <div><b>Where the money goes</b> <span style="color:var(--mute);font-size:13px">(this period's invoice spend)</span></div>
+    <div class="bar" id="bar"></div>
+    <div class="legend">
+      <span><em style="background:var(--green)"></em>on contract, correct price</span>
+      <span><em style="background:var(--red)"></em>on contract, overpaid</span>
+      <span><em style="background:var(--amber)"></em>off contract</span>
+      <span><em style="background:var(--blue)"></em>recovered / contracted</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="controls">
+      <label>Variance tolerance <input type="range" id="tol" min="0" max="10" step="0.5" value="1"> <b id="tolv">1.0%</b></label>
+      <button id="recoverAll">Recover all overpayments</button>
+      <button class="ghost" id="contractAll">Contract all off-contract spend</button>
+      <button class="ghost" id="next">Close period &amp; load next</button>
+      <div class="tabs" id="tabs"></div>
+    </div>
+    <table>
+      <thead><tr id="head"></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <b>Activity</b>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by SpaceFlow Technologies, Inc. (YC S26). Not affiliated with SpaceFlow Technologies, Inc.. Suppliers, prices and volumes are invented for illustration.
+</footer>
+
+<script>
+// ---- synthetic catalog: item, supplier, unit, benchmark price, on-contract flag
+const CATALOG = [
+  ["Corrugated box 12x12","Harbor Packaging","ea",1.42,1],
+  ["Stretch film 18in","Harbor Packaging","roll",14.8,1],
+  ["Pallet 48x40 GMA","Tri-State Pallet","ea",11.9,1],
+  ["Pallet repair","Tri-State Pallet","ea",6.3,0],
+  ["LTL freight Midwest","Northline Freight","cwt",38.5,1],
+  ["FTL reefer lane A","Northline Freight","mile",2.71,1],
+  ["Expedite surcharge","Northline Freight","load",240,0],
+  ["Steel coil 0.9mm","Ridgeway Metals","ton",812,1],
+  ["Aluminum extrusion","Ridgeway Metals","kg",4.35,1],
+  ["Hydraulic fitting 1/2in","Valley Fluid Power","ea",8.9,1],
+  ["Bearing 6204-2RS","Valley Fluid Power","ea",3.15,1],
+  ["Nitrile gloves case","Brightway MRO","case",41,0],
+  ["Cutting insert CNMG","Brightway MRO","box",52,1],
+  ["Forklift battery svc","Brightway MRO","visit",310,0],
+  ["Cold-storage rent","Polar Space Co","plt-mo",19.5,1],
+  ["Label stock 4x6","Marksmith Labels","roll",6.1,1]
+];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun"];
+const fmt = n => "$" + Math.round(n).toLocaleString();
+const fmt2 = n => "$" + n.toFixed(2);
+
+// seeded RNG so the demo is reproducible
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+// contract state per item index: negotiated price or null
+const contract = CATALOG.map(c => c[4] ? +(c[3] * 0.93).toFixed(2) : null);
+let period = 0, lines = [], totals = {identified:0, realized:0, contracted:0}, filter = "all";
+let sortKey = "gap", sortDir = -1;
+
+function genPeriod(){
+  lines = [];
+  const n = 22;
+  for(let i = 0; i < n; i++){
+    const k = Math.floor(rnd() * CATALOG.length);
+    const c = CATALOG[k];
+    const qty = Math.round(20 + rnd() * 380);
+    // suppliers drift: ~35% of lines are billed above contract/benchmark
+    const drift = rnd() < 0.35 ? 1 + 0.03 + rnd() * 0.14 : 1 + (rnd() - 0.5) * 0.01;
+    const base = contract[k] ?? c[3] * 1.05; // untracked spend pays "list-ish"
+    lines.push({id:period*100+i, k, item:c[0], supplier:c[1], unit:c[2], qty,
+      paid:+(base * drift).toFixed(2), state:"open"});
+  }
+}
+
+// derived fields depend on current contract + tolerance
+function derive(l){
+  const tol = +document.getElementById("tol").value / 100;
+  const cp = contract[l.k];
+  const spend = l.qty * l.paid;
+  if(l.state === "recovered") return {...l, spend, kind:"rec", cp, gap:0};
+  if(l.state === "contracted") return {...l, spend, kind:"rec", cp, gap:0};
+  if(cp == null) {
+    const target = CATALOG[l.k][3] * 0.93;       // what a sourced contract would likely get
+    return {...l, spend, kind:"off", cp, gap:Math.max(0,(l.paid - target) * l.qty), target};
+  }
+  const over = l.paid / cp - 1;
+  if(over > tol) return {...l, spend, kind:"over", cp, gap:(l.paid - cp) * l.qty};
+  return {...l, spend, kind:"ok", cp, gap:0};
+}
+
+function log(msg){
+  const d = document.createElement("div");
+  d.textContent = `[${MONTHS[period % 6]}] ${msg}`;
+  const el = document.getElementById("log");
+  el.prepend(d);
+}
+
+function act(id, how){
+  const l = lines.find(x => x.id === id);
+  const d = derive(l);
+  if(how === "recover" && d.kind === "over"){
+    totals.realized += d.gap; l.state = "recovered";
+    log(`Credit memo requested from ${l.supplier}: ${l.item}, ${fmt(d.gap)} recovered.`);
+  } else if(how === "contract" && d.kind === "off"){
+    contract[l.k] = +d.target.toFixed(2);
+    totals.contracted += d.gap;
+    // every open line for this item now has a contract price; lines already billed above it become recoverable
+    lines.forEach(x => { if(x.k === l.k && x.id === l.id) x.state = "contracted"; });
+    log(`Sourced ${l.item} at ${fmt2(contract[l.k])}/${l.unit} with ${l.supplier}. ${fmt(d.gap)} identified; future invoices are checked against it.`);
+  }
+  render();
+}
+
+function render(){
+  const tol = document.getElementById("tol").value;
+  document.getElementById("tolv").textContent = (+tol).toFixed(1) + "%";
+  let rows = lines.map(derive);
+  const spend = rows.reduce((a,r) => a + r.spend, 0);
+  const managed = rows.filter(r => r.cp != null || r.state === "contracted").reduce((a,r) => a + r.spend, 0);
+  const leakOpen = rows.filter(r => r.kind === "over").reduce((a,r) => a + r.gap, 0);
+  const offGap = rows.filter(r => r.kind === "off").reduce((a,r) => a + r.gap, 0);
+  const identified = leakOpen + offGap + totals.realized + totals.contracted;
+  const realized = totals.realized;
+  const conv = identified ? realized / identified : 0;
+
+  const k = [
+    ["Spend under management", (managed/spend*100).toFixed(1)+"%", `${fmt(managed)} of ${fmt(spend)}`],
+    ["Identified savings", fmt(identified), `${fmt(leakOpen)} overbilled, ${fmt(offGap)} unsourced`],
+    ["Realized savings", fmt(realized), "credits actually recovered"],
+    ["Realization rate", (conv*100).toFixed(0)+"%", conv < .5 ? "most of the value is still on paper" : "closing the gap"]
+  ];
+  document.getElementById("kpis").innerHTML = k.map(x => `<div class="kpi"><small>${x[0]}</small><b>${x[1]}</b><br><i>${x[2]}</i></div>`).join("");
+
+  const sum = kind => rows.filter(r => r.kind === kind).reduce((a,r) => a + r.spend, 0);
+  const parts = [["var(--green)", sum("ok")],["var(--red)", sum("over")],["var(--amber)", sum("off")],["var(--blue)", sum("rec")]];
+  document.getElementById("bar").innerHTML = parts.map(p => `<span style="width:${p[1]/spend*100}%;background:${p[0]}" title="${fmt(p[1])}"></span>`).join("");
+
+  // tabs
+  const labels = {all:"All", over:"Overpaid", off:"Off contract", ok:"Clean", rec:"Resolved"};
+  document.getElementById("tabs").innerHTML = Object.keys(labels).map(f =>
+    `<button class="${f===filter?"on":""}" data-f="${f}">${labels[f]} ${f==="all"?rows.length:rows.filter(r=>r.kind===f).length}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(); });
+
+  // header with sorting
+  const cols = [["item","Item"],["supplier","Supplier"],["qty","Qty"],["paid","Paid"],["cp","Contract"],["gap","Gap $"],["kind","Status"]];
+  document.getElementById("head").innerHTML = cols.map(c =>
+    `<th data-k="${c[0]}" class="${["qty","paid","cp","gap"].includes(c[0])?"n":""} ${c[0]==="supplier"?"hide-s":""}">${c[1]}${sortKey===c[0]?(sortDir>0?" ▲":" ▼"):""}</th>`).join("") + "<th></th>";
+  document.querySelectorAll("#head th[data-k]").forEach(th => th.onclick = () => {
+    sortDir = sortKey === th.dataset.k ? -sortDir : -1; sortKey = th.dataset.k; render();
+  });
+
+  if(filter !== "all") rows = rows.filter(r => r.kind === filter);
+  rows.sort((a,b) => {
+    const x = a[sortKey] ?? -1, y = b[sortKey] ?? -1;
+    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+  });
+  const pill = {ok:["ok","on price"], over:["over","overpaid"], off:["off","no contract"], rec:["rec","resolved"]};
+  document.getElementById("rows").innerHTML = rows.map(r => {
+    const p = pill[r.kind];
+    const btn = r.kind === "over" ? `<button class="sm" data-a="recover" data-id="${r.id}">Recover</button>`
+              : r.kind === "off" ? `<button class="sm ghost" data-a="contract" data-id="${r.id}">Source it</button>` : "";
+    return `<tr class="${r.kind==="rec"?"done":""}"><td>${r.item}</td><td class="hide-s">${r.supplier}</td>
+      <td class="n">${r.qty}</td><td class="n">${fmt2(r.paid)}</td><td class="n">${r.cp==null?"-":fmt2(r.cp)}</td>
+      <td class="n">${r.gap?fmt(r.gap):"-"}</td><td><span class="pill ${p[0]}">${p[1]}</span></td><td>${btn}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" style="color:var(--mute);padding:20px">Nothing here.</td></tr>`;
+  document.querySelectorAll("#rows button").forEach(b => b.onclick = () => act(+b.dataset.id, b.dataset.a));
+
+  document.getElementById("recoverAll").disabled = !leakOpen;
+  document.getElementById("contractAll").disabled = !offGap;
+}
+
+document.getElementById("tol").oninput = render;
+document.getElementById("recoverAll").onclick = () => {
+  lines.map(derive).filter(r => r.kind === "over").forEach(r => act(r.id, "recover"));
+};
+document.getElementById("contractAll").onclick = () => {
+  lines.map(derive).filter(r => r.kind === "off").forEach(r => {
+    // an item sourced earlier in this loop is no longer off-contract
+    if(contract[r.k] == null) act(r.id, "contract");
+    else { const l = lines.find(x => x.id === r.id); l.state = "contracted"; }
+  });
+};
+document.getElementById("next").onclick = () => {
+  const open = lines.map(derive).filter(r => r.kind === "over" || r.kind === "off");
+  const lost = open.reduce((a,r) => a + r.gap, 0);
+  log(`Period closed with ${fmt(lost)} of identified savings never realized.`);
+  period++; genPeriod();
+  log(`Loaded ${lines.length} new invoice lines. Contracts you signed earlier now catch drift automatically.`);
+  render();
+};
+
+genPeriod();
+log("Loaded 22 invoice lines. Start with the red ones.");
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Index Lab - build a basket of collectible cards</title>
+<style>
+:root{--bg:#f4efe6;--panel:#fffdf8;--ink:#1d2330;--mute:#6b7280;--line:#e2dacb;--acc:#c2410c;--acc2:#0f766e;--bench:#7c8aa5}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 24px 8px;max-width:1180px;margin:auto}
+h1{font:600 30px/1.1 Georgia,"Times New Roman",serif;margin:0 0 6px;letter-spacing:-.5px}
+header p{margin:0;color:var(--mute);max-width:760px}
+.tag{display:inline-block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);font-weight:700;margin-bottom:8px}
+main{max-width:1180px;margin:auto;padding:16px 24px 24px;display:grid;grid-template-columns:300px 1fr;gap:18px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{font:700 12px/1 ui-sans-serif,system-ui;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin:0 0 12px}
+label{display:block;font-size:13px;margin:12px 0 2px;font-weight:600}
+label span{float:right;font-weight:500;color:var(--acc);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:4px}
+.seg button{flex:1;border:0;background:transparent;padding:7px 4px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink)}
+.seg button.on{background:var(--ink);color:#fff}
+.stack{display:flex;flex-direction:column;gap:18px;min-width:0}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
+.stat b{display:block;font:600 22px Georgia,serif;font-variant-numeric:tabular-nums}
+.stat small{color:var(--mute);font-size:12px}
+.pos{color:var(--acc2)}.neg{color:var(--acc)}
+#chartwrap{position:relative}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--mute);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+#tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;font-size:12px;padding:6px 9px;border-radius:6px;display:none;white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);padding:6px;border-bottom:1px solid var(--line)}
+td{padding:6px;border-bottom:1px solid #eee7d9}
+tr.row{cursor:pointer}tr.row:hover{background:#faf5ea}
+tr.out td{color:#a9a393}
+tr.out .nm{text-decoration:line-through;text-decoration-color:#d8d0bd}
+.bar{height:8px;border-radius:4px;background:var(--acc2);min-width:1px}
+.pill{font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.pill.in{background:#e3f3ef;border-color:#b7e0d7;color:var(--acc2)}
+.pill.pin{background:#fde8dc;border-color:#f5c3a5;color:var(--acc)}
+.scroll{overflow-x:auto}
+.buy{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.buy input[type=number]{width:130px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit}
+.btn{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.note{font-size:12px;color:var(--mute);margin-top:8px}
+#lookthru{margin-top:10px;font-size:13px}
+#lookthru div{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:3px 0;gap:12px}
+footer{max-width:1180px;margin:auto;padding:12px 24px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Index Lab - toy model</div>
+  <h1>Own the basket, not the slab.</h1>
+  <p>Ninety synthetic collectible cards sit in a universe below. Screen them for liquidity and significance, pick a weighting rule, and watch a rules-based index get built and back-tested against a stock benchmark. Then "invest" and see how one share looks through to the cards. All data is randomly generated.</p>
+</header>
+<main>
+  <aside class="card" id="controls">
+    <h2>Construction rules</h2>
+    <label>Min. sales per month <span id="v-liq"></span></label>
+    <input type="range" id="liq" min="0" max="40" value="12">
+    <label>Min. significance score <span id="v-sig"></span></label>
+    <input type="range" id="sig" min="0" max="100" value="55">
+    <label>Max. bid/ask spread <span id="v-spr"></span></label>
+    <input type="range" id="spr" min="2" max="30" value="14">
+    <label>Number of constituents <span id="v-n"></span></label>
+    <input type="range" id="n" min="3" max="30" value="12">
+    <label>Weighting</label>
+    <div class="seg" id="wt">
+      <button data-v="equal" class="on">Equal</button>
+      <button data-v="value">Value</button>
+      <button data-v="liq">Liquidity</button>
+    </div>
+    <label>Max. weight per card <span id="v-cap"></span></label>
+    <input type="range" id="cap" min="5" max="50" value="15">
+    <label>Rebalance</label>
+    <div class="seg" id="rb">
+      <button data-v="12" class="on">Yearly</button>
+      <button data-v="0">Never</button>
+    </div>
+    <label>Random seed <span id="v-seed"></span></label>
+    <input type="range" id="seed" min="1" max="99" value="7">
+    <p class="note">Click any row in the table to force a card in or out, overriding the screens.</p>
+  </aside>
+
+  <div class="stack">
+    <div class="stats" id="stats"></div>
+
+    <section class="card">
+      <h2>Back-test, 10 years, base 1,000</h2>
+      <div id="chartwrap"><svg id="chart" viewBox="0 0 760 300" preserveAspectRatio="none"></svg><div id="tip"></div></div>
+      <div class="legend"><span><i style="background:var(--acc)"></i>Your card index</span><span><i style="background:var(--bench)"></i>Synthetic stock benchmark</span><span><i style="background:#d9cfb8"></i>Equal-weight whole universe</span></div>
+    </section>
+
+    <section class="card">
+      <h2>Buy a share of the basket</h2>
+      <div class="buy">
+        <input type="number" id="amt" value="2500" min="10" step="50"><span>USD</span>
+        <button class="btn" id="buy">Invest</button>
+        <span id="shareinfo" class="note" style="margin:0"></span>
+      </div>
+      <div id="lookthru"></div>
+    </section>
+
+    <section class="card">
+      <h2>Universe <span id="uc" style="float:right;text-transform:none;letter-spacing:0"></span></h2>
+      <div class="scroll"><table id="tbl"></table></div>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by tash (YC S26). Not affiliated with tash. All cards, prices and returns here are randomly generated and are not investment advice.</footer>
+
+<script>
+(function(){
+'use strict';
+const MONTHS = 120, $ = id => document.getElementById(id);
+const S = {liq:12, sig:55, spr:14, n:12, cap:15, wt:'equal', rb:12, seed:7, over:{}, pos:null};
+
+// ---------- deterministic randomness ----------
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0,v;while(!u)u=r();v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+
+// ---------- synthetic universe ----------
+const FIRST=['Marcus','Dante','Ellis','Rafael','Kenji','Owen','Teo','Hollis','Ansel','Vik','Lucan','Beck','Noor','Silas','Rey'];
+const LAST=['Vance','Okoro','Brandt','Salas','Mercer','Tanaka','Quill','Ferro','Hale','Durand','Voss','Ibarra','Kessler','Lund','Pryor','Adeyemi'];
+const SPORT=['Basketball','Football','Baseball','Hockey','Soccer'];
+const SET=['Prime Rookie','Chrome Debut','Heritage Gold','Apex Refractor','Legacy Auto','Origin Base'];
+let U=[], BENCH=[];
+function build(){
+  const r=rng(S.seed*7919+13), m=[];
+  let mk=0;
+  for(let t=1;t<=MONTHS;t++){mk=0.55*mk+gauss(r)*0.035+(t>40&&t<60?0.02:0)+(t>85&&t<100?-0.025:0.004);m.push(mk)}
+  U=[];
+  for(let i=0;i<90;i++){
+    const sig=Math.round(Math.min(99,Math.max(8,28+r()*72)));
+    const liq=Math.round(Math.max(1,(sig/100)*30*(0.4+r()*1.4)+r()*8));
+    const spread=Math.max(1.5,32-liq*0.7+r()*8-sig*0.05);
+    const price=Math.round((80+Math.pow(r(),2.2)*60000*(0.3+sig/100))/5)*5;
+    const beta=0.6+r()*1.2, vol=0.045+(1-Math.min(1,liq/45))*0.06+r()*0.02, drift=0.002+sig/100*0.004+gauss(r)*0.002;
+    const p=[price];
+    for(let t=1;t<=MONTHS;t++)p.push(p[t-1]*Math.exp(drift-vol*vol/2+beta*m[t-1]*0.9+vol*gauss(r)*(spread>20?1.3:1)));
+    U.push({id:i,name:FIRST[Math.floor(r()*FIRST.length)]+' '+LAST[Math.floor(r()*LAST.length)],
+      yr:1980+Math.floor(r()*43),sport:SPORT[Math.floor(r()*5)],set:SET[Math.floor(r()*SET.length)],
+      sig,liq,spread,price,vol,p});
+  }
+  // benchmark: stock-like series correlated with the same market factor
+  BENCH=[1000];
+  for(let t=1;t<=MONTHS;t++)BENCH.push(BENCH[t-1]*Math.exp(0.006+m[t-1]*0.45+gauss(r)*0.028));
+}
+
+// ---------- index construction ----------
+function pass(c){return c.sig>=S.sig&&c.liq>=S.liq&&c.spread<=S.spr}
+function composite(c){return 0.45*c.sig+0.35*Math.min(100,c.liq*2.5)+0.2*(100-c.spread*3)}
+function select(){
+  const forced=U.filter(c=>S.over[c.id]==='in');
+  const rest=U.filter(c=>pass(c)&&S.over[c.id]!=='out'&&S.over[c.id]!=='in').sort((a,b)=>composite(b)-composite(a));
+  return forced.concat(rest).slice(0,S.n);
+}
+function weights(sel){
+  if(!sel.length)return [];
+  const raw=sel.map(c=>S.wt==='equal'?1:S.wt==='value'?c.price:c.liq);
+  const cap=Math.max(S.cap/100,1/sel.length);
+  const total=raw.reduce((a,b)=>a+b,0);
+  let w=raw.map(x=>x/total);
+  const fixed=new Array(w.length).fill(false);
+  for(let it=0;it<30;it++){            // iterative capping: clamp, redistribute pro rata
+    let over=false,free=0,fixedSum=0;
+    w.forEach((x,i)=>{if(x>cap+1e-9){w[i]=cap;fixed[i]=true;over=true}});
+    if(!over)break;
+    w.forEach((x,i)=>{if(fixed[i])fixedSum+=x;else free+=raw[i]});
+    w=w.map((x,i)=>fixed[i]?x:raw[i]/free*(1-fixedSum));
+  }
+  return w;
+}
+function backtest(sel,w){
+  const lvl=[1000], units=[]; let V=1000;
+  const reb=t=>{sel.forEach((c,i)=>{units[i]=V*w[i]/c.p[t]})};
+  reb(0);
+  for(let t=1;t<=MONTHS;t++){
+    V=sel.reduce((s,c,i)=>s+units[i]*c.p[t],0);
+    lvl.push(V);
+    if(S.rb&&t%S.rb===0&&t<MONTHS)reb(t);
+  }
+  return lvl;
+}
+function vol12(l){
+  const r=[];for(let t=1;t<l.length;t++)r.push(Math.log(l[t]/l[t-1]));
+  const m=r.reduce((a,b)=>a+b,0)/r.length;
+  return Math.sqrt(r.reduce((a,b)=>a+(b-m)**2,0)/(r.length-1))*Math.sqrt(12);
+}
+function metrics(l){
+  let pk=l[0],dd=0;l.forEach(x=>{pk=Math.max(pk,x);dd=Math.min(dd,x/pk-1)});
+  return {cagr:Math.pow(l[l.length-1]/l[0],12/MONTHS)-1,vol:vol12(l),dd};
+}
+
+// ---------- rendering ----------
+const fmt$=x=>'$'+Math.round(x).toLocaleString();
+const pct=(x,d=1)=>(x*100).toFixed(d)+'%';
+const monthLabel=t=>{const d=new Date(2016,t,1);return d.toLocaleString('en',{month:'short'})+' '+d.getFullYear()};
+
+function render(){
+  ['liq','sig','spr','n','cap','seed'].forEach(k=>{
+    $('v-'+k).textContent = (k==='spr'||k==='cap') ? S[k]+'%' : S[k];
+  });
+  const sel=select(), w=weights(sel);
+  const rows=U.slice().sort((a,b)=>composite(b)-composite(a));
+  const inSet=new Set(sel.map(c=>c.id));
+  $('uc').textContent=sel.length+' in index / '+U.filter(pass).length+' pass screens / '+U.length+' total';
+
+  if(!sel.length){
+    $('stats').innerHTML='<div class="stat" style="grid-column:1/-1"><b>No constituents</b><small>Loosen the screens.</small></div>';
+    $('chart').innerHTML='';S.pos=null;$('lookthru').innerHTML='';$('shareinfo').textContent='';
+    table(rows,inSet,[],[]);return;
+  }
+  const L=backtest(sel,w), M=metrics(L), B=metrics(BENCH);
+  const avg=[];for(let t=0;t<=MONTHS;t++)avg.push(1000*U.reduce((s,c)=>s+c.p[t]/c.p[0],0)/U.length);
+  const single=sel.map(c=>vol12(c.p));
+  const avgSingle=single.reduce((a,b)=>a+b,0)/single.length;
+  const hhi=w.reduce((s,x)=>s+x*x,0);
+  const stat=(v,l,cls)=>'<div class="stat"><b class="'+(cls||'')+'">'+v+'</b><small>'+l+'</small></div>';
+  $('stats').innerHTML =
+    stat(pct(M.cagr),'Annualised return (bench '+pct(B.cagr)+')',M.cagr>=0?'pos':'neg')+
+    stat(pct(M.vol),'Volatility (avg single card '+pct(avgSingle,0)+')')+
+    stat(pct(M.dd),'Max drawdown (bench '+pct(B.dd,0)+')','neg')+
+    stat((1/hhi).toFixed(1),'Effective # of cards (of '+sel.length+')');
+  chart(L,BENCH,avg);
+  table(rows,inSet,w,sel);
+  S.pos={sel,w,level:L[MONTHS]};
+  invest(false);
+}
+
+function chart(a,b,c){
+  const W=760,H=300,pl=44,pr=10,pt=10,pb=24;
+  const all=a.concat(b,c), lo=Math.min(...all)*0.95, hi=Math.max(...all)*1.05;
+  const lg=Math.log, y=v=>pt+(H-pt-pb)*(1-(lg(v)-lg(lo))/(lg(hi)-lg(lo)));
+  const x=t=>pl+(W-pl-pr)*t/MONTHS;
+  const path=s=>s.map((v,t)=>(t?'L':'M')+x(t).toFixed(1)+' '+y(v).toFixed(1)).join('');
+  let g='';
+  for(let v=Math.pow(10,Math.floor(Math.log10(lo)));v<hi;v*=2){
+    if(v>lo)g+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#e8e0cf"/><text x="'+(pl-6)+'" y="'+(y(v)+4)+'" text-anchor="end" font-size="11" fill="#6b7280">'+Math.round(v).toLocaleString()+'</text>';
+  }
+  for(let t=0;t<=MONTHS;t+=24)g+='<text x="'+x(t)+'" y="'+(H-6)+'" text-anchor="middle" font-size="11" fill="#6b7280">'+(2016+t/12)+'</text>';
+  if(S.rb)for(let t=S.rb;t<MONTHS;t+=S.rb)g+='<line x1="'+x(t)+'" x2="'+x(t)+'" y1="'+pt+'" y2="'+(H-pb)+'" stroke="#ece4d2" stroke-dasharray="2 4"/>';
+  g+='<path d="'+path(c)+'" fill="none" stroke="#d9cfb8" stroke-width="2"/>';
+  g+='<path d="'+path(b)+'" fill="none" stroke="#7c8aa5" stroke-width="2"/>';
+  g+='<path d="'+path(a)+'" fill="none" stroke="#c2410c" stroke-width="2.8"/>';
+  g+='<line id="xh" y1="'+pt+'" y2="'+(H-pb)+'" stroke="#1d2330" stroke-opacity=".35" style="display:none"/>';
+  $('chart').innerHTML=g;
+  const svg=$('chart'), tip=$('tip');
+  svg.onmousemove=e=>{
+    const r=svg.getBoundingClientRect(), px=(e.clientX-r.left)/r.width*W;
+    const t=Math.max(0,Math.min(MONTHS,Math.round((px-pl)/(W-pl-pr)*MONTHS)));
+    const xh=$('xh');xh.setAttribute('x1',x(t));xh.setAttribute('x2',x(t));xh.style.display='';
+    tip.style.display='block';tip.style.left=Math.min(r.width-190,x(t)/W*r.width+10)+'px';tip.style.top='8px';
+    tip.innerHTML=monthLabel(t)+'<br>Index '+Math.round(a[t]).toLocaleString()+' / Bench '+Math.round(b[t]).toLocaleString();
+  };
+  svg.onmouseleave=()=>{tip.style.display='none';const xh=$('xh');if(xh)xh.style.display='none'};
+}
+
+function table(rows,inSet,w,sel){
+  const wOf={};sel.forEach((c,i)=>{wOf[c.id]=w[i]});
+  const maxW=Math.max(0.0001,...Object.values(wOf));
+  let h='<tr><th>Card</th><th>Set</th><th>Sig.</th><th>Sales/mo</th><th>Spread</th><th>Price</th><th>Status</th><th style="width:110px">Weight</th></tr>';
+  rows.slice(0,45).forEach(c=>{
+    const inn=inSet.has(c.id), o=S.over[c.id];
+    const st=o==='in'?'<span class="pill pin">pinned</span>':o==='out'?'<span class="pill pin">excluded</span>':inn?'<span class="pill in">in index</span>':pass(c)?'<span class="pill">eligible</span>':'<span class="pill">screened out</span>';
+    h+='<tr class="row '+(inn?'':'out')+'" data-id="'+c.id+'"><td class="nm">'+c.name+' <span style="color:#9a9484">'+c.yr+'</span></td><td>'+c.sport+' '+c.set+'</td><td>'+c.sig+'</td><td>'+c.liq+'</td><td>'+c.spread.toFixed(1)+'%</td><td>'+fmt$(c.price)+'</td><td>'+st+'</td><td>'+
+      (inn?'<div style="display:flex;align-items:center;gap:6px"><div class="bar" style="width:'+(wOf[c.id]/maxW*60).toFixed(0)+'px"></div>'+pct(wOf[c.id])+'</div>':'')+'</td></tr>';
+  });
+  $('tbl').innerHTML=h;
+  $('tbl').querySelectorAll('tr.row').forEach(tr=>{tr.onclick=()=>{
+    const id=+tr.dataset.id, inn=inSet.has(id);
+    if(S.over[id])delete S.over[id]; else S.over[id]=inn?'out':'in';
+    render();
+  }});
+}
+
+function invest(commit){
+  if(!S.pos)return;
+  const amt=Math.max(10,+$('amt').value||0), sel=S.pos.sel, w=S.pos.w;
+  const sharePx=S.pos.level/10;     // one share = 1/10 of the index level, in dollars
+  $('shareinfo').textContent='End-of-test share price '+sharePx.toFixed(2)+' USD, so '+(amt/sharePx).toFixed(3)+' shares (fractional).';
+  const top=sel.map((c,i)=>({c:c,d:amt*w[i]})).sort((a,b)=>b.d-a.d);
+  $('lookthru').innerHTML='<div style="font-weight:600"><span>Look-through of your '+fmt$(amt)+'</span><span>Dollars / slice of one copy</span></div>'+
+    top.map(x=>{const f=x.d/x.c.price*100;return '<div><span>'+x.c.name+' '+x.c.yr+' '+x.c.set+'</span><span>'+fmt$(x.d)+' / '+f.toFixed(f<10?2:1)+'%</span></div>'}).join('')+
+    '<p class="note">A basket holds slices of every card in it, sized by the rules above. No picking, grading, storing or reselling on your side.</p>';
+  if(commit)$('buy').textContent='Invested - edit amount to re-run';
+}
+
+// ---------- wiring ----------
+['liq','sig','spr','n','cap','seed'].forEach(k=>{
+  $(k).oninput=()=>{S[k]=+$(k).value;if(k==='seed'){S.over={};build()}render()};
+});
+[['wt','wt'],['rb','rb']].forEach(pair=>{
+  const id=pair[0], key=pair[1];
+  $(id).querySelectorAll('button').forEach(b=>{b.onclick=()=>{
+    $(id).querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    S[key]=key==='rb'?+b.dataset.v:b.dataset.v;render();
+  }});
+});
+$('buy').onclick=()=>invest(true);
+$('amt').oninput=()=>{$('buy').textContent='Invest';invest(false)};
+build();render();
+})();
+</script>
+</body>
+</html>
