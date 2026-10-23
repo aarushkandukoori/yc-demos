@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chainwalk - attack path replay toy</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d2320;--mute:#6b736e;--card:#fffdf8;--line:#d9d4c7;--ok:#1f7a4d;--bad:#b3392b;--warn:#b7791f;--acc:#2c4a8a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 32px 8px;max-width:1180px;margin:auto}
+h1{margin:0;font-size:26px;letter-spacing:-.02em}
+h1 span{color:var(--acc)}
+header p{margin:6px 0 0;color:var(--mute);max-width:760px}
+main{max-width:1180px;margin:auto;padding:12px 32px 28px;display:grid;grid-template-columns:330px 1fr;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mute);margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font:inherit;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:7px;padding:7px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button:disabled{opacity:.45;cursor:default}
+.sw{display:flex;gap:8px;align-items:center;font-size:13px;margin:10px 0 0;color:var(--ink)}
+.ex{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.ex:first-of-type{border-top:0}
+.ex b{font-weight:600}
+.ex small{color:var(--mute);grid-column:1/2}
+.tag{font-size:11px;border-radius:99px;padding:1px 8px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.tag.ok{color:var(--ok);border-color:var(--ok)}.tag.bad{color:var(--bad);border-color:var(--bad)}
+.tag.run{color:var(--warn);border-color:var(--warn)}.tag.off{text-decoration:line-through}
+.fix{grid-column:2/3;grid-row:1/3;align-self:center;font-size:12px;padding:3px 9px}
+svg{width:100%;height:auto;display:block;background:
+ radial-gradient(circle at 1px 1px,#d9d4c7 1px,transparent 1.2px) 0 0/18px 18px}
+.node rect{fill:#fff;stroke:var(--ink);stroke-width:1.2}
+.node text{font:600 11px ui-monospace,Menlo,monospace;text-anchor:middle;fill:var(--ink)}
+.node.reach rect{fill:#e3f1e9;stroke:var(--ok)}
+.node.goal rect{stroke-width:2.4}
+.node.pwn rect{fill:var(--bad);stroke:var(--bad)}.node.pwn text{fill:#fff}
+.edge{stroke:#aaa;stroke-width:1.4;stroke-dasharray:4 4;fill:none}
+.edge.ok{stroke:var(--ok);stroke-dasharray:none}
+.edge.bad{stroke:var(--bad)}
+.edge.path{stroke:var(--bad);stroke-width:3.4;stroke-dasharray:none}
+.edge.skip{opacity:.25}
+.elab{font:10px ui-monospace,Menlo,monospace;fill:var(--mute);text-anchor:middle}
+.stats{display:flex;gap:22px;margin:0 0 4px;flex-wrap:wrap}
+.stats div{font-size:12px;color:var(--mute)}.stats strong{display:block;font-size:22px;color:var(--ink);letter-spacing:-.02em}
+#log{background:#161b18;color:#cfe7d8;font:12px/1.55 ui-monospace,Menlo,monospace;border-radius:8px;padding:12px;height:210px;overflow:auto;white-space:pre-wrap}
+#log .f{color:#ff8c7a}#log .p{color:#7be0a4}#log .d{color:#8aa093}#log .h{color:#f0c36a}
+ol.chain{margin:0;padding-left:20px;font-size:13px}
+ol.chain li{margin:6px 0}
+.verdict{margin-top:8px;font-size:14px}
+.verdict.bad{color:var(--bad)}.verdict.ok{color:var(--ok)}
+.col{display:flex;flex-direction:column;gap:18px}
+footer{max-width:1180px;margin:auto;padding:0 32px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Chain<span>walk</span> - attack paths that have to survive a replay</h1>
+  <p>A toy agent explores a synthetic company ("Northwind Parcel", all fake). It proposes exploit steps, replays each one from a clean session, and only keeps what reproduces. Then it chains the survivors into a path to the production database. Apply a fix and re-run to watch the path reroute or die.</p>
+</header>
+<main>
+  <div class="card">
+    <h2>Candidate weaknesses</h2>
+    <div class="row">
+      <button id="run">Run agent</button>
+      <button id="reset" class="ghost">Reset fixes</button>
+    </div>
+    <label class="sw"><input type="checkbox" id="replay" checked> Replay each step from a clean session</label>
+    <p style="font-size:12px;color:var(--mute);margin:6px 0 10px">Turn replay off to see what a scanner that trusts every candidate would report.</p>
+    <div id="list"></div>
+  </div>
+  <div class="col">
+    <div class="card">
+      <div class="stats">
+        <div><strong id="s-cand">0</strong>candidates</div>
+        <div><strong id="s-ver">0</strong>reproduced</div>
+        <div><strong id="s-rej">0</strong>rejected</div>
+        <div><strong id="s-len">-</strong>path length</div>
+      </div>
+      <svg id="g" viewBox="0 0 960 340" role="img" aria-label="Attack graph"></svg>
+    </div>
+    <div class="card">
+      <h2>Verified attack path</h2>
+      <div id="report"><span style="color:var(--mute)">Run the agent to map a path.</span></div>
+    </div>
+    <div class="card">
+      <h2>Agent trace</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Trident (YC S26). Not affiliated with Trident. All hosts, tokens, and findings above are synthetic.</footer>
+
+<script>
+// Capability graph: nodes are things an attacker can hold, edges are exploit steps.
+var NODES = {
+  anon:   {l:'internet',     x:50,  y:170},
+  sess:   {l:'user session', x:170, y:170},
+  tenant: {l:'other tenant', x:290, y:80},
+  admin:  {l:'admin panel',  x:290, y:270},
+  svc:    {l:'service token',x:410, y:170},
+  role:   {l:'cloud role',   x:530, y:170},
+  bucket: {l:'bucket read',  x:650, y:80},
+  creds:  {l:'db creds',     x:770, y:80},
+  prod:   {l:'PROD DB',      x:900, y:170}
+};
+var GOAL = 'prod';
+// real: does the exploit reproduce from a clean session. fix: remediation text.
+var EX = [
+  {id:'E1', from:'anon',  to:'sess',   t:'Predictable password-reset token', where:'POST /reset', real:true,
+   proof:['request reset for user "demo-a"','token equals a hash of user id and current minute','guessed token on 3rd try, server returns 302 to /home'],
+   fix:'Use 128-bit random single-use tokens, expire in 15 min.'},
+  {id:'E2', from:'anon',  to:'admin',  t:'Reflected XSS on /search', where:'GET /search?q=', real:false,
+   proof:['payload reflected in page markup','strict script-src CSP blocks inline execution','no session cookie exfiltrated'],
+   fix:'Encode output; keep the strict CSP.'},
+  {id:'E3', from:'sess',  to:'tenant', t:'IDOR on order lookup', where:'GET /api/orders/{id}', real:true,
+   proof:['logged in as demo-a, tenant 12','requested order belonging to tenant 7, server returns 200','response body contains tenant 7 customer names'],
+   fix:'Check order owner tenant against the caller on every read.'},
+  {id:'E4', from:'tenant',to:'svc',    t:'Service token embedded in export file', where:'GET /api/orders/{id}/export', real:true,
+   proof:['exported order JSON includes a field named webhook_auth','value decodes to a live bearer token for the fulfillment service','token accepted against the service health endpoint'],
+   fix:'Strip internal auth fields from any customer-facing export.'},
+  {id:'E5', from:'svc',   to:'role',   t:'Overbroad instance role on fulfillment host', where:'metadata endpoint', real:true,
+   proof:['fulfillment service token grants access to the host metadata endpoint','metadata returns temporary cloud credentials','credentials carry a role meant for the backup job, not fulfillment'],
+   fix:'Scope the instance role to only the permissions fulfillment needs.'},
+  {id:'E6', from:'role',  to:'bucket', t:'Backup role can read the secrets bucket', where:'cloud storage', real:true,
+   proof:['assumed the backup role from E5','listed objects in the secrets bucket, access allowed','bucket policy grants backup role read on the whole bucket, not just backup prefix'],
+   fix:'Scope the backup role to its own prefix, not bucket-wide read.'},
+  {id:'E7', from:'bucket',to:'creds',  t:'Plaintext DB credentials in a config object', role:'secrets', where:'secrets bucket', real:true,
+   proof:['downloaded object config/prod.env from the secrets bucket','file contains DB_HOST, DB_USER, DB_PASS in plaintext','no secrets-manager reference, just raw values'],
+   fix:'Move credentials to a secrets manager; never commit plaintext env files to storage.'},
+  {id:'E8', from:'creds', to:'prod',   t:'Credentials connect directly to production', where:'db.northwind-parcel.example:5432', real:true,
+   proof:['opened a TCP connection to the production database host','authenticated with the credentials from E7','ran select 1, connection accepted'],
+   fix:'Rotate the leaked credentials and put the DB behind a bastion with network policy.'},
+  {id:'E9', from:'admin', to:'prod',   t:'Default admin credentials', where:'POST /admin/login', real:false,
+   proof:['tried admin / admin123 and 11 other common pairs','all attempts return 401','account locks after 5 attempts, as expected'],
+   fix:'No fix needed, this one never reproduced.'}
+];
+
+var fixed = {};
+var verified = null;
+
+function log(html){
+  var el = document.getElementById('log');
+  el.innerHTML += html + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+function buildList(){
+  var box = document.getElementById('list');
+  box.innerHTML = '';
+  EX.forEach(function(ex){
+    var row = document.createElement('div');
+    row.className = 'ex';
+    var tagClass = 'tag', tagText = 'queued';
+    if (verified){
+      var v = verified.results[ex.id];
+      if (v === 'ok'){tagClass='tag ok';tagText='reproduced';}
+      else if (v === 'bad'){tagClass='tag bad';tagText='rejected';}
+      else {tagClass='tag off';tagText='not reachable';}
+    }
+    var label = ex.t + (fixed[ex.id] ? ' (patched)' : '');
+    row.innerHTML =
+      '<b>'+label+'</b>' +
+      '<span class="'+tagClass+'">'+tagText+'</span>' +
+      '<small>'+ex.where+'</small>' +
+      '<button class="fix" data-id="'+ex.id+'" '+(fixed[ex.id]?'disabled':'')+'>'+(fixed[ex.id]?'fixed':'apply fix')+'</button>';
+    box.appendChild(row);
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('button.fix'), function(b){
+    b.addEventListener('click', function(){
+      fixed[b.getAttribute('data-id')] = true;
+      runAgent();
+    });
+  });
+}
+
+function edgePath(a,b){
+  var x1=NODES[a].x, y1=NODES[a].y, x2=NODES[b].x, y2=NODES[b].y;
+  var mx=(x1+x2)/2, my=(y1+y2)/2 - 28;
+  return 'M'+x1+','+y1+' Q'+mx+','+my+' '+x2+','+y2;
+}
+
+function drawGraph(pathIds){
+  var svg = document.getElementById('g');
+  var parts = [];
+  var pathSet = {};
+  (pathIds||[]).forEach(function(id){ pathSet[id]=true; });
+  var reach = {};
+  if (verified){ for (var k in NODES) if (verified.reached[k]) reach[k]=true; }
+
+  EX.forEach(function(ex){
+    var d = edgePath(ex.from, ex.to);
+    var cls = 'edge';
+    var v = verified ? verified.results[ex.id] : null;
+    if (pathSet[ex.id]) cls = 'edge path';
+    else if (v === 'ok') cls = 'edge ok';
+    else if (v === 'bad') cls = 'edge bad';
+    else if (verified) cls = 'edge skip';
+    parts.push('<path class="'+cls+'" d="'+d+'"/>');
+    var mx=(NODES[ex.from].x+NODES[ex.to].x)/2, my=(NODES[ex.from].y+NODES[ex.to].y)/2 - 34;
+    parts.push('<text class="elab" x="'+mx+'" y="'+my+'">'+ex.id+'</text>');
+  });
+
+  for (var id in NODES){
+    var n = NODES[id];
+    var cls = 'node';
+    if (id === GOAL) cls += ' goal';
+    if (reach[id]) cls += ' reach';
+    if (pathSet && pathIds && pathIds.length && reach[GOAL] && reach[id] && id===GOAL) cls += ' pwn';
+    var w = Math.max(70, n.l.length*7.5+16);
+    parts.push('<g class="'+cls+'" transform="translate('+(n.x-w/2)+','+(n.y-16)+')">' +
+      '<rect width="'+w+'" height="32" rx="7"/>' +
+      '<text x="'+w/2+'" y="20">'+n.l+'</text></g>');
+  }
+  svg.innerHTML = parts.join('');
+}
+
+function shortestPath(edgesOk){
+  // BFS over capabilities using only edges marked ok, from 'anon' to GOAL
+  var adj = {};
+  edgesOk.forEach(function(ex){
+    (adj[ex.from] = adj[ex.from] || []).push(ex);
+  });
+  var seenNode = {anon:true};
+  var q = [{node:'anon', path:[]}];
+  while(q.length){
+    var cur = q.shift();
+    if (cur.node === GOAL) return cur.path;
+    (adj[cur.node]||[]).forEach(function(ex){
+      if (!seenNode[ex.to]){
+        seenNode[ex.to] = true;
+        q.push({node: ex.to, path: cur.path.concat([ex])});
+      }
+    });
+  }
+  return null;
+}
+
+function runAgent(){
+  document.getElementById('log').innerHTML = '';
+  var replay = document.getElementById('replay').checked;
+  log('<span class="h">agent started -> target: Northwind Parcel (synthetic)</span>');
+  log('<span class="d">candidates surfaced from route map + cloud scan: '+EX.length+'</span>');
+
+  var results = {};
+  var reached = {anon:true};
+  var oks = [];
+
+  EX.forEach(function(ex){
+    var patched = !!fixed[ex.id];
+    var realNow = ex.real && !patched;
+    if (!replay){
+      // trust every candidate, no replay check
+      results[ex.id] = patched ? 'off' : 'ok';
+      if (!patched){ oks.push(ex); reached[ex.to]=true; }
+      log('<span class="f">'+ex.id+'</span> '+ex.t+' <span class="p">reported (no replay)</span>');
+      return;
+    }
+    log('<span class="f">'+ex.id+'</span> replaying from a clean session against '+ex.where+' ...');
+    ex.proof.forEach(function(step){ log('  <span class="d">'+step+'</span>'); });
+    if (patched){
+      results[ex.id] = 'off';
+      log('  <span class="h">target patched, step no longer reproduces</span>');
+    } else if (realNow){
+      results[ex.id] = 'ok';
+      oks.push(ex);
+      reached[ex.to] = true;
+      log('  <span class="p">reproduced, kept as a finding</span>');
+    } else {
+      results[ex.id] = 'bad';
+      log('  <span class="f">did not reproduce, discarded</span>');
+    }
+  });
+
+  var path = shortestPath(oks);
+  verified = {results:results, reached:reached};
+
+  var cand = EX.length;
+  var ver = Object.keys(results).filter(function(k){return results[k]==='ok';}).length;
+  var rej = Object.keys(results).filter(function(k){return results[k]==='bad';}).length;
+  document.getElementById('s-cand').textContent = cand;
+  document.getElementById('s-ver').textContent = ver;
+  document.getElementById('s-rej').textContent = rej;
+  document.getElementById('s-len').textContent = path ? path.length : '-';
+
+  var rep = document.getElementById('report');
+  if (path && path.length){
+    var ids = path.map(function(e){return e.id;});
+    drawGraph(ids);
+    var html = '<ol class="chain">';
+    path.forEach(function(ex){
+      html += '<li><b>'+ex.id+'</b> &middot; '+ex.t+' <span style="color:var(--mute)">('+ex.where+')</span></li>';
+    });
+    html += '</ol><div class="verdict bad">'+path.length+'-step path from an anonymous request to PROD DB. Each step above reproduced from a clean session.</div>';
+    rep.innerHTML = html;
+    log('<span class="h">chain assembled: '+ids.join(' -> ')+' -> PROD DB compromised</span>');
+  } else {
+    drawGraph([]);
+    rep.innerHTML = '<div class="verdict ok">No verified path to PROD DB right now. The fixes applied so far break every chain the agent found.</div>';
+    log('<span class="h">no path to goal survives replay, target holds</span>');
+  }
+  buildList();
+}
+
+document.getElementById('run').addEventListener('click', runAgent);
+document.getElementById('replay').addEventListener('change', runAgent);
+document.getElementById('reset').addEventListener('click', function(){
+  fixed = {};
+  verified = null;
+  drawGraph([]);
+  document.getElementById('report').innerHTML = '<span style="color:var(--mute)">Run the agent to map a path.</span>';
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('s-cand').textContent='0';
+  document.getElementById('s-ver').textContent='0';
+  document.getElementById('s-rej').textContent='0';
+  document.getElementById('s-len').textContent='-';
+  buildList();
+});
+
+buildList();
+drawGraph([]);
+</script>
+</body>
+</html>

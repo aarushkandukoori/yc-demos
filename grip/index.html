@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grasp Ledger - a toy pick-and-learn simulator</title>
+<style>
+:root{--bg:#14161a;--panel:#1c2026;--line:#2c323b;--ink:#e8e6df;--dim:#8d94a0;--ok:#9ad26b;--bad:#ee7a5c;--acc:#f0c35a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+header{padding:20px 24px 8px;max-width:1180px;margin:auto}
+h1{font:600 22px/1.2 Georgia,serif;margin:0 0 4px;letter-spacing:.2px}
+header p{margin:0;color:var(--dim);max-width:760px}
+main{max-width:1180px;margin:auto;padding:12px 24px;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h2{margin:0 0 8px;font:600 11px/1 ui-monospace,monospace;text-transform:uppercase;letter-spacing:1.4px;color:var(--dim)}
+canvas{width:100%;display:block;border-radius:6px;background:#0f1114;cursor:crosshair}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+button,select{background:#262c35;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#1a1405;border-color:var(--acc)}
+label{color:var(--dim);display:flex;gap:6px;align-items:center}
+input[type=range]{accent-color:var(--acc)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.stat{background:#14171b;border:1px solid var(--line);border-radius:8px;padding:8px}
+.stat b{display:block;font-size:20px}
+.stat span{color:var(--dim);font-size:11px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:4px 5px;text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--dim);font-weight:400;border-bottom:1px solid var(--line)}
+td.best{color:var(--ok);font-weight:700}
+#log{height:120px;overflow:auto;font-size:12px;color:var(--dim)}
+#log div{padding:1px 0}.g{color:var(--ok)}.r{color:var(--bad)}
+.tip{color:var(--dim);font-size:12px;margin-top:8px}
+footer{max-width:1180px;margin:auto;padding:12px 24px 28px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Grasp Ledger</h1>
+  <p>A toy sorting line. Contaminants ride a belt of food scraps; a robot has three grip strategies and no idea which works on what. It learns from every success and failure. Watch the table turn from guesses into a policy.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Belt</h2>
+    <canvas id="cv" width="760" height="360"></canvas>
+    <div class="bar">
+      <button id="auto" class="on">Auto-pick: on</button>
+      <label>Belt <input id="spd" type="range" min="10" max="90" value="40"></label>
+      <label>Policy
+        <select id="pol"><option value="ts">Learn (Thompson)</option><option value="rand">Random grip</option><option value="fixed">Always pinch</option></select>
+      </label>
+      <label>Manual grip
+        <select id="man"><option value="pinch">pinch</option><option value="suction">suction</option><option value="scoop">scoop</option></select>
+      </label>
+      <button id="rst">Reset memory</button>
+    </div>
+    <div class="tip">Click any item on the belt to grab it by hand with the manual grip. Your attempts also train the model. Red-outlined items are contaminants; green-outlined ones are good organics and should stay.</div>
+  </section>
+  <aside style="display:grid;gap:16px;align-content:start">
+    <section class="card">
+      <h2>Line stats</h2>
+      <div class="stats">
+        <div class="stat"><b id="sPicks">0</b><span>pick attempts</span></div>
+        <div class="stat"><b id="sRate">-</b><span>success (last 30)</span></div>
+        <div class="stat"><b id="sMiss">0</b><span>contaminants missed</span></div>
+      </div>
+      <canvas id="chart" width="360" height="90"></canvas>
+    </section>
+    <section class="card">
+      <h2>Learned grip success, by object</h2>
+      <table id="tbl"></table>
+      <div class="tip">Each cell is the posterior mean of Beta(wins+1, losses+1), with n attempts. Green is the current best grip.</div>
+    </section>
+    <section class="card"><h2>Attempt log</h2><div id="log"></div></section>
+  </aside>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Grip (YC S26). Not affiliated with Grip. All objects, probabilities and numbers here are synthetic.</footer>
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const ch=document.getElementById('chart'),cx=ch.getContext('2d');
+const W=cv.width,H=cv.height,BELT_Y=150,BELT_H=150;
+const GRIPS=['pinch','suction','scoop'];
+// Hidden ground truth: true success probability of each grip on each object class.
+const KINDS={
+  bag:   {contam:1,color:'#d8dde6',shape:'blob', p:{pinch:.25,suction:.80,scoop:.35}},
+  bottle:{contam:1,color:'#6fb7e6',shape:'bottle',p:{pinch:.55,suction:.45,scoop:.20}},
+  fork:  {contam:1,color:'#b9bec7',shape:'fork',  p:{pinch:.85,suction:.10,scoop:.30}},
+  can:   {contam:1,color:'#c9a24b',shape:'can',   p:{pinch:.30,suction:.85,scoop:.15}},
+  shard: {contam:1,color:'#8ee0c6',shape:'shard', p:{pinch:.45,suction:.20,scoop:.75}},
+  peel:  {contam:0,color:'#c78a3a',shape:'blob',  p:{pinch:.5,suction:.5,scoop:.5}},
+  apple: {contam:0,color:'#c4503f',shape:'circle',p:{pinch:.5,suction:.5,scoop:.5}},
+  greens:{contam:0,color:'#5fa04a',shape:'blob',  p:{pinch:.5,suction:.5,scoop:.5}}
+};
+const CONT=Object.keys(KINDS).filter(k=>KINDS[k].contam);
+const ORGANIC=['peel','apple','greens'];
+let items=[],arm,stats,hist,lastSpawn=0,nextId=1;
+let auto=true,rng=mulberry(7);
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function reset(){
+  items=[];hist=[];
+  stats={picks:0,miss:0,post:{}};
+  CONT.forEach(k=>{stats.post[k]={};GRIPS.forEach(g=>{stats.post[k][g]={w:0,l:0}})});
+  arm={x:W/2,y:60,state:'idle',target:null,grip:null,timer:0};
+  document.getElementById('log').innerHTML='';
+  render();
+}
+// Beta sampling via two gamma draws (Marsaglia-Tsang)
+function gauss(){let u=0;while(!u)u=rng();const v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function gamma(a){
+  if(a<1)return gamma(a+1)*Math.pow(rng(),1/a);
+  const d=a-1/3,c=1/Math.sqrt(9*d);
+  for(;;){
+    let x,v;
+    do{x=gauss();v=1+c*x}while(v<=0);
+    v=v*v*v;
+    const u=rng();
+    if(Math.log(u)<.5*x*x+d-d*v+d*Math.log(v))return d*v;
+  }
+}
+function beta(a,b){const x=gamma(a),y=gamma(b);return x/(x+y)}
+function chooseGrip(kind){
+  const pol=document.getElementById('pol').value;
+  if(pol==='rand')return GRIPS[Math.floor(rng()*3)];
+  if(pol==='fixed')return 'pinch';
+  let best=null,bs=-1;
+  GRIPS.forEach(g=>{
+    const s=stats.post[kind][g],v=beta(s.w+1,s.l+1);
+    if(v>bs){bs=v;best=g}
+  });
+  return best;
+}
+function mean(kind,g){const s=stats.post[kind][g];return (s.w+1)/(s.w+s.l+2)}
+function spawn(){
+  // ~55% contaminants so there is always something to learn on
+  const kind=rng()<.55?CONT[Math.floor(rng()*CONT.length)]:ORGANIC[Math.floor(rng()*3)];
+  items.push({id:nextId++,kind:kind,x:-30,y:BELT_Y+25+rng()*(BELT_H-50),r:14+rng()*5,rot:rng()*6,state:'belt'});
+}
+function attempt(item,grip){
+  arm.target=item;arm.grip=grip;arm.state='reach';item.state='claimed';
+}
+function resolve(){
+  const it=arm.target,k=KINDS[it.kind],grip=arm.grip;
+  const ok=rng()<k.p[grip];
+  stats.picks++;
+  const s=stats.post[it.kind][grip];
+  if(ok)s.w++;else s.l++;
+  hist.push(ok?1:0);
+  addLog(grip+' on '+it.kind+': '+(ok?'picked':'dropped'),ok);
+  if(ok){it.state='picked';arm.state='carry'}
+  else{it.state='belt';it.x+=30;arm.state='retract'}
+  render();
+}
+function addLog(msg,ok){
+  const d=document.createElement('div');
+  d.className=ok?'g':'r';
+  d.textContent=(ok?'+ ':'- ')+msg;
+  const L=document.getElementById('log');
+  L.prepend(d);
+  while(L.children.length>40)L.lastChild.remove();
+}
+function step(dt){
+  const spd=+document.getElementById('spd').value;
+  lastSpawn+=dt;
+  if(lastSpawn>2600/(spd/40)){lastSpawn=0;spawn()}
+  items.forEach(i=>{if(i.state==='belt'||i.state==='claimed')i.x+=spd*dt/1000});
+  for(let n=items.length-1;n>=0;n--){
+    const i=items[n];
+    if(i.x>W+30&&i.state==='belt'){
+      if(KINDS[i.kind].contam){stats.miss++;render()}
+      items.splice(n,1);
+    }
+  }
+  const mv=(tx,ty,sp)=>{
+    const dx=tx-arm.x,dy=ty-arm.y,d=Math.hypot(dx,dy);
+    if(d<4)return true;
+    const s=Math.min(d,sp*dt/1000);
+    arm.x+=dx/d*s;arm.y+=dy/d*s;
+    return false;
+  };
+  if(arm.state==='idle'){
+    mv(W*.45,60,200);
+    if(auto){
+      const c=items.filter(i=>i.state==='belt'&&KINDS[i.kind].contam&&i.x>90&&i.x<W-140).sort((a,b)=>b.x-a.x)[0];
+      if(c)attempt(c,chooseGrip(c.kind));
+    }
+  }else if(arm.state==='reach'){
+    const it=arm.target;
+    if(mv(it.x,it.y,420)){arm.state='grab';arm.timer=260}
+  }else if(arm.state==='grab'){
+    arm.x=arm.target.x;
+    arm.timer-=dt;
+    if(arm.timer<=0)resolve();
+  }else if(arm.state==='carry'){
+    const it=arm.target;
+    it.x=arm.x;it.y=arm.y+16;
+    if(mv(W-50,30,380)){
+      items=items.filter(z=>z!==it);
+      arm.state='idle';arm.target=null;
+    }
+  }else if(arm.state==='retract'){
+    if(mv(arm.x,60,420)){arm.state='idle';arm.target=null}
+  }
+}
+function shape(c,k,x,y,r,rot){
+  c.save();c.translate(x,y);c.rotate(rot);c.fillStyle=k.color;c.beginPath();
+  if(k.shape==='circle')c.arc(0,0,r,0,7);
+  else if(k.shape==='can')c.rect(-r*.7,-r,r*1.4,r*2);
+  else if(k.shape==='bottle'){c.rect(-r*.55,-r*.6,r*1.1,r*1.4);c.rect(-r*.2,-r*1.2,r*.4,r*.7)}
+  else if(k.shape==='fork'){c.rect(-r*.12,-r*.2,r*.24,r*1.3);for(let i=-1;i<=1;i++)c.rect(i*r*.38-r*.07,-r*1.1,r*.14,r*.95)}
+  else if(k.shape==='shard'){c.moveTo(-r,r*.6);c.lineTo(0,-r);c.lineTo(r,r*.3);c.closePath()}
+  else{
+    for(let a=0;a<7;a++){
+      const q=a/7*6.283,rr=r*(.75+.3*Math.sin(a*2.3));
+      c.lineTo(Math.cos(q)*rr,Math.sin(q)*rr);
+    }
+    c.closePath();
+  }
+  c.fill();c.restore();
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#1a1d22';ctx.fillRect(0,BELT_Y,W,BELT_H);
+  ctx.strokeStyle='#2a2f37';ctx.lineWidth=2;
+  const off=(performance.now()/1000*+document.getElementById('spd').value)%30;
+  for(let x=-30+off;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,BELT_Y);ctx.lineTo(x,BELT_Y+BELT_H);ctx.stroke()}
+  ctx.fillStyle='#2b3038';ctx.fillRect(0,40,W,6);
+  ctx.fillStyle='#8d94a0';ctx.font='11px monospace';
+  ctx.fillText('reject bin >',W-92,22);
+  ctx.fillText('INFEED',8,BELT_Y-8);
+  items.forEach(i=>{
+    const k=KINDS[i.kind];
+    shape(ctx,k,i.x,i.y,i.r,i.rot);
+    ctx.strokeStyle=k.contam?'#ee7a5c':'#5fa04a';ctx.lineWidth=1.5;
+    ctx.strokeRect(i.x-i.r-4,i.y-i.r-4,i.r*2+8,i.r*2+8);
+    ctx.fillStyle='#8d94a0';ctx.fillText(i.kind,i.x-i.r,i.y+i.r+16);
+  });
+  ctx.strokeStyle='#e8e6df';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(arm.x,34);ctx.lineTo(arm.x,arm.y);ctx.stroke();
+  ctx.fillStyle=arm.state==='grab'?'#f0c35a':'#e8e6df';
+  ctx.fillRect(arm.x-10,arm.y-4,20,10);
+  if(arm.grip&&arm.state!=='idle'){ctx.fillStyle='#f0c35a';ctx.fillText(arm.grip,arm.x+14,arm.y+4)}
+}
+function render(){
+  document.getElementById('sPicks').textContent=stats.picks;
+  document.getElementById('sMiss').textContent=stats.miss;
+  const last=hist.slice(-30);
+  document.getElementById('sRate').textContent=last.length?Math.round(100*last.reduce((a,b)=>a+b,0)/last.length)+'%':'-';
+  let h='<tr><th>object</th>'+GRIPS.map(g=>'<th>'+g+'</th>').join('')+'</tr>';
+  CONT.forEach(k=>{
+    const ms=GRIPS.map(g=>mean(k,g)),best=ms.indexOf(Math.max(...ms));
+    const tried=GRIPS.some(g=>stats.post[k][g].w+stats.post[k][g].l>0);
+    h+='<tr><td>'+k+'</td>'+GRIPS.map((g,j)=>{
+      const s=stats.post[k][g],n=s.w+s.l;
+      return '<td class="'+(tried&&j===best?'best':'')+'">'+Math.round(ms[j]*100)+'% <small style="color:#667">n'+n+'</small></td>';
+    }).join('')+'</tr>';
+  });
+  document.getElementById('tbl').innerHTML=h;
+  cx.clearRect(0,0,ch.width,ch.height);
+  cx.strokeStyle='#2c323b';cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(0,45);cx.lineTo(ch.width,45);cx.stroke();
+  cx.strokeStyle='#f0c35a';cx.lineWidth=2;cx.beginPath();
+  hist.forEach((_,i)=>{
+    const w=hist.slice(Math.max(0,i-14),i+1),r=w.reduce((a,b)=>a+b,0)/w.length;
+    const x=hist.length<2?0:i/(hist.length-1)*(ch.width-4)+2,y=ch.height-6-r*(ch.height-12);
+    if(i)cx.lineTo(x,y);else cx.moveTo(x,y);
+  });
+  cx.stroke();
+  cx.fillStyle='#8d94a0';cx.font='10px monospace';cx.fillText('rolling success (15)',4,10);
+}
+cv.addEventListener('click',function(e){
+  if(arm.state!=='idle')return;
+  const r=cv.getBoundingClientRect(),sx=W/r.width;
+  const mx=(e.clientX-r.left)*sx,my=(e.clientY-r.top)*sx;
+  const hit=items.filter(i=>i.state==='belt'&&Math.hypot(i.x-mx,i.y-my)<i.r+10)[0];
+  if(!hit)return;
+  if(!KINDS[hit.kind].contam){addLog('refused: '+hit.kind+' is good organic',false);return}
+  attempt(hit,document.getElementById('man').value);
+});
+document.getElementById('auto').onclick=function(){
+  auto=!auto;
+  this.classList.toggle('on',auto);
+  this.textContent='Auto-pick: '+(auto?'on':'off');
+};
+document.getElementById('rst').onclick=reset;
+let prev=performance.now();
+function loop(now){
+  const dt=Math.min(50,now-prev);prev=now;
+  step(dt);draw();
+  requestAnimationFrame(loop);
+}
+reset();
+for(let i=0;i<3;i++){spawn();items[i].x=120+i*180}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

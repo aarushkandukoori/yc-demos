@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>One Skill at a Time - a toy field-sales coach</title>
+<style>
+:root{--bg:#f4f1ea;--card:#fffdf8;--ink:#1d2327;--mut:#6b7378;--line:#ddd7c9;--acc:#0f6b66;--acc2:#e0a526;--ok:#2d7d46}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 24px 8px;max-width:1120px;margin:0 auto}
+h1{font:600 26px/1.2 Georgia,"Times New Roman",serif;margin:0 0 4px}
+header p{margin:0;color:var(--mut);max-width:70ch}
+main{max-width:1120px;margin:0 auto;padding:16px 24px 32px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:20px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.card h2{font:600 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:0 0 12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+select,input,textarea,button{font:inherit;color:inherit}
+select,input{border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:#fff}
+textarea{width:100%;height:250px;border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;font:13px/1.55 ui-monospace,Menlo,monospace;resize:vertical}
+button{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:8px;padding:7px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button:hover{opacity:.88}
+.hint{font-size:12.5px;color:var(--mut)}
+.skills{display:grid;gap:8px}
+.skill{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.skill.focus{border-color:var(--acc);box-shadow:0 0 0 2px #0f6b6622}
+.skill.locked{opacity:.55}
+.num{width:26px;height:26px;border-radius:50%;background:var(--bg);display:grid;place-items:center;font:600 12px ui-monospace,monospace}
+.focus .num{background:var(--acc);color:#fff}
+.mastered .num{background:var(--ok);color:#fff}
+.bar{height:6px;background:var(--bg);border-radius:4px;margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--acc2);transition:width .5s}
+.skill.focus .bar i{background:var(--acc)}
+.tag{font:600 11px ui-monospace,monospace;padding:2px 8px;border-radius:99px;background:var(--bg);white-space:nowrap}
+.tag.f{background:var(--acc);color:#fff}.tag.m{background:var(--ok);color:#fff}
+.dots{display:inline-flex;gap:3px;margin-left:6px}.dots b{width:8px;height:8px;border-radius:50%;background:var(--line)}.dots b.on{background:var(--ok)}
+.coach{border-left:4px solid var(--acc);padding-left:14px}
+.coach h3{margin:0 0 6px;font:600 18px Georgia,serif}
+.quote{background:#fff;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:14px}
+.quote small{display:block;color:var(--mut);font:600 11px ui-monospace,monospace;text-transform:uppercase;margin-bottom:2px}
+.t{max-height:300px;overflow:auto;font-size:13.5px}
+.t p{margin:0 0 6px;padding:5px 8px;border-radius:6px}
+.t .R{background:#eef5f3}.t .B{background:#f8f3e6}
+.t b.who{font:600 11px ui-monospace,monospace;margin-right:6px;color:var(--mut)}
+mark{padding:0 2px;border-radius:3px}
+mark.open{background:#bfe3c8}mark.closed{background:#f6d99a}mark.obj{background:#f2b8b0}mark.step{background:#b9d8f0}
+.legend{font-size:12px;color:var(--mut);margin-top:6px}
+.legend mark{margin-right:6px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+td,th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+th{font:600 11px ui-monospace,monospace;text-transform:uppercase;color:var(--mut)}
+.empty{color:var(--mut);font-style:italic}
+footer{max-width:1120px;margin:0 auto;padding:8px 24px 32px;color:var(--mut);font-size:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>One Skill at a Time</h1>
+  <p>A toy field-sales coach. Paste a transcript of an in-person meeting, and it scores four skills, then coaches the <b>single</b> one you haven't mastered yet. It only moves on after two clean meetings in a row. All data is synthetic and the analysis runs entirely in your browser.</p>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>1 / Meeting transcript</h2>
+      <div class="row">
+        <select id="sample" aria-label="Sample meeting"></select>
+        <label class="hint">Rep <input id="rep" size="10" value="Maya"></label>
+      </div>
+      <textarea id="tx" spellcheck="false" aria-label="Transcript"></textarea>
+      <div class="hint" style="margin:6px 0 10px">Format: lines starting with <code>Rep:</code> or <code>Buyer:</code>. Edit freely, then log it. Each click counts as a new meeting.</div>
+      <div class="row">
+        <button id="go">Log meeting &amp; coach</button>
+        <button id="reset" class="ghost">Reset all reps</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Annotated conversation</h2>
+      <div id="annot" class="t empty">Nothing analyzed yet.</div>
+      <div class="legend"><mark class="open">open question</mark><mark class="closed">closed question</mark><mark class="obj">objection</mark><mark class="step">next step</mark></div>
+    </div>
+  </section>
+  <section>
+    <div class="card">
+      <h2>2 / Skill ladder <span id="who"></span></h2>
+      <div id="ladder" class="skills"></div>
+      <p class="hint" style="margin:10px 0 0">Mastered = score of 80+ in 2 consecutive meetings. Try logging the Lena sample twice.</p>
+    </div>
+    <div class="card">
+      <h2>3 / Your coaching</h2>
+      <div id="coach" class="empty">Log a meeting to get this rep's one focus.</div>
+    </div>
+    <div class="card">
+      <h2>Team memory</h2>
+      <div id="team" class="empty">No reps yet.</div>
+    </div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by COACH (YC S26). Not affiliated with COACH.</footer>
+
+<script>
+const SKILLS=[
+ {id:'talk',name:'Talk ratio',goal:'Rep speaks under ~50% of the words'},
+ {id:'disc',name:'Open discovery',goal:'4+ open questions, few closed ones'},
+ {id:'obj',name:'Objection handling',goal:'Acknowledge, then ask a question'},
+ {id:'step',name:'Specific next step',goal:'A named day or time before leaving'}
+];
+const SAMPLES={
+ 'Maya - talks too much':{rep:'Maya',tx:[
+ "Rep: Thanks for having me in. So we make inventory software for hardware stores, and it has forecasting, barcode scanning, a supplier portal, and a mobile app, and honestly the forecasting is the best part because it uses seasonality.",
+ "Buyer: Okay. We mostly count stock by hand right now.",
+ "Rep: Right, and that is exactly what our scanning replaces, you just point the phone at the shelf and it syncs, and the supplier portal means reorders go out automatically, and we have 300 stores on it already.",
+ "Buyer: Sounds nice, but it feels too expensive for a store our size.",
+ "Rep: Our pricing is really competitive, and we have a starter tier, and most customers see ROI in four months, and there is a discount for annual plans.",
+ "Buyer: Hm.",
+ "Rep: Do you have a manager who does the counting? Is that a pain?",
+ "Buyer: My son does it on Sundays.",
+ "Rep: Great. I will follow up with you soon and send over some info, and we can circle back."].join('\n')},
+ 'Dev - great discovery, weak close':{rep:'Dev',tx:[
+ "Rep: Thanks for the time. How does your crew decide which jobs to quote first right now?",
+ "Buyer: Gut feel, mostly. Whoever called first.",
+ "Rep: What happens when two good jobs land the same week?",
+ "Buyer: We lose one. Last month that was a 40 thousand dollar deck.",
+ "Rep: Walk me through what that cost you in the end.",
+ "Buyer: Probably the whole margin for the month, honestly.",
+ "Rep: Tell me about how you track the quotes you send.",
+ "Buyer: Spreadsheet. But I will say, we already have a system for it and I am not sure we need another tool.",
+ "Rep: Well, our tool is much better than a spreadsheet.",
+ "Buyer: Mm. Send me some details and I will think about it.",
+ "Rep: Sure thing, I will touch base at some point."].join('\n')},
+ 'Lena - polished':{rep:'Lena',tx:[
+ "Rep: Thanks for the time. What does a typical install week look like for your team?",
+ "Buyer: Packed. Three crews, and scheduling is a mess.",
+ "Rep: How do you decide who goes where today?",
+ "Buyer: My wife does it on a whiteboard.",
+ "Rep: Tell me about the last time the whiteboard let you down.",
+ "Buyer: Double booked a crew in March. We ate the travel cost.",
+ "Rep: What would fixing that be worth to you?",
+ "Buyer: Honestly, a lot. But I worry it is going to be too expensive.",
+ "Rep: That is fair, price matters. Can I ask what you would compare it against, the cost of one double booking?",
+ "Buyer: Fair point. That was about 900 dollars.",
+ "Rep: Then let us do a two week pilot with your wife on the whiteboard side by side. Can we meet Thursday at 10am at the shop to set it up?",
+ "Buyer: Thursday at 10am works."].join('\n')}
+};
+const OPEN=/^(what|how|why|which|where|when|tell me|walk me|help me|describe)\b/i;
+const CLOSED=/^(do|does|did|is|are|was|were|can|could|would|will|have|has)\b/i;
+const OBJ=/too expensive|budget|pricey|already have|already use|not sure we need|send me|think about it|no time|too busy|worry/i;
+const ACK=/fair|makes sense|understand|totally|appreciate|good point|that is right|price matters/i;
+const SPEC=/\b(monday|tuesday|wednesday|thursday|friday|tomorrow|next week)\b|\b\d{1,2}(:\d\d)?\s?(am|pm)\b|\b\d{1,2}\/\d{1,2}\b/i;
+const VAGUE=/follow up|circle back|touch base|soon|at some point|send over/i;
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clamp=(x,a=0,b=100)=>Math.max(a,Math.min(b,x));
+const words=t=>t.split(/\s+/).filter(Boolean).length;
+const sentences=t=>(t.match(/[^.?!]+[.?!]*/g)||[]).map(s=>s.trim()).filter(Boolean);
+let reps={};
+
+function parse(text){
+ return text.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+  const m=l.match(/^(rep|buyer)\s*:\s*(.*)$/i);
+  return m?{who:m[1][0].toUpperCase(),text:m[2]}:null;
+ }).filter(Boolean);
+}
+
+// Core of the toy: turn a transcript into per-skill scores plus the evidence behind each score.
+function analyze(turns){
+ const marks=turns.map(()=>[]), out={};
+ const rw=turns.filter(t=>t.who==='R').reduce((a,t)=>a+words(t.text),0);
+ const bw=turns.filter(t=>t.who==='B').reduce((a,t)=>a+words(t.text),0);
+ const share=rw/Math.max(1,rw+bw);
+ out.talk={score:Math.round(clamp((0.8-share)/0.3*100)),detail:{share}};
+
+ const open=[],closed=[];
+ turns.forEach((t,i)=>{
+  if(t.who!=='R')return;
+  sentences(t.text).forEach(s=>{
+   const isQ=s.endsWith('?')||/^(tell me|walk me)/i.test(s);
+   if(!isQ)return;
+   if(OPEN.test(s)){open.push(s);marks[i].push([s,'open']);}
+   else if(CLOSED.test(s)){closed.push(s);marks[i].push([s,'closed']);}
+  });
+ });
+ out.disc={score:Math.round(clamp(open.length*25-closed.length*10)),detail:{open,closed}};
+
+ const objs=[];
+ turns.forEach((t,i)=>{
+  if(t.who!=='B'||!OBJ.test(t.text))return;
+  const nxt=turns.slice(i+1).find(x=>x.who==='R');
+  const ack=!!nxt&&ACK.test(nxt.text), q=!!nxt&&/\?/.test(nxt.text);
+  objs.push({said:t.text,reply:nxt?nxt.text:'',pts:(ack?.5:0)+(q?.5:0),ack,q});
+  marks[i].push([sentences(t.text).find(s=>OBJ.test(s))||t.text,'obj']);
+ });
+ out.obj={score:objs.length?Math.round(objs.reduce((a,o)=>a+o.pts,0)/objs.length*100):null,detail:{objs}};
+
+ let st=0,quote='';
+ turns.map((t,i)=>[t,i]).filter(([t])=>t.who==='R').slice(-2).forEach(([t,i])=>{
+  if(SPEC.test(t.text)){st=100;quote=t.text;marks[i].push([sentences(t.text).find(s=>SPEC.test(s))||t.text,'step']);}
+  else if(VAGUE.test(t.text)&&st<40){st=40;quote=t.text;}
+ });
+ out.step={score:st,detail:{quote}};
+ return {out,marks};
+}
+
+function renderAnnot(turns,marks){
+ $('annot').className='t';
+ $('annot').innerHTML=turns.map((t,i)=>{
+  let h=esc(t.text);
+  marks[i].forEach(([s,c])=>{const e=esc(s);h=h.replace(e,'<mark class="'+c+'">'+e+'</mark>');});
+  return '<p class="'+t.who+'"><b class="who">'+(t.who==='R'?'REP':'BUYER')+'</b>'+h+'</p>';
+ }).join('');
+}
+
+function coachFor(sk,res){
+ const d=res.out[sk].detail;
+ const q=(l,s)=>'<div class="quote"><small>'+l+'</small>'+esc(s)+'</div>';
+ if(sk==='talk'){
+  return '<h3>Let the buyer talk</h3><p>You spoke <b>'+Math.round(d.share*100)+'%</b> of the words. The target is under 50%. Buyers share their real problem only when there is room.</p>'+
+   '<p><b>Drill for next meeting:</b> after every buyer answer, pause two full seconds, then ask one follow-up before you pitch. Cap each of your turns at two sentences.</p>';
+ }
+ if(sk==='disc'){
+  const c=d.closed[0];
+  const fix=c?(/^(do|does)\b/i.test(c)?'How '+c.charAt(0).toLowerCase()+c.slice(1):'Walk me through how that works today.'):'';
+  return '<h3>Ask open questions</h3><p>You asked <b>'+d.open.length+'</b> open and <b>'+d.closed.length+'</b> closed questions. Aim for 4+ open.</p>'+
+   (c?q('You said',c)+q('Try instead',fix):'')+
+   '<p><b>Drill:</b> start every question with <i>what, how,</i> or <i>walk me through</i>. Ban "do you" for one meeting.</p>';
+ }
+ if(sk==='obj'){
+  const o=d.objs.find(o=>o.pts<1)||d.objs[0];
+  return '<h3>Handle objections without arguing</h3>'+q('Buyer said',o.said)+q('You said',o.reply||'(no reply)')+
+   '<p>You '+(o.ack?'acknowledged it':'<b>did not acknowledge</b> it')+' and '+(o.q?'asked a question':'<b>did not ask a question</b>')+'. Use the pattern: <i>"That is fair. What would you compare it against?"</i> Acknowledge first, then find out what is behind it.</p>';
+ }
+ return '<h3>Leave with a calendar entry</h3>'+(d.quote?q('You said',d.quote):'<p>No closing step was proposed at all.</p>')+
+  '<p>'+(d.quote?'That is vague. ':'')+'Name the day, time and place before you stand up: <i>"Can we meet Thursday at 10am at the shop?"</i></p>';
+}
+
+const mastered=(r,id)=>(r.streak[id]||0)>=2;
+const focusOf=r=>SKILLS.find(s=>!mastered(r,s.id));
+
+function logMeeting(){
+ const turns=parse($('tx').value);
+ if(!turns.some(t=>t.who==='R')||!turns.some(t=>t.who==='B')){
+  $('coach').className='';$('coach').innerHTML='Need at least one <b>Rep:</b> and one <b>Buyer:</b> line.';return;
+ }
+ const name=($('rep').value.trim()||'Rep').slice(0,20);
+ const r=reps[name]=reps[name]||{meetings:0,streak:{},last:{}};
+ const res=analyze(turns);
+ r.meetings++;
+ SKILLS.forEach(s=>{
+  const sc=res.out[s.id].score;
+  r.last[s.id]=sc;
+  if(sc!==null)r.streak[s.id]=sc>=80?(r.streak[s.id]||0)+1:0;
+ });
+ renderAnnot(turns,res.marks);
+ draw(name,res);
+}
+
+function draw(name,res){
+ const r=reps[name], f=focusOf(r);
+ $('who').textContent='- '+name+' ('+r.meetings+' meeting'+(r.meetings>1?'s':'')+')';
+ $('ladder').innerHTML=SKILLS.map((s,i)=>{
+  const sc=r.last[s.id], m=mastered(r,s.id), isF=f&&f.id===s.id;
+  const dots='<span class="dots">'+[0,1].map(k=>'<b class="'+((r.streak[s.id]||0)>k?'on':'')+'"></b>').join('')+'</span>';
+  const label=(sc===null?'n/a':sc)+(isF?' / FOCUS':m?' / MASTERED':' / QUEUED');
+  return '<div class="skill '+(isF?'focus ':'')+(m?'mastered ':'')+(!m&&!isF?'locked':'')+'">'+
+   '<div class="num">'+(m?'&#10003;':i+1)+'</div>'+
+   '<div><b>'+s.name+'</b>'+dots+'<div class="hint">'+s.goal+'</div><div class="bar"><i style="width:'+(sc||0)+'%"></i></div></div>'+
+   '<span class="tag '+(isF?'f':m?'m':'')+'">'+label+'</span></div>';
+ }).join('');
+ const c=$('coach'); c.className='coach';
+ if(!f){
+  c.innerHTML='<h3>'+esc(name)+' cleared the ladder</h3><p>All four skills are at 80+ for two meetings straight. Time to spot-check live instead of coaching by transcript.</p>';
+ }else{
+  const sc=r.last[f.id];
+  const pass=sc!==null&&sc>=80?'<p style="color:var(--ok)"><b>This meeting passed '+f.name+'.</b> One more clean meeting to master it.</p>':'';
+  c.innerHTML='<p class="hint" style="margin:0 0 4px">FOCUS '+(SKILLS.indexOf(f)+1)+' OF 4 - everything else waits</p>'+
+   (sc===null?'<p>No objections came up, so there is nothing to score here. Log another meeting.</p>':coachFor(f.id,res)+pass);
+ }
+ drawTeam();
+}
+
+function drawTeam(){
+ const names=Object.keys(reps), el=$('team');
+ if(!names.length){el.className='empty';el.textContent='No reps yet.';return;}
+ el.className='';
+ const rows=names.map(n=>{
+  const r=reps[n], f=focusOf(r);
+  return '<tr><td><b>'+esc(n)+'</b></td><td>'+r.meetings+'</td><td>'+(f?f.name:'All mastered')+'</td><td>'+SKILLS.filter(s=>mastered(r,s.id)).length+'/4</td></tr>';
+ }).join('');
+ const counts={};
+ names.forEach(n=>{const f=focusOf(reps[n]);if(f)counts[f.name]=(counts[f.name]||0)+1;});
+ const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+ el.innerHTML='<table><tr><th>Rep</th><th>Mtgs</th><th>Current focus</th><th>Mastered</th></tr>'+rows+'</table>'+
+  (top&&top[1]>1?'<p class="hint" style="margin:10px 0 0">Team pattern - '+top[1]+' of '+names.length+' reps are working on <b>'+top[0]+'</b>. A candidate for a team session.</p>':'');
+}
+
+const sel=$('sample');
+Object.keys(SAMPLES).forEach(k=>sel.add(new Option(k,k)));
+sel.addEventListener('change',()=>{const s=SAMPLES[sel.value];$('tx').value=s.tx;$('rep').value=s.rep;});
+$('go').addEventListener('click',logMeeting);
+$('reset').addEventListener('click',()=>{
+ reps={};$('ladder').innerHTML='';$('who').textContent='';
+ $('coach').className='empty';$('coach').textContent="Log a meeting to get this rep's one focus.";
+ $('annot').className='t empty';$('annot').textContent='Nothing analyzed yet.';drawTeam();
+});
+sel.dispatchEvent(new Event('change'));
+</script>
+</body>
+</html>

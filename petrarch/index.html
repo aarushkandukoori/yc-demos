@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scrub Bench - consistent de-identification of industrial records</title>
+<style>
+:root{--bg:#f3eee3;--card:#fbf8f1;--ink:#1e1c17;--mute:#756f62;--line:#d9d1bf;--acc:#b04a22;--grn:#2b5b4c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 32px 10px;max-width:1280px;margin:0 auto}
+h1{font:600 30px/1.1 ui-serif,Georgia,serif;margin:0 0 6px;letter-spacing:-.5px}
+h1 span{color:var(--acc)}
+header p{margin:0;color:var(--mute);max-width:760px}
+main{max-width:1280px;margin:0 auto;padding:10px 32px 30px}
+.bar{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:14px 0}
+.bar label{font-size:13px;color:var(--mute);display:flex;align-items:center;gap:6px}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink)}
+.seg button.on{background:var(--ink);color:var(--card)}
+input[type=text]{font:13px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:6px;padding:5px 8px;width:130px;background:#fff}
+.rules{display:flex;flex-wrap:wrap;gap:4px 12px}
+.panes{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-width:0}
+.pane h2{font:600 12px/1 ui-sans-serif,sans-serif;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin:0;padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+textarea,#out{font:12.5px/1.65 ui-monospace,Menlo,Consolas,monospace;margin:0;padding:14px;height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word;border:0;background:transparent;color:var(--ink);resize:vertical;width:100%}
+textarea:focus{outline:2px solid var(--acc);outline-offset:-2px}
+.e{border-radius:3px;padding:0 2px;cursor:default;transition:.1s}
+.e.hl{outline:2px solid var(--ink)}
+.t-person{background:#f6d6c8}.t-org{background:#d6e6dc}.t-email{background:#f3e3a6}.t-phone{background:#d8dcf3}
+.t-addr{background:#e8d2ec}.t-host{background:#cfe6ee}.t-ip{background:#cfe6ee}.t-secret{background:#f2b3a8;font-weight:600}
+.t-acct{background:#f3e3a6}.t-date{background:#e2e2e2}.t-money{background:#dcedc2}.t-loc{background:#f6d6c8}
+.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:14px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{text-align:left;color:var(--mute);font-weight:500;padding:6px 14px;border-bottom:1px solid var(--line)}
+td{padding:5px 14px;border-bottom:1px solid #eae3d2;font-family:ui-monospace,Menlo,monospace;word-break:break-all}
+td.ty{font-family:inherit}
+.tbl{max-height:290px;overflow:auto}
+.box{padding:12px 14px;font-size:13.5px}
+.chk{display:flex;gap:8px;padding:4px 0;align-items:flex-start}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:6px;flex:none}
+.ok{background:var(--grn)}.bad{background:var(--acc)}
+.chip{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--acc);border-radius:20px;padding:1px 3px 1px 10px;margin:3px 4px 3px 0;font-size:12.5px;background:#fff}
+.chip button{border:0;background:#f4e3da;border-radius:12px;font-size:11px;padding:2px 7px;cursor:pointer;margin-left:2px;font-weight:600}
+.chip button:hover{background:var(--acc);color:#fff}
+.mute{color:var(--mute)}
+.big{font:600 34px/1 ui-serif,Georgia,serif}
+.meter{display:flex;align-items:baseline;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+footer{max-width:1280px;margin:0 auto;padding:18px 32px 40px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+.pill{font-size:11px;border:1px solid var(--line);border-radius:12px;padding:1px 8px;text-transform:none;letter-spacing:0;font-weight:400}
+@media(max-width:860px){.panes,.grid{grid-template-columns:1fr}header,main{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Scrub <span>Bench</span></h1>
+  <p>Raw operational records are useless to a model if you black out every name, and unsafe to ship if you leave one in. Edit the synthetic record below and watch entities get replaced <b>consistently</b>, so a vendor stays the same vendor across the whole corpus, dates keep their gaps, and payments keep their ratios.</p>
+</header>
+<main>
+  <div class="bar">
+    <div class="seg" id="samples"></div>
+    <div class="seg" id="modes">
+      <button data-m="consistent" class="on" title="Same entity always gets the same token">Consistent</button>
+      <button data-m="redact" title="Classic black-box redaction">Redact</button>
+      <button data-m="naive" title="Random token per mention">Naive random</button>
+    </div>
+    <label>Project key <input type="text" id="salt" value="case-0417" spellcheck="false"></label>
+    <label><input type="checkbox" id="reveal"> show originals</label>
+    <div class="rules" id="rules"></div>
+  </div>
+
+  <div class="panes">
+    <div class="pane"><h2>Raw record (synthetic, editable)<span class="pill" id="len"></span></h2><textarea id="inp" spellcheck="false"></textarea></div>
+    <div class="pane"><h2>Cleared output<span class="pill">hover a token to trace it</span></h2><div id="out"></div></div>
+  </div>
+
+  <div class="grid">
+    <div class="pane">
+      <h2>Entity map<span class="pill" id="ecount"></span></h2>
+      <div class="tbl"><table><thead><tr><th>Type</th><th>Original</th><th>Token</th><th>Hits</th></tr></thead><tbody id="etab"></tbody></table></div>
+    </div>
+    <div class="pane">
+      <div class="meter"><div class="big" id="score">-</div><div><b>release score</b><div class="mute" style="font-size:12.5px">penalizes leftover capitalized words that look like names</div></div></div>
+      <div class="box">
+        <b>Utility checks</b>
+        <div id="checks"></div>
+        <div style="margin-top:12px"><b>Possible leaks</b> <span class="mute">- tag them to scrub</span></div>
+        <div id="flags"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Petrarch (YC S26). Not affiliated with Petrarch. All records, names, and numbers above are fabricated; nothing leaves your browser.</footer>
+
+<script>
+const SAMPLES = {
+  "Controller code": `# press_line_ctrl.py - Hargrove Stamping Works, Plant 3 (Dayton)
+# author: Daniel Okafor <d.okafor@hargrovestamping.example>  ext 937-555-0142
+import requests
+
+HISTORIAN = "http://hist01.hargrovestamping.local:8086/api"
+API_KEY   = "YOUR_API_KEY"
+PLC_IP    = "10.44.12.7"
+
+# TODO ask Priya Raman about press 4 tonnage limit,
+# Meridian Hydraulics LLC says 450t max on the new cylinders
+# (quote was $48,200.00, installed 2021-03-18)
+# Okafor's patch: derate 8% when oil temp > 61C
+def check_tonnage(press, load_t):
+    limit = 450 * (0.92 if press.oil_c > 61 else 1.0)
+    if load_t > limit:
+        requests.post(HISTORIAN, json={"press": press.id, "event": "OVERLOAD"},
+                      headers={"x-key": API_KEY})
+        return False
+    return True
+`,
+  "Payment ledger": `date,payee,amount,memo,account
+2021-03-04,Meridian Hydraulics LLC,"$48,200.00",Invoice 8812 press 4 cylinders,acct 4455012398
+2021-03-19,Kowalczyk Tool & Die,"$6,310.50",Die regrind lot 22,acct 8830021177
+2021-04-02,Meridian Hydraulics LLC,"$9,640.00",Seal kits Invoice 8890,acct 4455012398
+2021-04-30,Hargrove Stamping Works,"$212,000.00",Progress draw 3 - line expansion,acct 1002993841
+2021-05-11,Kowalczyk Tool & Die,"$6,310.50",Die regrind lot 23,acct 8830021177
+2021-06-01,Great Lakes Freight Co.,$1,125.75,Pallet drop at 880 Harbor Rd,acct 7712004456
+note: Kowalczyk wants net-15 from now on. Call Maria Delgado (419) 555-0188
+`,
+  "Change order email": `Subject: CO-117 conveyor retrofit, Line 2
+From: Maria Delgado (Project Mgr, Tri-County Packaging Inc.)
+To: Greg Hollis <ghollis@tricountypkg.example>
+Date: 2022-06-14
+Site: 2210 Industrial Pkwy, Toledo, OH 43604
+
+Greg, Sarah Whitfield signed off on the revised scope. Delta is $12,750.00
+on top of the original $86,400.00. Revised ship date is 2022-07-29, two weeks
+after the 2022-07-15 install window. Call me at (419) 555-0188.
+Toledo crew starts Monday. Delgado will confirm rigging with Wei Zhang.
+`
+};
+const FIRST = ["Daniel","Priya","Maria","Greg","Sarah","Wei","Luis","Aisha","Tom","Dave"];
+const RULES = [
+  {type:"secret", label:"secrets", re:/\b(?:sk|pk|ghp|AKIA)[_A-Za-z0-9]{12,}\b/g},
+  {type:"email",  label:"emails",  re:/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g},
+  {type:"host",   label:"urls",    re:/\bhttps?:\/\/[^\s"')<>]+/g},
+  {type:"ip",     label:"IPs",     re:/\b\d{1,3}(?:\.\d{1,3}){3}\b/g},
+  {type:"acct",   label:"accounts",re:/\bacct \d{6,}\b/g},
+  {type:"phone",  label:"phones",  re:/\(?\b\d{3}\)?[-. ]\d{3}[-. ]\d{4}\b/g},
+  {type:"addr",   label:"addresses",re:/\b\d{2,5} [A-Z][a-z]+(?: [A-Z][a-z]+)? (?:St|Ave|Rd|Blvd|Pkwy|Dr|Way)\b\.?(?:, [A-Z][a-z]+, [A-Z]{2} \d{5})?/g},
+  {type:"org",    label:"companies",re:/\b[A-Z][\w'-]*(?: (?:& )?[A-Z][\w'-]*){0,3} (?:Tool & Die|Inc|LLC|Corp|Co|Ltd|GmbH|Works|Industries|Manufacturing|Fabrication|Supply|Hydraulics|Logistics)\b\.?/g},
+  {type:"person", label:"people",  re:new RegExp("\\b(?:(?:Mr|Ms|Mrs|Dr)\\. )?(?:"+FIRST.join("|")+") [A-Z][a-z]+(?:-[A-Z][a-z]+)?\\b","g")},
+  {type:"date",   label:"dates",   re:/\b(?:19|20)\d\d-\d\d-\d\d\b/g},
+  {type:"money",  label:"amounts", re:/\$\s?\d{1,3}(?:,\d{3})+(?:\.\d+)?|\$\s?\d+(?:\.\d+)?/g}
+];
+const SAFE = new Set(("Plant Press Invoice Subject From Date Site Line Call Revised Delta Monday True False None Python Revised " +
+  "Progress Seal Die Pallet Drop Pkwy Project Mgr Change Order Install Ship Okay Thanks Hello Notes Note Memo OVERLOAD " +
+  "Great Lakes Freight Industrial Harbor Seals Kits Kit Lot Expansion Quote Installed Patch Tonnage Limit Wants Net " +
+  "Will Confirm Rigging Crew Starts Scope Signed Original Two Memo Payee Amount Account API Key Historian TODO ask").split(/\s+/));
+
+const $ = id => document.getElementById(id);
+const state = {sample:Object.keys(SAMPLES)[0], mode:"consistent", off:new Set(), custom:[], ignore:new Set()};
+
+function h(s){let x=2166136261;for(let i=0;i<s.length;i++){x^=s.charCodeAt(i);x=Math.imul(x,16777619)}return x>>>0}
+const hex4 = s => h(s).toString(16).padStart(8,"0").slice(0,4);
+const esc = s => s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm = (t,s) => s.toLowerCase().replace(/\s+/g," ").replace(/[.,]+$/,"");
+
+function replacement(type, orig, key, occ, salt, mode){
+  if (mode === "redact") return "[" + type.toUpperCase() + "]";
+  const seed = salt + "|" + type + "|" + key + (mode === "naive" ? "|" + occ : "");
+  const n = hex4(seed);
+  switch(type){
+    case "person": return "PERSON_" + n;
+    case "org": return "ORG_" + n;
+    case "loc": return "LOC_" + n;
+    case "addr": return "ADDR_" + n;
+    case "acct": return "acct ACCT" + n.toUpperCase();
+    case "secret": return "<SECRET_" + n + ">";
+    case "email": return "user_" + n + "@mail.invalid";
+    case "host": return (orig.match(/^https?:\/\//)||["http://"])[0] + "host-" + n + ".invalid";
+    case "ip": return "192.0.2." + (h(seed) % 254 + 1);
+    case "phone": return "(555) 010-" + String(h(seed) % 10000).padStart(4,"0");
+    case "date": {
+      const off = -(30 + h(salt + "|dateoffset") % 300) + (mode === "naive" ? (h(seed) % 40) : 0);
+      const [y,m,d] = orig.split("-").map(Number);
+      return new Date(Date.UTC(y,m-1,d+off)).toISOString().slice(0,10);
+    }
+    case "money": {
+      const f = 0.62 + (h(salt + "|factor") % 1000) / 1000 * 0.8 + (mode === "naive" ? (h(seed) % 300) / 1000 : 0);
+      const raw = orig.replace(/[$\s,]/g,""), dec = (raw.split(".")[1]||"").length;
+      const v = parseFloat(raw) * f;
+      const s = v.toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});
+      return "$" + (orig.includes(",") ? s : s.replace(/,/g,""));
+    }
+  }
+  return "[X]";
+}
+
+function detect(text){
+  const hits = [];
+  RULES.forEach((r,pri)=>{
+    if (state.off.has(r.type)) return;
+    r.re.lastIndex = 0;
+    for (let m; (m = r.re.exec(text)); ){
+      if (!m[0]) { r.re.lastIndex++; continue; }
+      hits.push({s:m.index, e:m.index+m[0].length, type:r.type, text:m[0], pri});
+    }
+  });
+  state.custom.forEach(c=>{
+    const re = new RegExp("\\b"+c.text.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","g");
+    for (let m; (m = re.exec(text)); ) hits.push({s:m.index, e:m.index+m[0].length, type:c.type, text:m[0], pri:-1});
+  });
+  // longest-first at the same start, skip anything overlapping an accepted match
+  hits.sort((a,b)=>a.s-b.s || (b.e-b.s)-(a.e-a.s) || a.pri-b.pri);
+  const out = []; let last = 0;
+  for (const x of hits){ if (x.s >= last){ out.push(x); last = x.e; } }
+  return out;
+}
+
+function run(){
+  const text = $("inp").value, salt = $("salt").value || "key", mode = state.mode;
+  const hits = detect(text);
+  const ents = new Map();          // key -> {type, orig, tokens:Set, count}
+  const seen = new Map();
+  const segs = []; let pos = 0;
+  for (const x of hits){
+    if (x.s > pos) segs.push({raw:text.slice(pos,x.s)});
+    const key = x.type + "|" + norm(x.type, x.text);
+    const occ = (seen.get(key)||0) + 1; seen.set(key, occ);
+    let rep = replacement(x.type, x.text, norm(x.type,x.text), occ, salt, mode);
+    if (/[.,]$/.test(x.text) && !/[.,]$/.test(rep) && x.type==="org") rep += x.text.slice(-1);
+    if (!ents.has(key)) ents.set(key,{type:x.type, orig:x.text, tokens:new Set(), count:0});
+    const en = ents.get(key); en.tokens.add(rep); en.count++;
+    segs.push({ent:x, rep});
+    pos = x.e;
+  }
+  if (pos < text.length) segs.push({raw:text.slice(pos)});
+
+  const reveal = $("reveal").checked;
+  $("out").innerHTML = segs.map(s=>{
+    if (s.raw !== undefined) return esc(s.raw);
+    const shown = reveal ? s.ent.text : s.rep;
+    return `<span class="e t-${s.ent.type}" data-k="${esc(s.rep)}" title="${esc(reveal ? s.rep : 'was: ' + s.ent.text)}">${esc(shown)}</span>`;
+  }).join("");
+  $("len").textContent = hits.length + " entities found";
+
+  // entity table
+  const rows = [...ents.values()].sort((a,b)=>b.count-a.count);
+  $("ecount").textContent = rows.length + " unique";
+  $("etab").innerHTML = rows.map(e=>`<tr><td class="ty"><span class="e t-${e.type}">${e.type}</span></td><td>${esc(e.orig)}</td><td>${esc([...e.tokens].join(" | "))}</td><td>${e.count}</td></tr>`).join("")
+    || `<tr><td colspan="4" class="mute">Nothing detected.</td></tr>`;
+
+  // utility checks
+  const checks = [];
+  const tokOwners = new Map();
+  rows.forEach(e=>e.tokens.forEach(t=>{ (tokOwners.get(t) || tokOwners.set(t,new Set()).get(t)).add(e.orig); }));
+  const joinable = rows.filter(e=>e.tokens.size===1 && tokOwners.get([...e.tokens][0]).size===1).length;
+  checks.push([joinable===rows.length && rows.length>0, `Entity joins - ${joinable}/${rows.length} entities map to exactly one private token`]);
+  const money = hits.filter(x=>x.type==="money").map(x=>({o:parseFloat(x.text.replace(/[$\s,]/g,"")), n:0}));
+  const mseg = segs.filter(s=>s.ent && s.ent.type==="money");
+  mseg.forEach((s,i)=>money[i].n = parseFloat(s.rep.replace(/[$\s,]/g,"")));
+  if (money.length > 1 && mode !== "redact"){
+    const r = a => (Math.max(...a)/Math.min(...a)).toFixed(2);
+    const a = r(money.map(m=>m.o)), b = r(money.map(m=>m.n));
+    checks.push([a===b, `Amount spread (max/min) - ${a} before, ${b} after`]);
+  } else if (mode==="redact" && money.length) checks.push([false, "Amounts are gone - no ratios left to learn from"]);
+  const dseg = segs.filter(s=>s.ent && s.ent.type==="date");
+  if (dseg.length > 1 && mode !== "redact"){
+    const ms = d=>Date.parse(d), span = a=>Math.round((Math.max(...a)-Math.min(...a))/864e5);
+    const a = span(dseg.map(s=>ms(s.ent.text))), b = span(dseg.map(s=>ms(s.rep)));
+    checks.push([a===b, `Date span - ${a} days before, ${b} after`]);
+  } else if (mode==="redact" && dseg.length) checks.push([false, "Dates are gone - no timeline left to learn from"]);
+  const secrets = segs.filter(s=>s.ent && s.ent.type==="secret").length;
+  const leftSecret = /\b(?:sk|pk|ghp|AKIA)[_A-Za-z0-9]{12,}\b/.test(segs.map(s=>s.raw||"").join(""));
+  checks.push([!leftSecret, leftSecret ? "A credential-shaped string survived" : `No credential-shaped strings in output${secrets ? " ("+secrets+" removed)" : ""}`]);
+  $("checks").innerHTML = checks.map(c=>`<div class="chk"><span class="dot ${c[0]?"ok":"bad"}"></span><span>${esc(c[1])}</span></div>`).join("");
+
+  // leak scan on untouched text only
+  const flags = new Map();
+  segs.forEach(s=>{
+    if (s.raw === undefined) return;
+    for (const m of s.raw.matchAll(/\b[A-Z][a-z]{2,}\b/g)){
+      if (SAFE.has(m[0]) || state.ignore.has(m[0])) continue;
+      flags.set(m[0], (flags.get(m[0])||0)+1);
+    }
+  });
+  const fl = [...flags.entries()];
+  $("flags").innerHTML = fl.length ? fl.map(([w,n])=>
+    `<span class="chip">${esc(w)} x${n}<button data-w="${esc(w)}" data-t="person">person</button><button data-w="${esc(w)}" data-t="org">org</button><button data-w="${esc(w)}" data-t="loc">place</button><button data-w="${esc(w)}" data-t="ignore">ok</button></span>`).join("")
+    : `<span class="mute">None. Residual text looks generic.</span>`;
+  const score = Math.max(0, 100 - fl.reduce((a,[,n])=>a+Math.min(18, 6+n*3),0) - (leftSecret?40:0));
+  $("score").textContent = score;
+  $("score").style.color = score >= 90 ? "var(--grn)" : score >= 70 ? "#9a7b10" : "var(--acc)";
+}
+
+// ---- wiring
+function buildUI(){
+  $("samples").innerHTML = Object.keys(SAMPLES).map(k=>`<button data-s="${k}">${k}</button>`).join("");
+  $("rules").innerHTML = RULES.map(r=>`<label><input type="checkbox" data-r="${r.type}" checked>${r.label}</label>`).join("");
+  load(state.sample);
+}
+function load(name){
+  state.sample = name; state.custom = []; state.ignore = new Set();
+  $("inp").value = SAMPLES[name];
+  document.querySelectorAll("#samples button").forEach(b=>b.classList.toggle("on", b.dataset.s===name));
+  run();
+}
+$("samples").onclick = e => { if (e.target.dataset.s) load(e.target.dataset.s); };
+$("modes").onclick = e => {
+  if (!e.target.dataset.m) return;
+  state.mode = e.target.dataset.m;
+  document.querySelectorAll("#modes button").forEach(b=>b.classList.toggle("on", b===e.target));
+  run();
+};
+$("rules").onchange = e => {
+  const t = e.target.dataset.r;
+  e.target.checked ? state.off.delete(t) : state.off.add(t);
+  run();
+};
+$("flags").onclick = e => {
+  const w = e.target.dataset.w; if (!w) return;
+  if (e.target.dataset.t === "ignore") state.ignore.add(w);
+  else state.custom.push({text:w, type:e.target.dataset.t});
+  run();
+};
+$("out").onmouseover = e => {
+  const k = e.target.dataset && e.target.dataset.k; if (!k) return;
+  document.querySelectorAll("#out .e").forEach(s=>s.classList.toggle("hl", s.dataset.k===k));
+};
+$("out").onmouseleave = () => document.querySelectorAll("#out .e.hl").forEach(s=>s.classList.remove("hl"));
+$("inp").addEventListener("input", run);
+$("salt").addEventListener("input", run);
+$("reveal").addEventListener("change", run);
+buildUI();
+</script>
+</body>
+</html>
