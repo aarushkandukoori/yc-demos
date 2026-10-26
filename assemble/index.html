@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changeset Desk - a toy change pipeline for business systems</title>
+<style>
+:root{--bg:#0f1218;--panel:#171c25;--line:#262e3b;--tx:#e6eaf0;--mut:#8b95a7;--acc:#6ee7c8;--warn:#f5b85c;--bad:#ff7a85;--ok:#6ee7c8;--blue:#7aa7ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+header{padding:22px 28px 10px;max-width:1280px;margin:auto}
+h1{margin:0;font-size:22px;letter-spacing:-.01em}
+h1 span{color:var(--acc)}
+.sub{color:var(--mut);margin-top:4px;max-width:760px}
+main{max-width:1280px;margin:auto;padding:10px 28px 30px;display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:16px}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.card h2{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--mut);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.req{grid-column:1/-1}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=text]{flex:1;min-width:220px;background:#0c0f15;border:1px solid var(--line);border-radius:8px;color:var(--tx);padding:9px 11px;font:inherit}
+input[type=text]:focus{outline:1px solid var(--acc)}
+button{background:#222a37;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--acc)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:var(--acc);color:#07201a;border-color:var(--acc);font-weight:600}
+button.chip{font-size:12.5px;padding:5px 10px;border-radius:999px;color:var(--mut)}
+label.chk{color:var(--mut);font-size:12.5px;display:flex;gap:6px;align-items:center;cursor:pointer}
+.item{border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-bottom:7px;background:#12161e;transition:.25s}
+.item .t{display:flex;justify-content:space-between;gap:8px}
+.item small{color:var(--mut)}
+.item.hit{border-color:var(--warn);background:#2a2316;box-shadow:0 0 0 1px #f5b85c33}
+.item.chg{border-color:var(--blue);background:#16213a}
+.tag{font-size:11px;border-radius:5px;padding:1px 6px;background:#222a37;color:var(--mut)}
+.tag.w{background:#3a2d12;color:var(--warn)}
+.tag.o{background:#10332b;color:var(--ok)}
+.tag.b{background:#3a1a1f;color:var(--bad)}
+.step{display:flex;gap:10px;margin-bottom:12px;opacity:.35;transition:.3s}
+.step.on{opacity:1}
+.dot{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:11px;flex:none;color:var(--mut)}
+.step.on .dot{border-color:var(--acc);color:var(--acc)}
+.step.fail .dot{border-color:var(--bad);color:var(--bad)}
+.step .body{flex:1;min-width:0}
+.step b{display:block;margin-bottom:3px}
+.diff{background:#0c0f15;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;overflow-x:auto;white-space:pre-wrap}
+.diff .m{color:var(--bad)}.diff .p{color:var(--ok)}
+.grid{display:grid;gap:3px;margin-top:6px;overflow-x:auto}
+.cell{height:20px;min-width:20px;border-radius:4px;background:#1c2330;display:grid;place-items:center;font-size:10px;color:var(--mut)}
+.cell.f{background:#143a31;color:var(--ok)}
+.cell.bad{background:#4a1d24;color:var(--bad);outline:1px solid var(--bad)}
+.cell.e{background:#4a1d24;color:#fff}
+.hd{font-size:10px;color:var(--mut);text-align:center;writing-mode:vertical-rl;transform:rotate(180deg);height:64px;white-space:nowrap}
+.rn{font-size:11px;color:var(--mut);white-space:nowrap;padding-right:6px;display:flex;align-items:center}
+.verdict{margin-top:8px;padding:8px 10px;border-radius:8px;font-size:13px}
+.verdict.ok{background:#10332b;color:var(--ok)}
+.verdict.no{background:#3a1a1f;color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);font-weight:500}
+.tw{overflow-x:auto}
+.log .item{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.empty{color:var(--mut);font-style:italic}
+footer{max-width:1280px;margin:auto;padding:6px 28px 28px;color:var(--mut);font-size:12.5px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Changeset <span>Desk</span></h1>
+  <div class="sub">A toy change pipeline for a business system. Ask for a change in plain words. The desk <b>scopes</b> what depends on it, <b>builds</b> it in a sandbox copy, <b>verifies</b> it against sample records, and only then lets you <b>apply</b> it, with a snapshot you can roll back. All data below is synthetic.</div>
+</header>
+
+<main>
+  <section class="card req">
+    <h2>Change request</h2>
+    <div class="row">
+      <input id="q" type="text" placeholder="e.g. rename region to territory" autocomplete="off">
+      <button class="pri" id="go">Scope &amp; build</button>
+      <label class="chk"><input type="checkbox" id="naive"> naive edit (skip dependency updates)</label>
+    </div>
+    <div class="row" style="margin-top:8px" id="chips"></div>
+  </section>
+
+  <section class="card">
+    <h2>System map <span id="mapnote" class="mono"></span></h2>
+    <div id="fields"></div>
+    <div id="auts"></div>
+  </section>
+
+  <section class="card">
+    <h2>Pipeline <span id="pnote" class="mono"></span></h2>
+    <div id="s1" class="step"><div class="dot">1</div><div class="body"><b>Scope</b><div id="o1" class="mut">Waiting for a request.</div></div></div>
+    <div id="s2" class="step"><div class="dot">2</div><div class="body"><b>Build in sandbox</b><div id="o2"></div></div></div>
+    <div id="s3" class="step"><div class="dot">3</div><div class="body"><b>Verify</b><div id="o3"></div></div></div>
+    <div id="s4" class="step"><div class="dot">4</div><div class="body"><b>Review &amp; apply</b>
+      <div class="row" style="margin-top:6px"><button class="pri" id="apply" disabled>Approve &amp; apply to live</button><button id="discard" disabled>Discard</button></div>
+    </div></div>
+  </section>
+
+  <section class="card">
+    <h2>Live records <span class="mono" id="rnote"></span></h2>
+    <div class="tw"><table id="rec"></table></div>
+    <h2 style="margin-top:16px">Change log &amp; snapshots</h2>
+    <div class="log" id="log"><div class="empty">No applied changes yet.</div></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Assemble (YC S26). Not affiliated with Assemble.</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const clone = o => JSON.parse(JSON.stringify(o));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ---------- synthetic "live system" ----------
+let live = {
+  fields: ['region', 'status', 'score', 'tier'],
+  records: [
+    {id:'L1', name:'D. Okafor',  region:'EMEA', status:'New',       score:91, tier:'Gold'},
+    {id:'L2', name:'M. Tanaka',  region:'APAC', status:'Contacted', score:64, tier:'Silver'},
+    {id:'L3', name:'S. Rivera',  region:'AMER', status:'Working',   score:82, tier:'Gold'},
+    {id:'L4', name:'P. Novak',   region:'EMEA', status:'Contacted', score:38, tier:'Bronze'},
+    {id:'L5', name:'A. Haddad',  region:'AMER', status:'New',       score:55, tier:'Silver'},
+    {id:'L6', name:'J. Lindqvist', region:'APAC', status:'Working', score:88, tier:'Gold'},
+    {id:'L7', name:'R. Mehta',   region:'EMEA', status:'Contacted', score:72, tier:'Silver'},
+    {id:'L8', name:'K. Boateng', region:'AMER', status:'New',       score:22, tier:'Bronze'}
+  ],
+  autos: [
+    {id:'A1', name:'Route EMEA to SDR pod',  when:[['region','==','EMEA']], then:'assign pod-2'},
+    {id:'A2', name:'Territory sync flow',     when:[['region','==','APAC']], then:'push to regional ERP'},
+    {id:'A3', name:'Follow-up reminder',      when:[['status','==','Contacted']], then:'create task +3d'},
+    {id:'A4', name:'Auto-nurture',            when:[['score','>=',50]], then:'enqueue nurture'},
+    {id:'A5', name:'Gold renewal digest',     when:[['tier','==','Gold']], then:'add to weekly digest'}
+  ],
+  log: []
+};
+
+// ---------- tiny rule engine ----------
+function fires(state, rec, a){
+  for (const [f, op, v] of a.when){
+    if (!state.fields.includes(f)) return 'ERR';          // dangling reference
+    const x = rec[f];
+    if (op === '==' && x !== v) return false;
+    if (op === '>=' && !(x >= v)) return false;
+    if (op === '<'  && !(x < v))  return false;
+  }
+  return true;
+}
+const matrix = s => Object.fromEntries(s.records.flatMap(r => s.autos.map(a => [r.id + '|' + a.id, fires(s, r, a)])));
+const rule = a => a.when.map(c => `${c[0]} ${c[1]} ${typeof c[2] === 'string' ? "'" + c[2] + "'" : c[2]}`).join(' AND ') + '  ->  ' + a.then;
+
+// ---------- change catalogue (the toy "planner" knows three kinds) ----------
+const CHANGES = {
+  rename: {
+    label: 'rename region to territory',
+    match: /rename|territory|region/i,
+    refs: s => ({fields:['region'], autos: s.autos.filter(a => a.when.some(c => c[0] === 'region')).map(a => a.id)}),
+    apply(s, naive){
+      s.fields = s.fields.map(f => f === 'region' ? 'territory' : f);
+      s.records.forEach(r => { r.territory = r.region; delete r.region; });
+      if (!naive) s.autos.forEach(a => a.when.forEach(c => { if (c[0] === 'region') c[0] = 'territory'; }));
+    },
+    expect: (before) => ({...before})   // behavior must be unchanged
+  },
+  merge: {
+    label: "merge status 'Contacted' into 'Working'",
+    match: /merge|contacted|working|picklist/i,
+    refs: s => ({fields:['status'], autos: s.autos.filter(a => a.when.some(c => c[2] === 'Contacted')).map(a => a.id)}),
+    apply(s, naive){
+      s.records.forEach(r => { if (r.status === 'Contacted') r.status = 'Working'; });
+      if (!naive) s.autos.forEach(a => a.when.forEach(c => { if (c[2] === 'Contacted') c[2] = 'Working'; }));
+    },
+    // follow-up reminder must still fire for everyone who was 'Contacted' before the merge,
+    // and (new, by definition of the merge) now also for those already 'Working'
+    expect: (before, s0) => {
+      const e = {...before};
+      s0.records.forEach(r => { if (r.status === 'Working') e[r.id + '|A3'] = true; });
+      return e;
+    }
+  },
+  hot: {
+    label: 'alert on hot leads (score 80+) without double-nurturing them',
+    match: /hot|alert|notify|80/i,
+    refs: s => ({fields:['score'], autos: s.autos.filter(a => a.when.some(c => c[0] === 'score')).map(a => a.id)}),
+    apply(s, naive){
+      s.autos.push({id:'A6', name:'Hot lead alert', when:[['score','>=',80]], then:'notify owner + set priority Hot'});
+      if (!naive) s.autos.find(a => a.id === 'A4').when.push(['score','<',80]);
+    },
+    expect: (before, s0) => {
+      const e = {...before};
+      s0.records.forEach(r => { e[r.id + '|A6'] = r.score >= 80; if (r.score >= 80) e[r.id + '|A4'] = false; });
+      return e;
+    }
+  }
+};
+
+// ---------- rendering ----------
+let sandbox = null, pending = null;
+function renderMap(hit = {fields:[], autos:[]}, chg = {fields:[], autos:[]}){
+  $('fields').innerHTML = '<div class="mono" style="color:var(--mut);margin-bottom:6px">FIELDS</div>' +
+    live.fields.map(f => {
+      const deps = live.autos.filter(a => a.when.some(c => c[0] === f)).length;
+      return `<div class="item ${hit.fields.includes(f) ? 'hit' : ''}"><div class="t"><code>Lead.${f}</code><span class="tag ${deps ? 'w' : ''}">${deps} rule${deps === 1 ? '' : 's'}</span></div></div>`;
+    }).join('');
+  $('auts').innerHTML = '<div class="mono" style="color:var(--mut);margin:12px 0 6px">AUTOMATIONS</div>' +
+    live.autos.map(a => `<div class="item ${hit.autos.includes(a.id) ? 'hit' : ''}"><div class="t"><b>${a.name}</b><span class="tag">${a.id}</span></div><small class="mono">${rule(a)}</small></div>`).join('');
+  $('mapnote').textContent = live.fields.length + ' fields, ' + live.autos.length + ' rules';
+}
+function renderRecords(){
+  const cols = ['name', ...live.fields];
+  $('rec').innerHTML = '<tr><th>id</th>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>' +
+    live.records.map(r => `<tr><td>${r.id}</td>${cols.map(c => `<td>${r[c]}</td>`).join('')}</tr>`).join('');
+  $('rnote').textContent = live.records.length + ' sample records';
+}
+function renderLog(){
+  $('log').innerHTML = live.log.length ? live.log.slice().reverse().map(l =>
+    `<div class="item"><div><b>${l.label}</b><br><small>${l.when}${l.naive ? ' - naive' : ''}</small></div><button data-id="${l.id}">Roll back to before</button></div>`).join('')
+    : '<div class="empty">No applied changes yet.</div>';
+  $('log').querySelectorAll('button').forEach(b => b.onclick = () => rollback(+b.dataset.id));
+}
+function setStep(n, on, fail){ const el = $('s' + n); el.classList.toggle('on', on); el.classList.toggle('fail', !!fail); }
+function reset(){
+  [1,2,3,4].forEach(n => setStep(n, false));
+  $('o1').textContent = 'Waiting for a request.'; $('o2').innerHTML = ''; $('o3').innerHTML = '';
+  $('apply').disabled = true; $('discard').disabled = true; $('pnote').textContent = '';
+  sandbox = null; pending = null; renderMap();
+}
+
+// ---------- pipeline ----------
+async function run(text){
+  const key = Object.keys(CHANGES).find(k => CHANGES[k].match.test(text));
+  reset();
+  if (!key){
+    setStep(1, true, true);
+    $('o1').innerHTML = `<span style="color:var(--bad)">This toy planner understands three request types</span> (rename a field, merge a picklist value, add an alert rule). Try a chip above.`;
+    return;
+  }
+  const ch = CHANGES[key], naive = $('naive').checked;
+  $('go').disabled = true;
+
+  // 1 scope
+  setStep(1, true); await sleep(350);
+  const refs = ch.refs(live);
+  renderMap(refs);
+  $('o1').innerHTML = `Request matched: <b>${ch.label}</b>.<br>Touches ${refs.fields.map(f => '<code>Lead.' + f + '</code>').join(', ')} and <b>${refs.autos.length}</b> dependent rule${refs.autos.length === 1 ? '' : 's'}: ` +
+    (refs.autos.map(id => `<span class="tag w">${id}</span>`).join(' ') || 'none') + '.';
+
+  // 2 build
+  await sleep(600); setStep(2, true);
+  sandbox = clone(live);
+  ch.apply(sandbox, naive);
+  const changed = sandbox.autos.filter(a => { const o = live.autos.find(x => x.id === a.id); return !o || rule(o) !== rule(a); });
+  let diff = '';
+  changed.forEach(a => {
+    const o = live.autos.find(x => x.id === a.id);
+    if (o) diff += `<span class="m">- ${a.id} ${rule(o)}</span>\n`;
+    diff += `<span class="p">+ ${a.id} ${rule(a)}</span>\n`;
+  });
+  const fd = live.fields.join() !== sandbox.fields.join() ? `<span class="m">- fields: ${live.fields.join(', ')}</span>\n<span class="p">+ fields: ${sandbox.fields.join(', ')}</span>\n` : '';
+  const recDiff = sandbox.records.filter((r, i) => JSON.stringify(r) !== JSON.stringify(live.records[i])).length;
+  $('o2').innerHTML = `Sandbox copy modified: ${recDiff} record${recDiff === 1 ? '' : 's'} migrated, ${changed.length} rule${changed.length === 1 ? '' : 's'} changed${naive ? ' <span class="tag b">naive: no dependency updates</span>' : ''}.` +
+    `<div class="diff mono">${fd}${diff || '(no rule edits)'}</div>`;
+  renderMap(refs, {fields:[], autos:changed.map(a => a.id)});
+
+  // 3 verify
+  await sleep(700); setStep(3, true);
+  const before = matrix(live), want = ch.expect(before, live), got = matrix(sandbox);
+  const bad = new Set();
+  for (const k in got) if (got[k] !== want[k] && !(k in want === false && got[k] === false)) bad.add(k);
+  for (const k in want) if (got[k] !== want[k]) bad.add(k);
+  const ids = sandbox.records.map(r => r.id);
+  let g = `<div class="grid" style="grid-template-columns:auto repeat(${sandbox.autos.length},1fr)"><div></div>` +
+    sandbox.autos.map(a => `<div class="hd">${a.id} ${a.name}</div>`).join('');
+  ids.forEach(id => {
+    g += `<div class="rn">${id}</div>`;
+    sandbox.autos.forEach(a => {
+      const k = id + '|' + a.id, v = got[k];
+      const cls = v === 'ERR' ? 'e' : bad.has(k) ? 'bad' : v ? 'f' : '';
+      g += `<div class="cell ${cls}" title="${k}: ${v === 'ERR' ? 'unknown field' : v ? 'fires' : 'idle'}">${v === 'ERR' ? '!' : v ? '●' : ''}</div>`;
+    });
+  });
+  g += '</div>';
+  const errs = Object.values(got).filter(v => v === 'ERR').length;
+  const pass = bad.size === 0;
+  $('o3').innerHTML = `Replayed ${ids.length} records x ${sandbox.autos.length} rules and compared with expected behavior.${g}` +
+    `<div class="verdict ${pass ? 'ok' : 'no'}">${pass
+      ? `Pass - ${Object.keys(got).length} of ${Object.keys(got).length} outcomes match expectation.`
+      : `Blocked - ${bad.size} outcome${bad.size === 1 ? '' : 's'} differ from expectation` + (errs ? `, ${errs} hit a dangling field reference (<b>!</b>)` : ', rules silently fire differently (red outlines)') + '. Untick "naive edit" and rebuild.'}</div>`;
+  setStep(3, true, !pass);
+
+  // 4 review
+  await sleep(300); setStep(4, true, !pass);
+  pending = {key, naive, label: ch.label};
+  $('apply').disabled = !pass; $('discard').disabled = false;
+  $('pnote').textContent = pass ? 'ready for review' : 'blocked by verify';
+  $('go').disabled = false;
+}
+
+function applyLive(){
+  if (!sandbox || !pending) return;
+  live.log.push({id: Date.now(), label: pending.label, naive: pending.naive, when: new Date().toLocaleTimeString(), snap: clone({fields: live.fields, records: live.records, autos: live.autos})});
+  const log = live.log;
+  live = {...sandbox, log};
+  renderRecords(); renderLog(); reset();
+  $('pnote').textContent = 'applied';
+}
+function rollback(id){
+  const i = live.log.findIndex(l => l.id === id);
+  if (i < 0) return;
+  const s = clone(live.log[i].snap);
+  live = {...s, log: live.log.slice(0, i)};   // restores snapshot, drops this and later changes
+  renderRecords(); renderLog(); reset();
+  $('pnote').textContent = 'rolled back';
+}
+
+// ---------- wire up ----------
+Object.values(CHANGES).forEach(c => {
+  const b = document.createElement('button'); b.className = 'chip'; b.textContent = c.label;
+  b.onclick = () => { $('q').value = c.label; run(c.label); };
+  $('chips').appendChild(b);
+});
+$('go').onclick = () => run($('q').value);
+$('q').onkeydown = e => { if (e.key === 'Enter') run($('q').value); };
+$('apply').onclick = applyLive;
+$('discard').onclick = reset;
+renderMap(); renderRecords(); renderLog();
+</script>
+</body>
+</html>

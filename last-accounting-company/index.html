@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Postbook - agent posts, accountant signs off (toy demo)</title>
+<style>
+:root{--paper:#f6f1e7;--card:#fffdf8;--ink:#1d2a24;--mute:#6b7770;--line:#ddd5c3;--green:#1f6b4f;--green2:#d9eadf;--amber:#b7791f;--amber2:#fbeacb;--red:#a63d3d;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.45 Georgia,'Times New Roman',serif}
+header{padding:28px 32px 12px;max-width:1200px;margin:auto}
+h1{margin:0;font-size:26px;letter-spacing:-.3px}
+h1 span{color:var(--green)}
+.sub{color:var(--mute);margin:4px 0 0;max-width:720px}
+main{max-width:1200px;margin:auto;padding:12px 32px 40px;display:grid;grid-template-columns:1.1fr 1fr;gap:20px}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:12px 16px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute);font-family:system-ui,sans-serif;display:flex;justify-content:space-between;align-items:center}
+.full{grid-column:1/-1}
+button{font:600 13px system-ui,sans-serif;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:7px 12px;border-radius:7px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button.ok{background:var(--green);border-color:var(--green)}
+button:disabled{opacity:.35;cursor:not-allowed}
+button:hover:not(:disabled){filter:brightness(1.15)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--paper)}
+.stat b{display:block;font:700 22px var(--mono)}
+.stat small{color:var(--mute);font-family:system-ui,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font:600 11px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);padding:4px 6px;border-bottom:1px solid var(--line)}
+td{padding:6px;border-bottom:1px dashed var(--line);vertical-align:middle}
+td.n,th.n{text-align:right;font-family:var(--mono)}
+.neg{color:var(--red)}.pos{color:var(--green)}
+.tag{font:600 11px system-ui,sans-serif;padding:2px 7px;border-radius:99px;white-space:nowrap}
+.tag.auto{background:var(--green2);color:var(--green)}
+.tag.human{background:#e3e0f5;color:#4b3f9a}
+.tag.pend{background:#eee;color:var(--mute)}
+.tag.rev{background:var(--amber2);color:var(--amber)}
+.bar{height:6px;background:var(--line);border-radius:3px;width:70px;display:inline-block;vertical-align:middle;margin-right:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--green)}
+.bar i.low{background:var(--amber)}
+select{font:13px system-ui,sans-serif;padding:5px;border:1px solid var(--line);border-radius:6px;background:#fff;max-width:170px}
+.q{border:1px solid var(--amber);background:var(--amber2);border-radius:8px;padding:10px;margin-bottom:8px}
+.q .why{color:#6b4a10;font-size:13px;margin:4px 0 8px}
+.empty{color:var(--mute);font-style:italic;padding:10px 0}
+.log{font:12px/1.5 var(--mono);max-height:150px;overflow:auto;color:#33463c;background:var(--paper);border-radius:8px;padding:8px}
+.balance{font:600 12px var(--mono);padding:3px 8px;border-radius:6px}
+.balance.good{background:var(--green2);color:var(--green)}
+.balance.bad{background:#f4d4d4;color:var(--red)}
+.stamp{border:2px solid var(--green);color:var(--green);border-radius:8px;padding:10px 14px;font:600 13px var(--mono);margin-top:10px;transform:rotate(-1deg)}
+input[type=range]{accent-color:var(--green);width:150px}
+footer{max-width:1200px;margin:auto;padding:0 32px 30px;color:var(--mute);font-size:12.5px;font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<header>
+  <h1>Post<span>book</span> <small style="font-weight:400;font-size:14px;color:var(--mute)">- toy demo</small></h1>
+  <p class="sub">An agent turns raw bank lines into double-entry journal entries. Confident ones post themselves; shaky ones wait for an accountant. Every approval teaches the agent a vendor rule. All data is synthetic and runs in your browser.</p>
+  <ol class="sub" style="padding-left:18px;font-size:13.5px">
+    <li>Run the agent. New vendors score low and land in the queue.</li>
+    <li>Approve them. The agent saves a rule and gets surer next time.</li>
+    <li>Fetch more lines and run again. Repeat vendors now post themselves.</li>
+    <li>Once the queue is empty, the accountant signs off the period.</li>
+  </ol>
+</header>
+
+<main>
+  <section class="card full">
+    <div class="stats">
+      <div class="stat"><small>Auto-posted</small><b id="sAuto">0</b></div>
+      <div class="stat"><small>Human-signed</small><b id="sHuman">0</b></div>
+      <div class="stat"><small>Awaiting sign-off</small><b id="sQueue">0</b></div>
+      <div class="stat"><small>Rules learned</small><b id="sRules">0</b></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>1 - Bank feed
+      <span class="row">
+        <button class="ghost" id="btnFeed">+ Fetch 6 new lines</button>
+        <button id="btnRun">Run agent</button>
+      </span>
+    </h2>
+    <div class="row" style="margin-bottom:10px;font:13px system-ui,sans-serif">
+      <label for="thr">Auto-post threshold</label>
+      <input type="range" id="thr" min="50" max="99" value="85">
+      <b id="thrV" style="font-family:var(--mono)">0.85</b>
+      <span style="color:var(--mute)">lower = fewer reviews, more risk</span>
+    </div>
+    <table>
+      <thead><tr><th>Date</th><th>Description</th><th class="n">Amount</th><th>Status</th></tr></thead>
+      <tbody id="feed"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>2 - Accountant sign-off queue</h2>
+    <div id="queue"></div>
+    <h2 style="margin-top:14px">Agent log</h2>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section class="card">
+    <h2>3 - General ledger <span class="balance good" id="bal">balanced</span></h2>
+    <div style="max-height:300px;overflow:auto">
+    <table>
+      <thead><tr><th>#</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th>By</th></tr></thead>
+      <tbody id="gl"></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Learned rules <span style="text-transform:none;letter-spacing:0">the agent's memory, editable</span></h2>
+    <table>
+      <thead><tr><th>Vendor key</th><th>Account</th><th class="n">Confirms</th><th></th></tr></thead>
+      <tbody id="rules"></tbody>
+    </table>
+    <p class="sub" style="font-size:13px;margin-top:8px">Each confirmation raises confidence for that vendor, so repeat vendors drift above the threshold and stop needing review. Delete a rule to watch the agent become unsure again.</p>
+  </section>
+
+  <section class="card">
+    <h2>4 - Trial balance &amp; close</h2>
+    <table>
+      <thead><tr><th>Account</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div class="row" style="margin-top:12px">
+      <button class="ok" id="btnClose" disabled>Accountant signs off period</button>
+      <button class="ghost" id="btnReset">Reset demo</button>
+    </div>
+    <div id="signed"></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Last Accounting Company (YC S26). Not affiliated with Last Accounting Company.</footer>
+
+<script>
+const ACCTS = {
+  1000:'Cash', 4000:'Revenue', 5000:'Cloud hosting', 5100:'Software', 5200:'Meals',
+  5300:'Travel', 5400:'Payroll', 5500:'Office', 5600:'Professional fees', 5700:'Bank fees'
+};
+// Weak priors the agent has before it sees any client data: keyword -> account.
+const HINTS = [
+  [/air|hotel|taxi|rail/i,5300],[/cafe|lunch|pizza|bistro/i,5200],[/law|legal|audit/i,5600],
+  [/cloud|host|server/i,5000],[/soft|app|licen/i,5100],[/desk|paper|supply/i,5500],
+  [/fee|charge/i,5700],[/payroll|salary/i,5400],[/invoice|payout|wire in/i,4000]
+];
+// Synthetic bank lines. Fictional vendors only.
+const POOL = [
+  ['Nimbus Cloud Services',-1840.20,5000],['Nimbus Cloud Services',-1912.75,5000],
+  ['Harbor Payroll Run',-14200,5400],['Harbor Payroll Run',-14200,5400],
+  ['Kettle &amp; Crumb Cafe',-48.60,5200],['Kettle &amp; Crumb Cafe',-62.10,5200],
+  ['Pelican Air 4471',-612.00,5300],['Pelican Air 9120',-388.40,5300],
+  ['Quillstone LLP',-2500,5600],['Quillstone LLP',-1800,5600],
+  ['Tern Notes Pro',-96,5100],['Tern Notes Pro',-96,5100],
+  ['Wire in - Fernhill Studio',9800,4000],['Wire in - Fernhill Studio',7400,4000],
+  ['Wire in - Larkspur Co',12650,4000],['Monthly acct charge',-29,5700],
+  ['Brackenwood Supplies',-214.30,5500],['Zephyr Ops',-330,5100],['Zephyr Ops',-330,5100],
+  ['Orchid Collective',-540,5600],['Mossgate Events',-775,5200],['Vantor Systems',-129,5100]
+];
+let S;
+function fresh(){ S = {id:1, je:1, tx:[], gl:[], rules:{}, closed:false, rng:7, log:[], poolIdx:0}; }
+fresh();
+const $ = id => document.getElementById(id);
+const fmt = n => (n<0?'-':'') + '$' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const key = d => d.toLowerCase().replace(/[0-9#]/g,'').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim();
+function rand(){ S.rng = (S.rng*1664525+1013904223)%4294967296; return S.rng/4294967296; }
+function log(m){ S.log.unshift(m); S.log = S.log.slice(0,40); }
+const dateFor = i => { const d=new Date(2026,8,1+i*2); return d.toISOString().slice(5,10); };
+
+function fetchFeed(){
+  if(S.closed) return;
+  for(let i=0;i<6;i++){
+    const p = POOL[Math.floor(rand()*POOL.length)];
+    const amt = +(p[1]*(0.92+rand()*.16)).toFixed(2);
+    S.tx.push({id:S.id++, date:dateFor(S.tx.length), desc:p[0], amt: p[1]===-14200?p[1]:amt, truth:p[2], state:'pending'});
+  }
+  log(`Fetched 6 lines from the (synthetic) bank feed.`);
+  render();
+}
+
+// The "agent": returns {acct, conf, why}. Learned rules dominate; keyword hints are weak.
+function classify(t){
+  const k = key(t.desc), r = S.rules[k];
+  if(r){
+    const conf = Math.min(.99, .82 + .06*r.n);
+    return {acct:r.acct, conf, why:`Matched learned rule for "${k}" (confirmed ${r.n}x by an accountant).`};
+  }
+  for(const [re,a] of HINTS){
+    if(re.test(t.desc)){
+      const signOk = (a===4000) === (t.amt>0);
+      const conf = signOk ? .55 + rand()*.2 : .3;
+      return {acct:a, conf, why:`New vendor. Keyword hint suggests ${ACCTS[a]}${signOk?'':', but the sign of the amount disagrees'}.`};
+    }
+  }
+  return {acct:t.amt>0?4000:5100, conf:.3+rand()*.15, why:'New vendor, no signal. Defaulting by cash direction.'};
+}
+
+function post(t, acct, by){
+  const n = S.je++, a = Math.abs(t.amt), out = t.amt<0;
+  S.gl.push({n, acct: out?acct:1000, dr:a, cr:0, by, tx:t.id});
+  S.gl.push({n, acct: out?1000:acct, dr:0, cr:a, by, tx:t.id});
+  t.state = by; t.acct = acct;
+}
+
+function runAgent(){
+  if(S.closed) return;
+  const thr = $('thr').value/100;
+  const todo = S.tx.filter(t=>t.state==='pending');
+  if(!todo.length){ log('Nothing pending.'); return render(); }
+  let auto=0, rev=0;
+  todo.forEach(t=>{
+    const c = classify(t); t.pred = c;
+    if(c.conf>=thr){ post(t,c.acct,'agent'); auto++; log(`POST  ${t.desc} -> ${ACCTS[c.acct]} (conf ${c.conf.toFixed(2)})`); }
+    else { t.state='review'; rev++; log(`HOLD  ${t.desc} (conf ${c.conf.toFixed(2)} below ${thr.toFixed(2)})`); }
+  });
+  log(`Run complete: ${auto} auto-posted, ${rev} sent to sign-off.`);
+  render();
+}
+
+function approve(id){
+  const t = S.tx.find(x=>x.id===id), sel = $('sel'+id);
+  const acct = +sel.value, k = key(t.desc);
+  const r = S.rules[k];
+  S.rules[k] = {acct, n: r && r.acct===acct ? r.n+1 : 1};
+  post(t, acct, 'human');
+  log(`SIGN  ${t.desc} -> ${ACCTS[acct]}. Rule saved: "${k}" => ${ACCTS[acct]}.`);
+  render();
+}
+
+function delRule(i){
+  const k = Object.keys(S.rules)[i];
+  delete S.rules[k];
+  log(`FORGET rule for "${k}". Future lines from this vendor start from scratch.`);
+  render();
+}
+
+function render(){
+  const thr = $('thr').value/100;
+  $('thrV').textContent = thr.toFixed(2);
+  $('feed').innerHTML = S.tx.length ? S.tx.map(t=>{
+    const tag = {pending:['pend','pending'],review:['rev','needs sign-off'],agent:['auto','auto-posted'],human:['human','accountant']}[t.state];
+    return `<tr><td>${t.date}</td><td>${t.desc}</td><td class="n ${t.amt<0?'neg':'pos'}">${fmt(t.amt)}</td><td><span class="tag ${tag[0]}">${tag[1]}</span></td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">No lines yet. Fetch some from the bank feed.</td></tr>';
+
+  const rq = S.tx.filter(t=>t.state==='review');
+  $('queue').innerHTML = rq.length ? rq.map(t=>{
+    const c = t.pred, pct = Math.round(c.conf*100);
+    const opts = Object.entries(ACCTS).filter(([k])=>k!=1000).map(([k,v])=>`<option value="${k}" ${k==c.acct?'selected':''}>${k} ${v}</option>`).join('');
+    return `<div class="q"><b>${t.desc}</b> <span class="${t.amt<0?'neg':'pos'}" style="font-family:var(--mono)">${fmt(t.amt)}</span>
+      <div class="why"><span class="bar"><i class="low" style="width:${pct}%"></i></span>${pct}% - ${c.why}</div>
+      <div class="row"><select id="sel${t.id}">${opts}</select><button class="ok" onclick="approve(${t.id})">Approve &amp; learn</button></div></div>`;
+  }).join('') : '<div class="empty">Queue empty. Run the agent on new lines, or lower the threshold to see more land here.</div>';
+
+  $('log').innerHTML = S.log.join('<br>') || 'Waiting for work...';
+
+  $('gl').innerHTML = S.gl.length ? S.gl.map(e=>`<tr><td>${e.n}</td><td>${e.acct} ${ACCTS[e.acct]}</td><td class="n">${e.dr?fmt(e.dr):''}</td><td class="n">${e.cr?fmt(e.cr):''}</td><td><span class="tag ${e.by==='agent'?'auto':'human'}">${e.by}</span></td></tr>`).join('')
+    : '<tr><td colspan="5" class="empty">No entries yet.</td></tr>';
+
+  const rk = Object.keys(S.rules);
+  $('rules').innerHTML = rk.length ? rk.map((k,i)=>{
+    const r = S.rules[k];
+    return `<tr><td>${k}</td><td>${r.acct} ${ACCTS[r.acct]}</td><td class="n">${r.n}</td><td><button class="ghost" onclick="delRule(${i})" ${S.closed?'disabled':''}>forget</button></td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">No rules yet. Approve something in the queue.</td></tr>';
+
+  const bal = {};
+  S.gl.forEach(e=>{ bal[e.acct]=(bal[e.acct]||0)+e.dr-e.cr; });
+  let D=0, C=0;
+  $('tb').innerHTML = Object.keys(bal).sort().map(a=>{
+    const v = Math.round(bal[a]*100)/100; v>0?D+=v:C-=v;
+    return `<tr><td>${a} ${ACCTS[a]}</td><td class="n">${v>0?fmt(v):''}</td><td class="n">${v<0?fmt(-v):''}</td></tr>`;
+  }).join('') + `<tr><td><b>Total</b></td><td class="n"><b>${fmt(D)}</b></td><td class="n"><b>${fmt(C)}</b></td></tr>`;
+  const ok = Math.abs(D-C)<0.005;
+  $('bal').textContent = ok ? 'debits = credits' : 'OUT OF BALANCE';
+  $('bal').className = 'balance ' + (ok?'good':'bad');
+
+  const nA = S.tx.filter(t=>t.state==='agent').length, nH = S.tx.filter(t=>t.state==='human').length;
+  $('sAuto').textContent = nA; $('sHuman').textContent = nH;
+  $('sQueue').textContent = rq.length; $('sRules').textContent = Object.keys(S.rules).length;
+  const pend = S.tx.filter(t=>t.state==='pending').length;
+  $('btnClose').disabled = S.closed || !S.gl.length || rq.length || pend;
+  $('btnRun').disabled = S.closed; $('btnFeed').disabled = S.closed;
+  $('btnClose').title = $('btnClose').disabled ? 'Needs: some entries, nothing pending, empty queue' : '';
+}
+
+function closePeriod(){
+  S.closed = true;
+  let rev=0, exp=0;
+  S.gl.forEach(e=>{ if(e.acct===4000) rev+=e.cr-e.dr; else if(e.acct>=5000) exp+=e.dr-e.cr; });
+  const body = JSON.stringify(S.gl), h = [...body].reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,7);
+  const nA = S.tx.filter(t=>t.state==='agent').length, tot = S.tx.length;
+  $('signed').innerHTML = `<div class="stamp">PERIOD SIGNED OFF<br>Revenue ${fmt(rev)} / Expenses ${fmt(exp)} / Net ${fmt(rev-exp)}<br>${tot} lines, ${Math.round(nA/tot*100)}% posted without human touch<br>ledger hash ${(h>>>0).toString(16).padStart(8,'0')}</div>`;
+  log('Period closed. Ledger is now read-only.');
+  render();
+}
+
+$('btnFeed').onclick = fetchFeed;
+$('btnRun').onclick = runAgent;
+$('btnClose').onclick = closePeriod;
+$('btnReset').onclick = ()=>{ fresh(); $('signed').innerHTML=''; fetchFeed(); };
+$('thr').oninput = render;
+fetchFeed();
+</script>
+</body>
+</html>
