@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cheapest Seat - a toy cost-aware LLM router</title>
+<style>
+:root{--bg:#f5efe3;--panel:#fffaf0;--ink:#231f1a;--mute:#7a6f60;--line:#e2d8c4;--acc:#c2410c;--ok:#1f6f5c;--bad:#a1262b;--mono:ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:auto}
+h1{margin:0;font-size:26px;letter-spacing:-.02em}
+h1 span{color:var(--acc)}
+.sub{color:var(--mute);margin:4px 0 0;max-width:720px}
+main{max-width:1100px;margin:auto;padding:16px 24px 40px;display:grid;grid-template-columns:1fr 340px;gap:20px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mute);font-weight:600}
+textarea{width:100%;min-height:78px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;font:14px var(--mono);background:#fff;color:var(--ink)}
+textarea:focus,button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 11px;cursor:pointer;color:var(--ink)}
+button:hover{border-color:var(--acc)}
+button.go{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+button.go:hover{background:var(--acc);border-color:var(--acc)}
+button.chip{font-size:12.5px;padding:4px 9px;color:var(--mute)}
+.ctl{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13px;color:var(--mute)}
+.ctl input[type=range]{flex:1;accent-color:var(--acc)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}
+.stat b{display:block;font-size:22px;font-family:var(--mono);letter-spacing:-.02em}
+.stat small{color:var(--mute);font-size:12px}
+.save b{color:var(--ok)}
+.bar{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:12px}
+.bar i{display:block;height:100%;background:var(--ok);width:0;transition:width .4s}
+.prov{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
+.prov:last-child{border:0}
+.sw{cursor:pointer;font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--ok);color:var(--ok);background:transparent}
+.sw.down{border-color:var(--bad);color:var(--bad);background:#fbeaea}
+#log{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.q{border:1px solid var(--line);background:var(--panel);border-radius:10px;overflow:hidden;animation:in .25s}
+@keyframes in{from{opacity:0;transform:translateY(6px)}}
+.qh{padding:10px 14px;font:13px var(--mono);border-bottom:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.qb{padding:12px 14px}
+.pick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+.tag{font:12px var(--mono);padding:2px 8px;border-radius:5px;background:#efe6d2}
+.tag.win{background:var(--acc);color:#fff}
+.tag.hit{background:var(--ok);color:#fff}
+.tag.bad{background:var(--bad);color:#fff}
+table{width:100%;border-collapse:collapse;font:12px var(--mono)}
+th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--mute);font-weight:500}
+tr.win td{background:#fde9d9;font-weight:700}
+tr.no td{color:#b3a894}
+.why{font-size:13px;color:var(--mute);margin:8px 0 0}
+.feat{font-size:12.5px;color:var(--mute);margin-bottom:8px}
+.meter{display:inline-block;width:90px;height:7px;background:var(--line);border-radius:4px;vertical-align:middle;position:relative}
+.meter i{position:absolute;left:0;top:0;bottom:0;background:var(--acc);border-radius:4px}
+footer{max-width:1100px;margin:auto;padding:14px 24px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+.empty{color:var(--mute);text-align:center;padding:30px;border:1px dashed var(--line);border-radius:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cheapest <span>seat</span> router</h1>
+  <p class="sub">A toy model of per-query routing. Each prompt is scored for difficulty, then the router picks the cheapest (model, provider) pair that clears the bar, accounting for prompt-cache state. All models, prices and scores here are synthetic.</p>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>Send a query</h2>
+      <textarea id="prompt" placeholder="Type a coding-agent style request, or pick an example below..."></textarea>
+      <div class="row" id="chips"></div>
+      <div class="ctl">
+        <label for="margin">Quality margin</label>
+        <input id="margin" type="range" min="0" max="25" value="5">
+        <span id="marginv" style="font-family:var(--mono);width:34px">+5</span>
+      </div>
+      <div class="row">
+        <button class="go" id="send">Route it</button>
+        <button id="burst">Run a 12-query session</button>
+        <button id="reset">Reset</button>
+      </div>
+    </div>
+    <div id="log"><div class="empty" id="empty">No queries yet. Send one and watch the router think.</div></div>
+  </section>
+  <aside style="display:flex;flex-direction:column;gap:20px">
+    <div class="card">
+      <h2>Session bill</h2>
+      <div class="stats">
+        <div class="stat"><b id="sRouted">$0.000</b><small>routed</small></div>
+        <div class="stat"><b id="sBase">$0.000</b><small>always-top-model baseline</small></div>
+        <div class="stat save"><b id="sSave">0%</b><small>saved</small></div>
+        <div class="stat"><b id="sHit">0%</b><small>cache hit rate</small></div>
+      </div>
+      <div class="bar"><i id="bar"></i></div>
+    </div>
+    <div class="card">
+      <h2>Providers (click to toggle outage)</h2>
+      <div id="provs"></div>
+    </div>
+    <div class="card">
+      <h2>Model pool</h2>
+      <table id="pool"></table>
+      <p class="why">Prices are per 1M tokens (in / out). Capability is a made-up 0-100 score.</p>
+    </div>
+    <div class="card">
+      <h2>How cache changes the answer</h2>
+      <p class="why" style="margin:0">Cache lives per (model, provider). Every query carries a 6,000-token shared prefix (system prompt + repo context). A warm cache reads that prefix at 10% of input price, so switching to a slightly cheaper model can cost more than staying put. The router prices this in.</p>
+    </div>
+  </aside>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Conifer (YC S26). Not affiliated with Conifer.</footer>
+
+<script>
+// ---- synthetic world -------------------------------------------------
+const PREFIX = 6000;                      // shared context tokens per query
+const CACHE_READ = 0.10;                  // cache read costs 10% of input price
+const CACHE_WRITE = 1.25;                 // first write costs 125%
+const MODELS = [
+  {id:'Spruce-XL',  cap:96, in:15.0, out:75.0},
+  {id:'Cedar-L',    cap:84, in:3.0,  out:15.0},
+  {id:'Larch-M',    cap:68, in:0.9,  out:3.6},
+  {id:'Birch-S',    cap:48, in:0.25, out:1.0},
+  {id:'Fir-Mini',   cap:30, in:0.06, out:0.24},
+];
+// provider price multiplier and which models each one hosts
+const PROVIDERS = [
+  {id:'northline',  mult:1.00, up:true, hosts:['Spruce-XL','Cedar-L','Larch-M','Birch-S','Fir-Mini']},
+  {id:'quarry',     mult:0.80, up:true, hosts:['Cedar-L','Larch-M','Birch-S']},
+  {id:'tidepool',   mult:0.62, up:true, hosts:['Larch-M','Birch-S','Fir-Mini']},
+  {id:'garage-gpu', mult:0.30, up:true, hosts:['Fir-Mini','Birch-S']},
+];
+const SAMPLES = [
+  ['rename the variable `cnt` to `count` in utils.py', 'easy'],
+  ['fix the typo in the README heading', 'easy'],
+  ['what does this regex do? /^(\\d{3})-(\\d{4})$/', 'easy'],
+  ['summarize the diff in this PR in two sentences', 'easy'],
+  ['write a unit test for parseDate covering null and empty string', 'mid'],
+  ['add pagination to the /users endpoint and update the client', 'mid'],
+  ['debug why the websocket reconnect loop leaks memory after 10 minutes. Here is the trace:\n```\nat Socket.onclose (net.js:88)\nat retry (net.js:140)\n```', 'hard'],
+  ['refactor the auth module across multiple files to support OAuth and SSO, keep the public API stable, and explain the migration plan', 'hard'],
+  ['find the race condition in our job queue where two workers claim the same lease, then prove the fix is correct', 'hard'],
+];
+
+// ---- state -----------------------------------------------------------
+let cache = {};          // key "model@provider" -> true when warm
+let tot = {routed:0, base:0, reads:0, calls:0};
+
+// ---- scoring: crude, readable heuristics -----------------------------
+const UP = [['race condition',22],['refactor',16],['architecture',16],['migrat',14],['debug',14],['prove',18],['multiple files',14],['across',8],['concurren',14],['memory',6],['security',10],['design',10],['optimi',10],['explain',4],['pagination',8],['endpoint',6],['test',5],['oauth',8],['leak',8]];
+const DOWN = [['rename',-18],['typo',-22],['readme',-10],['summarize',-12],['what does',-14],['format',-12],['comment',-8],['lint',-8],['regex',-4]];
+function tokens(s){return Math.max(4, Math.round(s.trim().split(/\s+/).length*1.35 + (s.match(/[{}()\[\];`]/g)||[]).length*0.4));}
+function score(text){
+  const t = text.toLowerCase(), feats = []; let s = 30;
+  for (const [k,w] of UP.concat(DOWN)) if (t.includes(k)){ s += w; feats.push((w>0?'+':'')+w+' "'+k+'"'); }
+  const n = tokens(text);
+  const lenPts = Math.min(18, Math.floor(n/12)); if (lenPts){ s += lenPts; feats.push('+'+lenPts+' length ('+n+' tok)'); }
+  if (text.includes('```')){ s += 8; feats.push('+8 code block'); }
+  if ((text.match(/\?/g)||[]).length>1){ s += 4; feats.push('+4 multi-question'); }
+  return {need: Math.max(10, Math.min(95, s)), feats, n};
+}
+
+// ---- the router ------------------------------------------------------
+function price(model, prov, newTok, outTok, warm){
+  const inP = model.in*prov.mult/1e6, outP = model.out*prov.mult/1e6;
+  const prefix = PREFIX*inP*(warm ? CACHE_READ : CACHE_WRITE);
+  return prefix + newTok*inP + outTok*outP;
+}
+function route(text){
+  const margin = +document.getElementById('margin').value;
+  const sc = score(text);
+  const need = Math.min(96, sc.need + margin);
+  const outTok = Math.round(120 + sc.need*9);           // harder -> longer answers
+  const cands = [];
+  for (const p of PROVIDERS) for (const mid of p.hosts){
+    const m = MODELS.find(x=>x.id===mid);
+    const warm = !!cache[m.id+'@'+p.id];
+    cands.push({m, p, warm, ok:p.up && m.cap>=need, down:!p.up, cost:price(m,p,sc.n,outTok,warm)});
+  }
+  const win = cands.filter(c=>c.ok).sort((a,b)=>a.cost-b.cost)[0] || null;
+  // baseline: top model, flagship provider, no routing logic, warm after first call
+  const baseCost = price(MODELS[0], PROVIDERS[0], sc.n, outTok, tot.calls>0);
+  return {sc, need, outTok, cands, win, baseCost};
+}
+
+// ---- rendering -------------------------------------------------------
+const $ = id => document.getElementById(id);
+const usd = x => '$' + (x<0.01 ? x.toFixed(4) : x.toFixed(3));
+function esc(s){return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function submit(text){
+  text = text.trim(); if (!text) return;
+  const r = route(text);
+  if (!r.win){ renderFail(text, r); return; }
+  const w = r.win;
+  tot.routed += w.cost; tot.base += r.baseCost; tot.calls++; if (w.warm) tot.reads++;
+  cache[w.m.id+'@'+w.p.id] = true;
+  renderQuery(text, r);
+  renderStats();
+}
+
+function renderQuery(text, r){
+  const w = r.win;
+  // the seat with the lowest sticker price among eligible ones, ignoring cache
+  const sticker = r.cands.filter(c=>c.ok).sort((a,b)=>a.m.in*a.p.mult-b.m.in*b.p.mult)[0];
+  let why = 'Cheapest eligible seat after cache pricing: '+w.m.id+' on '+w.p.id+'.';
+  if (sticker !== w) why = sticker.m.id+' on '+sticker.p.id+' has the lowest sticker price, but switching drops the warm prefix. Staying on '+w.m.id+'@'+w.p.id+' is cheaper for this call.';
+  else if (!w.warm) why += ' Cache was cold, so this call pays the write premium on the shared prefix.';
+  const down = PROVIDERS.filter(p=>!p.up).map(p=>p.id);
+  if (down.length) why += ' (Skipped down: '+down.join(', ')+'.)';
+  const rows = r.cands.slice().sort((a,b)=>(b.ok-a.ok)||(a.cost-b.cost)).map(c=>{
+    const cls = c===w ? 'win' : (c.ok ? '' : 'no');
+    const note = c.down ? 'provider down' : (c.ok ? '' : 'below bar');
+    return '<tr class="'+cls+'"><td>'+(c===w?'&#9654; ':'')+c.m.id+'</td><td>'+c.p.id+'</td><td>'+c.m.cap+'</td><td>'+(c.warm?'warm':'cold')+'</td><td>'+usd(c.cost)+'</td><td>'+note+'</td></tr>';
+  }).join('');
+  const saved = r.baseCost>0 ? Math.round((1-w.cost/r.baseCost)*100) : 0;
+  const el = document.createElement('div'); el.className = 'q';
+  el.innerHTML =
+    '<div class="qh">'+esc(text.length>220 ? text.slice(0,220)+'...' : text)+'</div>'+
+    '<div class="qb">'+
+      '<div class="pick"><span class="tag win">'+w.m.id+'</span><span class="tag">'+w.p.id+'</span>'+
+      '<span class="tag '+(w.warm?'hit':'')+'">cache '+(w.warm?'read':'write')+'</span>'+
+      '<span class="tag">'+usd(w.cost)+' vs '+usd(r.baseCost)+' baseline ('+(saved>=0?'-':'+')+Math.abs(saved)+'%)</span></div>'+
+      '<div class="feat">Difficulty '+r.sc.need+' + margin = bar '+r.need+' <span class="meter"><i style="width:'+r.need+'%"></i></span><br>'+
+      (r.sc.feats.length ? esc(r.sc.feats.join(' | ')) : 'no signals, default baseline 30')+'</div>'+
+      '<table><tr><th>model</th><th>provider</th><th>cap</th><th>cache</th><th>est. cost</th><th></th></tr>'+rows+'</table>'+
+      '<p class="why">'+esc(why)+'</p>'+
+    '</div>';
+  addLog(el);
+}
+function renderFail(text, r){
+  const el = document.createElement('div'); el.className = 'q';
+  el.innerHTML = '<div class="qh">'+esc(text.slice(0,200))+'</div><div class="qb"><div class="pick"><span class="tag bad">no route</span></div>'+
+    '<p class="why">Bar is '+r.need+' but no live provider hosts a model that strong. Bring a provider back up or lower the quality margin.</p></div>';
+  addLog(el);
+}
+function addLog(el){
+  const e = $('empty'); if (e) e.remove();
+  $('log').prepend(el);
+}
+function renderStats(){
+  $('sRouted').textContent = usd(tot.routed);
+  $('sBase').textContent = usd(tot.base);
+  const sv = tot.base>0 ? Math.round((1-tot.routed/tot.base)*100) : 0;
+  $('sSave').textContent = sv + '%';
+  $('sHit').textContent = (tot.calls ? Math.round(tot.reads/tot.calls*100) : 0) + '%';
+  $('bar').style.width = Math.max(0, Math.min(100, sv)) + '%';
+}
+function renderProviders(){
+  $('provs').innerHTML = PROVIDERS.map((p,i) =>
+    '<div class="prov"><span><b>'+p.id+'</b> <span style="color:var(--mute)">x'+p.mult.toFixed(2)+'</span></span>'+
+    '<button class="sw '+(p.up?'':'down')+'" data-i="'+i+'">'+(p.up?'up':'down')+'</button></div>').join('');
+  $('provs').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const p = PROVIDERS[+b.dataset.i]; p.up = !p.up;
+    // an outage drops that provider's warm caches
+    if (!p.up) for (const k of Object.keys(cache)) if (k.endsWith('@'+p.id)) delete cache[k];
+    renderProviders();
+  });
+}
+function renderPool(){
+  $('pool').innerHTML = '<tr><th>model</th><th>cap</th><th>in / out</th></tr>' +
+    MODELS.map(m => '<tr><td>'+m.id+'</td><td>'+m.cap+'</td><td>$'+m.in+' / $'+m.out+'</td></tr>').join('');
+}
+
+// ---- wiring ----------------------------------------------------------
+SAMPLES.forEach(([t,l]) => {
+  const first = t.split('\n')[0];
+  const b = document.createElement('button'); b.className = 'chip';
+  b.textContent = l+': '+first.slice(0,34)+(first.length>34 ? '...' : '');
+  b.onclick = () => { $('prompt').value = t; };
+  $('chips').appendChild(b);
+});
+$('margin').oninput = e => { $('marginv').textContent = '+' + e.target.value; };
+$('send').onclick = () => submit($('prompt').value);
+$('prompt').addEventListener('keydown', e => { if ((e.metaKey||e.ctrlKey) && e.key==='Enter') submit($('prompt').value); });
+$('burst').onclick = () => {
+  // a plausible agent session: mostly small edits, a few hard ones
+  [0,4,5,1,6,2,4,3,7,0,8,5].forEach((i,k) => setTimeout(() => submit(SAMPLES[i][0]), k*140));
+};
+$('reset').onclick = () => {
+  cache = {}; tot = {routed:0, base:0, reads:0, calls:0};
+  PROVIDERS.forEach(p => p.up = true);
+  $('log').innerHTML = '<div class="empty" id="empty">No queries yet. Send one and watch the router think.</div>';
+  renderStats(); renderProviders();
+};
+renderProviders(); renderPool(); renderStats();
+</script>
+</body>
+</html>

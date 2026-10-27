@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Digester to Drum - a toy biogas-to-chemicals flowsheet</title>
+<style>
+:root{--bg:#0e1411;--panel:#16201a;--line:#2a3a30;--ink:#e6efe8;--mut:#8fa598;--acc:#e9b44c;--g:#6fcf97;--b:#5aa9e6;--r:#e8735a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:auto}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.4px}
+h1 span{color:var(--acc)}
+.sub{color:var(--mut);max-width:720px;margin:0}
+main{max-width:1100px;margin:auto;padding:12px 24px 24px;display:grid;grid-template-columns:320px 1fr;gap:16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);margin:0 0 12px;font-weight:600}
+label{display:block;margin:12px 0 2px;color:var(--mut);font-size:12px}
+label b{float:right;color:var(--ink);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--acc)}
+input[type=number]{width:90px;background:#0e1411;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+button{background:#1d2b23;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer;font:inherit;font-size:13px}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#1a1405;border-color:var(--acc);font-weight:600}
+.right{display:grid;gap:16px}
+.flow{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding-bottom:4px}
+.unit{min-width:128px;flex:1;border:1px solid var(--line);border-radius:8px;padding:10px;background:#101811;position:relative}
+.unit h3{margin:0 0 4px;font-size:12px;color:var(--acc);text-transform:uppercase;letter-spacing:.8px}
+.unit div{font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--mut)}
+.unit div b{color:var(--ink)}
+.arrow{align-self:center;color:var(--mut);padding:0 4px;font-size:18px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:700px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:#101811;border:1px solid var(--line);border-radius:8px;padding:10px}
+.kpi small{color:var(--mut);display:block;font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+.kpi strong{font-size:22px;font-variant-numeric:tabular-nums}
+.good{color:var(--g)}.warn{color:var(--acc)}.bad{color:var(--r)}
+.bar{display:flex;height:26px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;font-style:normal;font-size:11px;line-height:26px;text-align:center;color:#0e1411;overflow:hidden;white-space:nowrap}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;color:var(--mut);font-size:12px}
+.legend s{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;text-decoration:none}
+canvas{width:100%;height:220px;display:block}
+.msg{margin-top:10px;padding:8px 10px;border-left:3px solid var(--acc);background:#101811;color:var(--mut);font-size:13px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td{padding:4px 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right}
+footer{max-width:1100px;margin:auto;padding:8px 24px 36px;color:var(--mut);font-size:12.5px}
+.note{font-size:12px;color:var(--mut);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Digester <span>to</span> Drum</h1>
+  <p class="sub">A toy, on-site biogas reforming flowsheet. Dial in a gas stream and a reformer, see the syngas it makes, whether that syngas is the right shape for methanol, and what the product is worth next to just selling the gas. Numbers are simplified and synthetic.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Gas stream</h2>
+    <div class="row" id="presets"></div>
+    <label>Biogas flow <b id="vflow"></b></label>
+    <input type="range" id="flow" min="100" max="3000" step="50" value="800">
+    <label>Methane in biogas <b id="vch4"></b></label>
+    <input type="range" id="ch4" min="40" max="70" step="1" value="60">
+    <h2 style="margin-top:20px">Reformer</h2>
+    <label>Outlet temperature <b id="vT"></b></label>
+    <input type="range" id="T" min="650" max="950" step="5" value="850">
+    <label>Steam-to-carbon ratio <b id="vSC"></b></label>
+    <input type="range" id="SC" min="0" max="3" step="0.05" value="1.0">
+    <h2 style="margin-top:20px">Product &amp; prices</h2>
+    <div class="row" id="prod">
+      <button data-p="meoh" class="on">Methanol</button>
+      <button data-p="dme">DME</button>
+    </div>
+    <label>Methanol price, $/t</label><input type="number" id="pM" value="450">
+    <label>DME price, $/t</label><input type="number" id="pD" value="900">
+    <label>Gas sold as-is, $/MMBtu</label><input type="number" id="pG" value="8" step="0.5">
+    <p class="note">Prices are placeholders. Edit them and the verdict flips.</p>
+  </section>
+
+  <div class="right">
+    <section class="card">
+      <h2>Flowsheet (kmol/h)</h2>
+      <div class="flow" id="flowsheet"></div>
+    </section>
+
+    <section class="card">
+      <div class="kpis" id="kpis"></div>
+      <div class="msg" id="verdict"></div>
+    </section>
+
+    <section class="card">
+      <h2>Syngas composition (dry, mol %)</h2>
+      <div class="bar" id="bar"></div>
+      <div class="legend" id="legend"></div>
+      <div class="msg" id="sn"></div>
+    </section>
+
+    <section class="card">
+      <h2>Sweep - product output vs. reformer temperature</h2>
+      <canvas id="cv" width="900" height="220"></canvas>
+      <p class="note">Dot is your current setting. Cooler reformers leave methane unconverted; hotter ones burn more of your gas as fuel. Drag the temperature slider and watch the dot walk the curve.</p>
+    </section>
+
+    <section class="card">
+      <h2>Mass &amp; money balance</h2>
+      <table id="tbl"></table>
+    </section>
+
+    <section class="card">
+      <h2>Pinned runs</h2>
+      <div class="row">
+        <button id="pin">Pin current run</button>
+        <button id="clear">Clear</button>
+        <button id="best">Auto-find best temperature</button>
+      </div>
+      <table id="pins" style="margin-top:10px"></table>
+      <p class="note">Pin a few settings and compare them side by side. "Auto-find" sweeps 650-950 °C at your current steam ratio and moves the slider to the peak.</p>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Rise Reforming (YC S26). Not affiliated with Rise Reforming.</footer>
+
+<script>
+// ---------- constants (simplified, rounded) ----------
+const KMOL_PER_SCFM = 0.072;      // 1 scfm of gas ~ 0.072 kmol/h
+const MW = {meoh:32.04, dme:46.07};
+const MMBTU_PER_KMOL_CH4 = 0.76;  // ~802 MJ/kmol
+const H_SMR = 206, H_DRM = 247, H_STEAM = 40; // MJ/kmol
+const FUEL_EFF = 0.75, LHV = 802;
+const UPTIME = 0.9;
+const PRESETS = {
+  'Wastewater digester': {flow:800, ch4:60, T:850, SC:1.0},
+  'Landfill gas':        {flow:2000, ch4:50, T:880, SC:0.4},
+  'Dairy digester':      {flow:400, ch4:58, T:850, SC:1.0},
+  'Dry-reforming only':  {flow:800, ch4:60, T:900, SC:0.0}
+};
+const COL = {H2:'#5aa9e6', CO:'#e9b44c', CO2:'#8fa598', CH4:'#6fcf97', H2O:'#3c4f44'};
+
+const $ = id => document.getElementById(id);
+const st = {prod:'meoh'};
+
+// ---------- model ----------
+function convCH4(T, SC){
+  // sigmoid in temperature; extra steam pushes equilibrium a bit further
+  const x = 1/(1+Math.exp(-(T-770)/38));
+  return Math.min(0.99, 0.97*x + 0.02*Math.min(SC,2)/2*x);
+}
+function simulate(p){
+  const F = p.flow*KMOL_PER_SCFM, y = p.ch4/100;
+  const ch4_0 = F*y, co2_0 = F*(1-y);
+  let b = 0, r = null;
+  for(let i=0;i<10;i++){            // fixed-point: how much CH4 do we burn for reformer heat?
+    const ch4f = ch4_0*(1-b), co2 = co2_0;
+    const steam = p.SC*ch4f;
+    const conv = convCH4(p.T,p.SC)*ch4f;
+    // dry reforming share shrinks as steam goes up
+    let drm = Math.min(conv, co2*0.9*(1-Math.min(p.SC,2.5)/3.5));
+    let smr = Math.min(conv-drm, steam);
+    const ch4_out = ch4f-drm-smr;
+    let H2 = 3*smr+2*drm, CO = smr+2*drm, CO2 = co2-drm, H2O = steam-smr;
+    const w = 0.15*Math.min(CO,H2O);   // partial water-gas shift
+    H2+=w; CO-=w; CO2+=w; H2O-=w;
+    const duty = H_SMR*smr + H_DRM*drm + H_STEAM*steam*0.5; // MJ/h, per kmol basis
+    const fuel = duty/FUEL_EFF/LHV;
+    const nb = Math.min(0.6, fuel/ch4_0);
+    r = {F,ch4_0,co2_0,ch4f,steam,drm,smr,ch4_out,H2,CO,CO2,H2O,duty,fuel,b:nb};
+    b = nb;
+  }
+  // methanol loop: CO first, then CO2 hydrogenation (slower), recycle loop efficiency
+  let H2 = r.H2, m1 = Math.min(r.CO*0.97, H2/2); H2 -= 2*m1;
+  let m2 = 0.9*Math.min(r.CO2*0.97, H2/3);      H2 -= 3*m2;
+  const meoh = (m1+m2)*0.92;
+  const dme = meoh*0.5*0.96;
+  r.meoh = meoh; r.dme = dme; r.h2purge = H2 + (m1+m2)*3*0.08*0;
+  r.SN = (r.H2-r.CO2)/Math.max(1e-9,(r.CO+r.CO2));
+  const mol = st.prod==='meoh'?meoh:dme;
+  r.tpd = mol*MW[st.prod]*24/1000;
+  r.price = st.prod==='meoh'?+$('pM').value:+$('pD').value;
+  r.revYr = r.tpd*r.price*365*UPTIME;
+  r.gasYr = ch4_0*MMBTU_PER_KMOL_CH4*8760*UPTIME*(+$('pG').value);
+  r.yield = mol/ch4_0;   // product mol per mol CH4 in
+  return r;
+}
+
+// ---------- UI ----------
+const fmt = (x,d=1)=>x.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const money = x=>'$'+(Math.abs(x)>=1e6?fmt(x/1e6,2)+'M':fmt(x/1e3,0)+'k');
+function params(){return {flow:+$('flow').value,ch4:+$('ch4').value,T:+$('T').value,SC:+$('SC').value};}
+
+function render(){
+  const p = params(), r = simulate(p);
+  $('vflow').textContent = p.flow+' scfm';
+  $('vch4').textContent = p.ch4+' %';
+  $('vT').textContent = p.T+' °C';
+  $('vSC').textContent = p.SC.toFixed(2);
+
+  const units = [
+    ['Biogas in', `CH₄ <b>${fmt(r.ch4_0)}</b><br>CO₂ <b>${fmt(r.co2_0)}</b>`],
+    ['Reformer', `fuel burned <b>${fmt(r.fuel)}</b> CH₄<br>steam <b>${fmt(r.steam)}</b><br>CH₄ left <b>${fmt(r.ch4_out)}</b>`],
+    ['Syngas', `H₂ <b>${fmt(r.H2)}</b><br>CO <b>${fmt(r.CO)}</b><br>CO₂ <b>${fmt(r.CO2)}</b>`],
+    ['Synthesis loop', `MeOH <b>${fmt(r.meoh)}</b><br>H₂ unused <b>${fmt(r.h2purge)}</b>`],
+    [st.prod==='dme'?'DME reactor':'Product drum', st.prod==='dme'?`DME <b>${fmt(r.dme)}</b><br>+ H₂O <b>${fmt(r.dme)}</b>`:`MeOH <b>${fmt(r.meoh)}</b>`]
+  ];
+  $('flowsheet').innerHTML = units.map((u,i)=>
+    (i?'<div class="arrow">›</div>':'')+`<div class="unit"><h3>${u[0]}</h3><div>${u[1]}</div></div>`).join('');
+
+  const delta = r.revYr - r.gasYr;
+  const kp = [
+    ['Output', fmt(r.tpd,1)+' t/d', ''],
+    ['Product / CH₄ in', fmt(r.yield*100,0)+' mol %', r.yield>.55?'good':r.yield>.35?'warn':'bad'],
+    ['Revenue', money(r.revYr)+'/yr', ''],
+    ['vs. selling gas', (delta>=0?'+':'-')+money(delta), delta>=0?'good':'bad']
+  ];
+  $('kpis').innerHTML = kp.map(k=>`<div class="kpi"><small>${k[0]}</small><strong class="${k[2]}">${k[1]}</strong></div>`).join('');
+
+  let v;
+  if(r.ch4_out/r.ch4_0>0.25) v=`Reformer is too cool: ${fmt(r.ch4_out/r.ch4_0*100,0)}% of the methane slips through unreacted. Raise the temperature.`;
+  else if(delta<0) v=`At these prices, selling the gas as-is beats making ${st.prod==='dme'?'DME':'methanol'} by ${money(-delta)}/yr. Try a higher product price or a bigger stream.`;
+  else v=`Reforming on-site beats selling the gas by ${money(delta)}/yr at these assumptions. ${r.b>0.25?'Note '+fmt(r.b*100,0)+'% of your methane is burned just for reformer heat.':''}`;
+  $('verdict').textContent = v;
+
+  // syngas composition
+  const dry = {H2:r.H2,CO:r.CO,CO2:r.CO2,CH4:r.ch4_out};
+  const tot = Object.values(dry).reduce((a,b)=>a+b,0)||1;
+  $('bar').innerHTML = Object.keys(dry).map(k=>{const pc=dry[k]/tot*100;
+    return `<i style="width:${pc}%;background:${COL[k]}">${pc>7?fmt(pc,0)+'%':''}</i>`}).join('');
+  $('legend').innerHTML = Object.keys(dry).map(k=>`<span><s style="background:${COL[k]}"></s>${k} ${fmt(dry[k]/tot*100,1)}%</span>`).join('');
+  const sn = r.SN;
+  const snTxt = sn<1.8?'hydrogen-lean (add steam or temperature; CO₂ is eating your H₂)':sn>2.3?'hydrogen-rich (leftover H₂ gets purged or recycled)':'right in the methanol sweet spot';
+  $('sn').innerHTML = `Stoichiometric number (H₂−CO₂)/(CO+CO₂) = <b class="${sn>=1.9&&sn<=2.2?'good':'warn'}">${fmt(sn,2)}</b> - ${snTxt}. Methanol synthesis wants about 2.0.`;
+
+  // table
+  const rows = [
+    ['Methane fed',fmt(r.ch4_0*16.04*24/1000,1)+' t/d'],
+    ['Methane burned for heat',fmt(r.fuel*16.04*24/1000,1)+' t/d'],
+    ['Reformer duty',fmt(r.duty/1000*24/24,2)+' GJ/h'],
+    ['Methanol made',fmt(r.meoh*MW.meoh*24/1000,1)+' t/d'],
+    ['DME if dehydrated',fmt(r.dme*MW.dme*24/1000,1)+' t/d'],
+    ['Product revenue (90% uptime)',money(r.revYr)+'/yr'],
+    ['Same gas sold as-is',money(r.gasYr)+'/yr']
+  ];
+  $('tbl').innerHTML = rows.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`).join('');
+
+  drawSweep(p,r);
+}
+
+function drawSweep(p,cur){
+  const cv=$('cv'), dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=cv.clientHeight;
+  cv.width=W*dpr; cv.height=H*dpr;
+  const c=cv.getContext('2d'); c.scale(dpr,dpr); c.clearRect(0,0,W,H);
+  const pts=[]; for(let T=650;T<=950;T+=5) pts.push([T,simulate({...p,T}).tpd]);
+  const mx=Math.max(...pts.map(q=>q[1]),0.1)*1.15, L=44,R=12,Tp=10,B=28;
+  const X=T=>L+(T-650)/300*(W-L-R), Y=v=>H-B-v/mx*(H-B-Tp);
+  c.strokeStyle='#2a3a30'; c.fillStyle='#8fa598'; c.font='11px sans-serif'; c.lineWidth=1;
+  for(let i=0;i<=4;i++){const v=mx*i/4,y=Y(v);c.beginPath();c.moveTo(L,y);c.lineTo(W-R,y);c.stroke();c.fillText(fmt(v,1),4,y+4);}
+  for(let T=650;T<=950;T+=50) c.fillText(T+'°',X(T)-10,H-10);
+  c.strokeStyle='#e9b44c'; c.lineWidth=2; c.beginPath();
+  pts.forEach((q,i)=>i?c.lineTo(X(q[0]),Y(q[1])):c.moveTo(X(q[0]),Y(q[1]))); c.stroke();
+  c.fillStyle='#fff'; c.beginPath(); c.arc(X(p.T),Y(cur.tpd),5,0,7); c.fill();
+  c.fillStyle='#8fa598'; c.fillText('t/d '+(st.prod==='dme'?'DME':'methanol'),L+4,Tp+8);
+}
+
+// ---------- wiring ----------
+['flow','ch4','T','SC','pM','pD','pG'].forEach(id=>$(id).addEventListener('input',render));
+document.querySelectorAll('#prod button').forEach(b=>b.onclick=()=>{
+  st.prod=b.dataset.p;
+  document.querySelectorAll('#prod button').forEach(x=>x.classList.toggle('on',x===b));
+  render();
+});
+$('presets').innerHTML = Object.keys(PRESETS).map(n=>`<button>${n}</button>`).join('');
+document.querySelectorAll('#presets button').forEach(b=>b.onclick=()=>{
+  const q=PRESETS[b.textContent];
+  Object.keys(q).forEach(k=>$(k).value=q[k]);
+  render();
+});
+const pins = [];
+function renderPins(){
+  const head = '<tr><td><b>Run</b></td><td><b>t/d</b></td><td><b>Syn. no.</b></td><td><b>Rev/yr</b></td></tr>';
+  $('pins').innerHTML = pins.length ? head + pins.map(q=>
+    `<tr><td>${q.label}</td><td>${fmt(q.tpd,1)}</td><td>${fmt(q.SN,2)}</td><td>${money(q.rev)}</td></tr>`).join('')
+    : '<tr><td>Nothing pinned yet.</td><td></td></tr>';
+}
+$('pin').onclick = ()=>{
+  const p = params(), r = simulate(p);
+  pins.push({label:`${p.flow} scfm, ${p.ch4}% CH₄, ${p.T}°C, S/C ${p.SC.toFixed(2)}, ${st.prod==='dme'?'DME':'MeOH'}`,
+    tpd:r.tpd, SN:r.SN, rev:r.revYr});
+  if(pins.length>5) pins.shift();
+  renderPins();
+};
+$('clear').onclick = ()=>{pins.length=0; renderPins();};
+$('best').onclick = ()=>{
+  const p = params(); let bestT = p.T, best = -1;
+  for(let T=650;T<=950;T+=5){const v = simulate({...p,T}).tpd; if(v>best){best=v;bestT=T;}}
+  $('T').value = bestT; render();
+};
+renderPins();
+window.addEventListener('resize',render);
+render();
+</script>
+</body>
+</html>
