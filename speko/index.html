@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bakeoff - a toy voice-model router</title>
+<style>
+:root{--bg:#0f1113;--panel:#171a1d;--line:#262b30;--tx:#e6e8ea;--mut:#8b949c;--acc:#7dd3a8;--warn:#f0b86e;--bad:#e5786d;--blue:#79b4f0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 28px 8px;max-width:1200px;margin:0 auto}
+h1{margin:0 0 4px;font-size:24px;letter-spacing:-.01em}
+h1 span{color:var(--acc)}
+header p{margin:0;color:var(--mut);max-width:760px}
+main{max-width:1200px;margin:0 auto;padding:16px 28px 24px;display:grid;grid-template-columns:290px 1fr 340px;gap:16px}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600}
+label{display:block;margin:12px 0 4px;color:var(--mut);font-size:12px}
+select,input[type=range]{width:100%}
+select{background:#0f1113;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.val{font-variant-numeric:tabular-nums;color:var(--tx)}
+input[type=range]{accent-color:var(--acc)}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+button{background:#1f2428;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px 11px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#0b1a12;border-color:var(--acc);font-weight:600}
+button.danger:hover{border-color:var(--bad)}
+button:disabled{opacity:.4;cursor:default}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);text-align:right;font-weight:600;padding:0 8px 8px}
+th:first-child,td:first-child{text-align:left}
+td{padding:8px;border-top:1px solid var(--line);text-align:right;transition:background .3s}
+tr.top td{background:rgba(125,211,168,.08)}
+tr.out td{opacity:.4;text-decoration:line-through}
+tr.new td:first-child::after{content:"NEW";margin-left:6px;font-size:10px;color:#0b1a12;background:var(--blue);padding:1px 5px;border-radius:4px}
+.bar{display:inline-block;height:8px;border-radius:4px;background:var(--acc);vertical-align:middle;transition:width .35s}
+.tag{font-size:11px;color:var(--mut)}
+.unk{color:var(--mut);font-style:italic}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+pre{margin:0;background:#0b0d0f;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d1d9}
+pre .k{color:var(--blue)}pre .s{color:var(--warn)}pre .g{color:var(--acc)}
+#log{height:210px;overflow:auto;font:12px/1.6 ui-monospace,Menlo,monospace;background:#0b0d0f;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:12px}
+#log div{border-bottom:1px dashed #1c2024;padding:1px 0}
+.t{color:var(--mut)}.ok{color:var(--acc)}.wn{color:var(--warn)}.er{color:var(--bad)}.bl{color:var(--blue)}
+.why{margin-top:12px;color:var(--mut);font-size:12px}
+.why b{color:var(--tx)}
+footer{max-width:1200px;margin:0 auto;padding:8px 28px 32px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
+footer p{margin:14px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bake<span>off</span> - route a call to the measured-best speech model</h1>
+  <p>A toy router. Pick a language and what matters for your agent; it ranks speech-to-text models from a small, clearly synthetic benchmark and sends each call to the winner. Ship a new model or knock out a provider and watch traffic move with no code change.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Your agent</h2>
+    <label for="lang">Caller language</label>
+    <select id="lang"></select>
+
+    <label>Use-case preset</label>
+    <div class="presets" id="presets"></div>
+
+    <label>Accuracy weight <span class="val" id="wAv"></span></label>
+    <input type="range" id="wA" min="0" max="100" value="50">
+    <label>Latency weight <span class="val" id="wLv"></span></label>
+    <input type="range" id="wL" min="0" max="100" value="35">
+    <label>Cost weight <span class="val" id="wCv"></span></label>
+    <input type="range" id="wC" min="0" max="100" value="15">
+
+    <label>Max word error rate <span class="val" id="mWv"></span></label>
+    <input type="range" id="mW" min="5" max="60" value="60">
+    <label>Max p50 latency <span class="val" id="mLv"></span></label>
+    <input type="range" id="mL" min="100" max="900" step="10" value="900">
+
+    <div class="acts">
+      <button id="ship">Ship a new model</button>
+      <button id="drift">Re-measure (drift)</button>
+      <button id="reset">Reset</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Live ranking - <span id="rkLang"></span></h2>
+    <table>
+      <thead><tr><th>Model</th><th>WER</th><th>p50 ms</th><th>$/1k min</th><th>Score</th><th></th></tr></thead>
+      <tbody id="board"></tbody>
+    </table>
+    <div class="why" id="why"></div>
+  </section>
+
+  <section class="card">
+    <h2>Your code (never changes)</h2>
+<pre><span class="k">const</span> res = <span class="k">await</span> router.transcribe({
+  <span class="k">apiKey</span>: <span class="s">"YOUR_API_KEY"</span>,
+  <span class="k">audio</span>: callStream,
+  <span class="k">language</span>: <span class="g" id="codeLang"></span>,
+  <span class="k">optimize</span>: <span class="g" id="codeOpt"></span>
+});
+<span class="t">// model chosen server-side</span></pre>
+    <div class="acts">
+      <button class="primary" id="call">Place a call</button>
+      <button class="danger" id="kill">Kill top provider</button>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+
+<footer>
+  <div>All numbers on this page are invented sample data for illustration, and the model names are made up. Nothing here reflects any real model's performance.</div>
+  <p>Independent demo built by Aarush Kandukoori, inspired by Speko (YC S26). Not affiliated with Speko.</p>
+</footer>
+
+<script>
+(function(){
+"use strict";
+
+// ---- synthetic benchmark -------------------------------------------------
+// wer: percent per language; missing key = never measured in that language.
+const LANGS = ["English","Spanish","Hindi","Japanese","Arabic","Swahili"];
+const BASE = [
+  {id:"lumen-2",   name:"Lumen 2",    lat:210, cost:9.0,  wer:{English:6.1, Spanish:8.9,  Hindi:19.5, Japanese:13.8, Arabic:24.0, Swahili:38.0}},
+  {id:"kestrel-s", name:"Kestrel S",  lat:140, cost:6.5,  wer:{English:7.4, Spanish:9.7,  Hindi:27.0, Japanese:17.2, Arabic:31.0}},
+  {id:"basalt-v3", name:"Basalt v3",  lat:330, cost:14.0, wer:{English:5.2, Spanish:7.1,  Hindi:15.1, Japanese:9.9,  Arabic:17.6, Swahili:29.5}},
+  {id:"quill-fast",name:"Quill Fast", lat:95,  cost:4.2,  wer:{English:9.8, Spanish:13.5, Hindi:33.0}},
+  {id:"marrow-m",  name:"Marrow M",   lat:260, cost:5.1,  wer:{English:8.3, Spanish:10.2, Hindi:16.8, Japanese:12.1, Arabic:21.5, Swahili:34.0}},
+  {id:"tern-live", name:"Tern Live",  lat:120, cost:11.5, wer:{English:6.9, Spanish:9.1,  Hindi:22.4, Japanese:11.0}},
+  {id:"orrery-1",  name:"Orrery 1",   lat:480, cost:3.0,  wer:{English:7.9, Spanish:9.4,  Hindi:18.9, Japanese:14.5, Arabic:19.9, Swahili:31.5}}
+];
+const NEWCOMERS = [
+  {id:"vesper-x", name:"Vesper X", lat:175, cost:7.2, wer:{English:5.6, Spanish:6.6, Hindi:12.9, Japanese:9.1, Arabic:16.4, Swahili:26.8}},
+  {id:"nimbus-3", name:"Nimbus 3", lat:150, cost:8.4, wer:{English:5.9, Spanish:7.8, Hindi:14.2, Japanese:8.7, Arabic:18.8}},
+  {id:"coda-r",   name:"Coda R",   lat:110, cost:5.8, wer:{English:6.3, Spanish:8.2, Hindi:20.5, Japanese:12.6, Arabic:23.1, Swahili:30.2}}
+];
+const PRESETS = {
+  "Support line":   {a:50, l:30, c:20, hint:"balanced"},
+  "Live dictation": {a:75, l:15, c:10, hint:"accuracy"},
+  "Barge-in agent": {a:25, l:65, c:10, hint:"latency"},
+  "Bulk call QA":   {a:35, l:5,  c:60, hint:"cost"}
+};
+
+// ---- state -----------------------------------------------------------------
+let models, queue, outage, newest, lastTop, lastRank;
+const $ = id => document.getElementById(id);
+function reset(){
+  models = BASE.map(m => ({...m, wer:{...m.wer}}));
+  queue = NEWCOMERS.slice();
+  outage = new Set();
+  newest = null; lastTop = null;
+}
+reset();
+
+// ---- routing core ------------------------------------------------------------
+function settings(){
+  return {
+    lang: $("lang").value,
+    wA: +$("wA").value, wL: +$("wL").value, wC: +$("wC").value,
+    maxW: +$("mW").value, maxL: +$("mL").value
+  };
+}
+function rank(s){
+  const cand = models.filter(m => m.wer[s.lang] !== undefined);
+  const unknown = models.length - cand.length;
+  const ok = cand.filter(m => m.wer[s.lang] <= s.maxW && m.lat <= s.maxL);
+  const pool = ok.length ? ok : [];
+  const norm = (arr, f) => {
+    const v = arr.map(f), lo = Math.min(...v), hi = Math.max(...v);
+    return x => hi === lo ? 0 : (f(x) - lo) / (hi - lo);
+  };
+  const nW = norm(pool, m => m.wer[s.lang]);
+  const nL = norm(pool, m => m.lat);
+  const nC = norm(pool, m => m.cost);
+  const tot = (s.wA + s.wL + s.wC) || 1;
+  const scored = pool.map(m => {
+    const penalty = (s.wA*nW(m) + s.wL*nL(m) + s.wC*nC(m)) / tot;
+    return {m, score: Math.round((1 - penalty) * 100)};
+  }).sort((a, b) => b.score - a.score);
+  const filtered = cand.filter(m => !pool.includes(m));
+  return {scored, filtered, unknown};
+}
+function pick(r){
+  return r.scored.find(x => !outage.has(x.m.id)) || null;
+}
+
+// ---- rendering ---------------------------------------------------------------
+function optLabel(s){
+  const t = [["accuracy", s.wA], ["latency", s.wL], ["cost", s.wC]].sort((a, b) => b[1] - a[1]);
+  return '"' + t[0][0] + '"';
+}
+function render(){
+  const s = settings();
+  $("wAv").textContent = s.wA; $("wLv").textContent = s.wL; $("wCv").textContent = s.wC;
+  $("mWv").textContent = s.maxW >= 60 ? "no limit" : s.maxW + "%";
+  $("mLv").textContent = s.maxL >= 900 ? "no limit" : s.maxL + " ms";
+  $("rkLang").textContent = s.lang;
+  $("codeLang").textContent = '"' + s.lang.toLowerCase().slice(0, 2) + '"';
+  $("codeOpt").textContent = optLabel(s);
+
+  const r = rank(s), top = pick(r);
+  lastRank = r;
+  const rows = r.scored.map(x => {
+    const m = x.m, isTop = top && top.m.id === m.id, down = outage.has(m.id);
+    return `<tr class="${isTop ? "top" : ""} ${down ? "out" : ""} ${newest === m.id ? "new" : ""}">
+      <td>${m.name}</td><td>${m.wer[s.lang].toFixed(1)}%</td><td>${m.lat}</td><td>${m.cost.toFixed(1)}</td>
+      <td>${x.score}</td><td style="text-align:left;width:90px"><span class="bar" style="width:${x.score*0.8}px"></span></td></tr>`;
+  });
+  r.filtered.forEach(m => rows.push(`<tr class="out"><td>${m.name}</td><td>${m.wer[s.lang].toFixed(1)}%</td><td>${m.lat}</td><td>${m.cost.toFixed(1)}</td><td colspan="2" class="tag">over your limits</td></tr>`));
+  $("board").innerHTML = rows.join("") || '<tr><td colspan="6" class="tag">No model satisfies these limits.</td></tr>';
+
+  let why = "";
+  if (top) {
+    why = `Routing ${s.lang} traffic to <b>${top.m.name}</b>.`;
+    if (outage.size) why += ` ${outage.size} provider(s) marked down and skipped.`;
+  } else why = "<b>No eligible model.</b> Loosen a limit.";
+  if (r.unknown) why += ` ${r.unknown} model(s) were never measured in ${s.lang}, so they are not eligible (unknown is not the same as good).`;
+  $("why").innerHTML = why;
+
+  const prev = lastTop;
+  const cur = top ? top.m.id : null;
+  if (prev !== undefined && prev !== null && cur !== prev && render.announce) {
+    const from = models.find(m => m.id === prev), to = top && top.m;
+    log(to ? `ROUTE CHANGE  ${from ? from.name : prev} -> ${to.name}` : `ROUTE LOST  no eligible model`, "wn");
+  }
+  lastTop = cur;
+  render.announce = true;
+}
+
+function log(msg, cls){
+  const d = document.createElement("div");
+  const ts = new Date().toLocaleTimeString([], {hour12:false});
+  d.innerHTML = `<span class="t">${ts}</span> <span class="${cls || ""}">${msg}</span>`;
+  const box = $("log"); box.appendChild(d); box.scrollTop = box.scrollHeight;
+}
+
+// ---- actions -------------------------------------------------------------------
+function placeCall(){
+  const s = settings(), r = rank(s);
+  const ordered = r.scored;
+  if (!ordered.length) { log("CALL FAILED  nothing eligible under limits", "er"); return; }
+  log(`CALL  lang=${s.lang} optimize=${optLabel(s)}`, "bl");
+  let attempt = 0;
+  for (const x of ordered) {
+    attempt++;
+    if (outage.has(x.m.id)) { log(`  try ${attempt}: ${x.m.name} - 503 upstream, failing over`, "er"); continue; }
+    // jitter so repeated calls look alive
+    const j = Math.round((Math.random() - .5) * x.m.lat * 0.2);
+    const lat = x.m.lat + j;
+    const wer = Math.max(1, x.m.wer[s.lang] + (Math.random() - .5) * 1.2);
+    log(`  try ${attempt}: ${x.m.name} - ok, first token ${lat} ms, call WER ${wer.toFixed(1)}%`, "ok");
+    return;
+  }
+  log("CALL FAILED  every eligible provider is down", "er");
+}
+function killTop(){
+  const top = pick(rank(settings()));
+  if (!top) { log("nothing to kill", "wn"); return; }
+  outage.add(top.m.id);
+  log(`PROBE  ${top.m.name} health check failed, marked down`, "er");
+  render();
+}
+function shipNew(){
+  if (!queue.length) { log("No more newcomers in this toy. Hit Reset.", "wn"); return; }
+  const m = queue.shift();
+  models.push(m); newest = m.id;
+  log(`BENCH  ${m.name} released today, measured across ${Object.keys(m.wer).length} languages`, "bl");
+  render();
+  if (!queue.length) $("ship").disabled = true;
+}
+function drift(){
+  // a provider quietly regresses: top model in current language gets worse
+  const s = settings(), top = pick(rank(s));
+  if (!top) return;
+  const m = models.find(x => x.id === top.m.id);
+  const bump = 3 + Math.random() * 4;
+  m.wer[s.lang] = +(m.wer[s.lang] + bump).toFixed(1);
+  m.lat = Math.round(m.lat * 1.25);
+  log(`BENCH  re-measure: ${m.name} regressed (+${bump.toFixed(1)} WER pts in ${s.lang}, p50 now ${m.lat} ms)`, "wn");
+  render();
+}
+function applyPreset(name){
+  const p = PRESETS[name];
+  $("wA").value = p.a; $("wL").value = p.l; $("wC").value = p.c;
+  document.querySelectorAll("#presets button").forEach(b => b.style.borderColor = b.dataset.n === name ? "var(--acc)" : "");
+  render();
+}
+
+// ---- wiring ----------------------------------------------------------------------
+LANGS.forEach(l => { const o = document.createElement("option"); o.textContent = l; $("lang").appendChild(o); });
+Object.keys(PRESETS).forEach(n => {
+  const b = document.createElement("button"); b.textContent = n; b.dataset.n = n;
+  b.onclick = () => applyPreset(n); $("presets").appendChild(b);
+});
+["lang","wA","wL","wC","mW","mL"].forEach(id => $(id).addEventListener("input", () => {
+  if (id[0] === "w") document.querySelectorAll("#presets button").forEach(b => b.style.borderColor = "");
+  render();
+}));
+$("call").onclick = placeCall;
+$("kill").onclick = killTop;
+$("ship").onclick = shipNew;
+$("drift").onclick = drift;
+$("reset").onclick = () => {
+  reset(); $("ship").disabled = false; $("log").innerHTML = "";
+  render.announce = false; render(); log("Reset to the starting benchmark.", "t");
+};
+
+render.announce = false;
+render();
+log("Ready. Try Hindi, then ship a new model.", "t");
+})();
+</script>
+</body>
+</html>

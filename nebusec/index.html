@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof Bench - exploit-verified findings, in your browser</title>
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--line:#262d38;--fg:#e6e9ee;--mut:#8b95a5;--acc:#7dd3a8;--red:#ff7b72;--amb:#e3b341;--blu:#79b8ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:22px 28px 10px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:20px;letter-spacing:.2px}
+h1 span{color:var(--acc)}
+header p{margin:4px 0 0;color:var(--mut);max-width:760px}
+.stats{display:flex;gap:10px;padding:14px 28px;flex-wrap:wrap}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:110px}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.stat small{color:var(--mut);text-transform:uppercase;font-size:11px;letter-spacing:.8px}
+main{display:grid;grid-template-columns:260px 1fr 380px;gap:14px;padding:0 28px 20px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.panel h2{margin:0;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);border-bottom:1px solid var(--line)}
+.target{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.target:hover{background:#1c232d}
+.target.sel{background:#1f2937;box-shadow:inset 3px 0 var(--acc)}
+.target small{display:block;color:var(--mut)}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.pill.candidate{color:var(--amb);border-color:var(--amb)}
+.pill.confirmed{color:var(--red);border-color:var(--red)}
+.pill.dropped{color:var(--blu);border-color:var(--blu)}
+.pill.fixed{color:var(--acc);border-color:var(--acc)}
+.bar{display:flex;gap:8px;padding:10px 14px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+button{background:#222a35;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--acc)}
+button:disabled{opacity:.4;cursor:default}
+button.go{background:var(--acc);color:#062014;border-color:var(--acc);font-weight:600}
+textarea,input{width:100%;background:#0b0e13;color:#d6deeb;border:0;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;padding:12px 14px;resize:vertical}
+textarea{min-height:150px;display:block;outline:none}
+.custom{display:flex;border-top:1px solid var(--line)}
+.custom input{border-right:1px solid var(--line)}
+.custom button{border-radius:0;border:0}
+.note{padding:10px 14px;color:var(--mut);font-size:12.5px;border-top:1px solid var(--line)}
+#log{height:300px;overflow:auto;padding:10px 14px;font:12.5px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap}
+.l-ok{color:var(--acc)}.l-bad{color:var(--red)}.l-info{color:var(--blu)}.l-warn{color:var(--amb)}.l-dim{color:var(--mut)}
+#report{padding:12px 14px;font-size:13px;border-top:1px solid var(--line);min-height:120px}
+#report h3{margin:0 0 4px;font-size:14px}
+#report code{background:#0b0e13;padding:1px 5px;border-radius:4px;font-size:12px;word-break:break-all}
+footer{padding:16px 28px 30px;color:var(--mut);font-size:12.5px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Proof</span> Bench</h1>
+  <p>A scanner that only reports what it can <em>exploit</em>. Each target below is real JavaScript running in your tab. Scan it, fire payloads at it, patch it, then replay the same payloads. Edit the code to change the outcome.</p>
+</header>
+
+<div class="stats">
+  <div class="stat"><b id="sCand">0</b><small>Candidates</small></div>
+  <div class="stat"><b id="sConf">0</b><small>Confirmed</small></div>
+  <div class="stat"><b id="sDrop">0</b><small>Dropped (no proof)</small></div>
+  <div class="stat"><b id="sFix">0</b><small>Fixed + replayed</small></div>
+</div>
+
+<main>
+  <section class="panel">
+    <h2>Targets</h2>
+    <div id="targets"></div>
+    <div class="bar"><button class="go" id="bScan">Scan all</button><button id="bAll">Verify all</button></div>
+  </section>
+
+  <section class="panel">
+    <h2 id="codeTitle">Source</h2>
+    <textarea id="src" spellcheck="false"></textarea>
+    <div class="bar">
+      <button class="go" id="bVerify">Fire exploits</button>
+      <button id="bPatch">Apply suggested patch</button>
+      <button id="bReset">Reset source</button>
+    </div>
+    <div class="custom">
+      <input id="manual" placeholder="Try your own payload (first argument) ...">
+      <button id="bManual">Send</button>
+    </div>
+    <div class="note" id="hint"></div>
+    <div id="report"><span class="l-dim">Confirmed findings get a proof-of-exploit report here.</span></div>
+  </section>
+
+  <section class="panel">
+    <h2>Exploit console</h2>
+    <div id="log"></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by NebuSec (YC S26). Not affiliated with NebuSec. All code, users and secrets here are synthetic and run entirely in this page.</footer>
+
+<script>
+// ---------- synthetic sandbox the targets run against ----------
+const CANARY = "CANARY-8841-DEMO";
+const FILES = {
+  "/srv/docs/welcome.txt": "Welcome to the docs service.",
+  "/srv/docs/faq.txt": "Q: Is this real? A: No.",
+  "/srv/secrets/token.txt": CANARY
+};
+const USERS = [{name: "admin", pin: "7319", role: "root"}, {name: "dana", pin: "1042", role: "user"}];
+const BASE = "/srv/docs/";
+
+const FS = {
+  resolve(p) {
+    const out = [];
+    for (const seg of p.split("/")) {
+      if (seg === "" || seg === ".") continue;
+      if (seg === "..") out.pop(); else out.push(seg);
+    }
+    return "/" + out.join("/");
+  },
+  read(p) {
+    const r = FS.resolve(p);
+    if (!(r in FILES)) throw new Error("ENOENT " + r);
+    return FILES[r];
+  }
+};
+
+// Tiny SQL engine: WHERE with AND / OR, '--' comments, quoted literals, or ? params.
+const db = {
+  query(sql, params) {
+    if (params) return USERS.filter(u => u.name === params[0] && u.pin === params[1]);
+    const m = sql.replace(/--.*$/, "").match(/WHERE (.*)$/i);
+    if (!m) throw new Error("syntax error");
+    const test = (u, atom) => {
+      let a;
+      if ((a = atom.match(/^'(.*)'\s*=\s*'(.*)'$/))) return a[1] === a[2];
+      if ((a = atom.match(/^(\w+)\s*=\s*'(.*)'$/))) return String(u[a[1]]) === a[2];
+      throw new Error("syntax error near: " + atom);
+    };
+    return USERS.filter(u => m[1].split(/ OR /i).some(c => c.split(/ AND /i).every(a => test(u, a.trim()))));
+  }
+};
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---------- targets ----------
+const TARGETS = [
+  {
+    id: "docs", title: "GET /docs/:name", sub: "file read handler",
+    cls: "path traversal",
+    source: `function handler(name) {\n  return FS.read(BASE + name);\n}`,
+    patch: `function handler(name) {\n  const p = FS.resolve(BASE + name);\n  if (!p.startsWith(BASE)) throw new Error("denied");\n  return FS.read(p);\n}`,
+    candidate: s => /BASE\s*\+/.test(s),
+    payloads: [["welcome.txt"], ["../secrets/token.txt"], ["./../../srv/secrets/token.txt"]],
+    wins: out => String(out).includes(CANARY),
+    hint: "Sink: FS.read. Source: the URL segment. Proof means the canary file contents come back."
+  },
+  {
+    id: "login", title: "POST /login", sub: "credential check",
+    cls: "SQL injection",
+    source: `function handler(name, pin) {\n  const sql = "SELECT * FROM users WHERE name='" + name + "' AND pin='" + pin + "'";\n  return db.query(sql);\n}`,
+    patch: `function handler(name, pin) {\n  return db.query("SELECT * FROM users WHERE name=? AND pin=?", [name, pin]);\n}`,
+    candidate: s => /'\s*"?\s*\+\s*(name|pin)|"\s*\+\s*(name|pin)/.test(s),
+    payloads: [["dana", "0000"], ["admin'--", "x"], ["x' OR '1'='1'--", "x"]],
+    wins: out => Array.isArray(out) && out.some(u => u.role === "root"),
+    hint: "Sink: db.query. Proof means a root session is returned without knowing the PIN (the PIN is not in the payload list)."
+  },
+  {
+    id: "greet", title: "GET /greet", sub: "HTML greeting",
+    cls: "reflected XSS",
+    source: `function handler(name) {\n  return "<p>Hello, " + esc(name) + "</p>";\n}`,
+    patch: `function handler(name) {\n  return "<p>Hello, " + esc(name) + "</p>";\n}`,
+    candidate: s => /"<[^"]*"\s*\+/.test(s),
+    payloads: [["<img src=x onerror=alert(1)>"], ["\"><script>alert(1)<\/script>"]],
+    wins: out => /<(img|script|svg)/i.test(String(out)),
+    hint: "Looks like string-built HTML, so a pattern scanner flags it. Delete the esc( ) call and rescan to make it real."
+  }
+];
+TARGETS.forEach(t => { t.original = t.source; t.status = "idle"; });
+let cur = TARGETS[0];
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function log(msg, cls) {
+  const d = document.createElement("div");
+  d.className = cls || ""; d.textContent = msg;
+  $("log").appendChild(d); $("log").scrollTop = 1e9;
+}
+function compile(src) {
+  // Our own synthetic snippets only; exposes the toy sandbox objects to the handler.
+  return new Function("FS", "db", "esc", "BASE", src + "\nreturn handler;")(FS, db, esc, BASE);
+}
+function run(src, args) {
+  try { return {ok: true, out: compile(src)(...args)}; }
+  catch (e) { return {ok: false, err: e.message}; }
+}
+const show = v => typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v);
+const SHORT = {idle: "not scanned", candidate: "candidate", confirmed: "CONFIRMED", dropped: "dropped", fixed: "fixed"};
+
+function render() {
+  $("targets").innerHTML = "";
+  TARGETS.forEach(t => {
+    const d = document.createElement("div");
+    d.className = "target" + (t === cur ? " sel" : "");
+    d.innerHTML = `<div>${t.title}<small>${t.sub}</small></div><span class="pill ${t.status}">${SHORT[t.status]}</span>`;
+    d.onclick = () => { cur = t; select(); };
+    $("targets").appendChild(d);
+  });
+  const n = s => TARGETS.filter(t => t.status === s).length;
+  $("sCand").textContent = TARGETS.filter(t => ["candidate", "confirmed", "dropped", "fixed"].includes(t.status)).length;
+  $("sConf").textContent = n("confirmed");
+  $("sDrop").textContent = n("dropped");
+  $("sFix").textContent = n("fixed");
+}
+function select() {
+  $("codeTitle").textContent = "Source - " + cur.title;
+  $("src").value = cur.source;
+  $("hint").textContent = cur.hint;
+  $("report").innerHTML = '<span class="l-dim">Confirmed findings get a proof-of-exploit report here.</span>';
+  render();
+}
+
+// ---------- the core mechanic ----------
+function scan(t) {
+  t.source = $("src").value && t === cur ? $("src").value : t.source;
+  if (t.candidate(t.source)) {
+    t.status = "candidate";
+    log(`[scan] ${t.title}: tainted input reaches a sink (${t.cls} suspected)`, "l-warn");
+  } else {
+    t.status = "idle";
+    log(`[scan] ${t.title}: no suspicious flow`, "l-dim");
+  }
+}
+
+async function verify(t) {
+  if (t === cur) t.source = $("src").value;
+  const wasPatched = t.status === "fixed" || t.patched;
+  log(`\n[verify] ${t.title} - firing ${t.payloads.length} payloads at the live function`, "l-info");
+  let proof = null;
+  for (const args of t.payloads) {
+    await sleep(260);
+    const r = run(t.source, args);
+    const label = `  > handler(${args.map(show).join(", ")})`;
+    if (!r.ok) { log(`${label}\n    threw: ${r.err}`, "l-dim"); continue; }
+    if (t.wins(r.out)) { log(`${label}\n    => ${show(r.out)}  << PROOF`, "l-bad"); proof = {args, out: r.out}; break; }
+    log(`${label}\n    => ${show(r.out)}`, "l-dim");
+  }
+  if (proof && !wasPatched) {
+    t.status = "confirmed"; t.proof = proof;
+    log(`[verify] CONFIRMED: ${t.cls} with a working exploit`, "l-bad");
+    report(t);
+  } else if (proof) {
+    t.status = "confirmed"; t.proof = proof;
+    log(`[verify] STILL EXPLOITABLE after patch - not fixed`, "l-bad");
+    report(t);
+  } else if (wasPatched) {
+    t.status = "fixed";
+    log(`[verify] replay clean: every payload that worked before now fails. Marked fixed.`, "l-ok");
+    $("report").innerHTML = `<h3 class="l-ok">Fix verified</h3>Same exploit set replayed against the patched code. No canary leaked.`;
+  } else {
+    t.status = "dropped";
+    log(`[verify] no payload produced proof. Finding dropped instead of reported as noise.`, "l-info");
+    $("report").innerHTML = `<h3 class="l-info">Dropped - false positive</h3>The scanner flagged it, but no exploit worked, so nobody gets paged.`;
+  }
+  render();
+}
+
+function report(t) {
+  const call = `handler(${t.proof.args.map(show).join(", ")})`;
+  $("report").innerHTML =
+    `<h3 class="l-bad">${t.cls} - confirmed</h3>` +
+    `Reproduce: <code>${esc(call)}</code><br>Observed: <code>${esc(show(t.proof.out))}</code><br>` +
+    `<span class="l-dim">Press "Apply suggested patch", then fire exploits again to replay.</span>`;
+}
+
+// ---------- wiring ----------
+$("src").addEventListener("input", () => { cur.source = $("src").value; });
+$("bScan").onclick = () => { $("log").innerHTML = ""; TARGETS.forEach(t => { if (t === cur) t.source = $("src").value; scan(t); }); render(); };
+$("bVerify").onclick = () => verify(cur);
+$("bAll").onclick = async () => {
+  for (const t of TARGETS) { if (t.status === "candidate" || t.status === "confirmed") await verify(t); }
+  if (!TARGETS.some(t => t.status === "candidate" || t.status === "confirmed")) log("Nothing to verify. Run Scan all first.", "l-warn");
+};
+$("bPatch").onclick = () => {
+  if (cur.id === "greet" && cur.source === cur.patch) { log("[patch] this target is already safe.", "l-dim"); return; }
+  cur.source = cur.patch; cur.patched = true; $("src").value = cur.source;
+  log(`[patch] applied suggested patch to ${cur.title}. Replay the exploits to prove it.`, "l-ok");
+};
+$("bReset").onclick = () => { cur.source = cur.original; cur.patched = false; cur.status = "idle"; select(); };
+$("bManual").onclick = () => {
+  cur.source = $("src").value;
+  const v = $("manual").value;
+  const args = cur.id === "login" ? [v, "0000"] : [v];
+  const r = run(cur.source, args);
+  log(`\n[manual] handler(${args.map(show).join(", ")})`, "l-info");
+  if (!r.ok) log(`    threw: ${r.err}`, "l-dim");
+  else log(`    => ${show(r.out)}${cur.wins(r.out) ? "  << PROOF" : ""}`, cur.wins(r.out) ? "l-bad" : "l-dim");
+};
+$("manual").addEventListener("keydown", e => { if (e.key === "Enter") $("bManual").click(); });
+
+log("Proof Bench ready. Press 'Scan all' to flag candidates, then 'Verify all' to see which ones are real.", "l-dim");
+select();
+</script>
+</body>
+</html>

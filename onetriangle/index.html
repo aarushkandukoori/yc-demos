@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prefill small, decode large - a toy KV transfer gate</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--line:#262b36;--tx:#e6e8ee;--mut:#8a92a3;--a:#7ee0c3;--b:#f2b868;--c:#8fa8ff;--bad:#ff7a7a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:32px 20px 24px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:0 0 12px;font-weight:600}
+p.lead{color:var(--mut);margin:0 0 24px;max-width:700px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+label{display:flex;justify-content:space-between;font-size:13px;color:var(--mut);margin:12px 0 4px}
+label b{color:var(--tx);font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--a)}
+select,button{background:#1f2430;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+select{width:100%}
+button.go{background:var(--a);color:#0b1511;border-color:var(--a);font-weight:600}
+button:hover{filter:brightness(1.12)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.lane{margin:10px 0}
+.lane .nm{font-size:12px;color:var(--mut);margin-bottom:3px;display:flex;justify-content:space-between}
+.bar{height:26px;background:#10131a;border-radius:6px;position:relative;overflow:hidden;border:1px solid var(--line)}
+.seg{position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#0b0e12;font-weight:600;white-space:nowrap;overflow:hidden;transition:left .5s,width .5s}
+.s1{background:var(--c)}.s2{background:var(--b)}.s3{background:var(--a)}.s0{background:#c9a0ff}
+.big{font-size:34px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.stats div span{display:block;font-size:12px;color:var(--mut)}
+.good{color:var(--a)}.warn{color:var(--bad)}
+.verdict{padding:10px 12px;border-radius:8px;font-size:13px;margin-top:12px;border:1px solid var(--line)}
+.verdict.ok{background:#12251f;border-color:#235442}
+.verdict.no{background:#2a1618;border-color:#5b2a2f}
+canvas{width:100%;height:190px;display:block;background:#10131a;border-radius:8px;border:1px solid var(--line)}
+.legend{font-size:12px;color:var(--mut);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px}
+pre{background:#10131a;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:12px;overflow:auto;margin:10px 0 0;color:#b7bfd0}
+footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Prefill small, decode large</h1>
+  <p class="lead">A toy of cross-model KV cache transfer. A small model reads a long prompt, an adapter translates its cache into the big model's space, and the big model only decodes. The adapter is fitted live in your browser, and a held-out quality gate decides whether the transfer is allowed. All numbers are synthetic.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>1. Workload</h2>
+      <label>Prompt length <b id="vCtx"></b></label>
+      <input type="range" id="ctx" min="2000" max="128000" step="1000" value="100000">
+      <label>Requests per month <b id="vReq"></b></label>
+      <input type="range" id="req" min="1" max="50" step="1" value="10">
+      <label>Model pair (how well a linear map can explain the large model)</label>
+      <select id="pair">
+        <option value="0.12">small 8B to large 70B (close family)</option>
+        <option value="0.35">small 8B to large 70B (looser match)</option>
+        <option value="0.9">small 3B to large 405B (distant pair)</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>2. Fit the adapter</h2>
+      <label>Calibration samples <b id="vCal"></b></label>
+      <input type="range" id="cal" min="8" max="400" step="4" value="120">
+      <label>Quality gate (min held-out cosine) <b id="vGate"></b></label>
+      <input type="range" id="gate" min="0.80" max="0.999" step="0.001" value="0.97">
+      <div class="row"><button class="go" id="fit">Fit and evaluate</button><button id="reseed">New random seed</button></div>
+      <div id="verdict" class="verdict"></div>
+      <div class="stats" style="margin-top:12px">
+        <div><span>train cosine</span><b id="sTr">-</b></div>
+        <div><span>held-out cosine</span><b id="sHo">-</b></div>
+        <div><span>attention output match</span><b id="sAt">-</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3. Time to first token</h2>
+    <div class="lane"><div class="nm"><span>Standard: big model prefills everything</span><span id="tBase"></span></div>
+      <div class="bar" id="barBase"></div></div>
+    <div class="lane"><div class="nm"><span id="lblX"></span><span id="tX"></span></div>
+      <div class="bar" id="barX"></div></div>
+    <div class="stats" style="margin-top:18px">
+      <div><span>time saved</span><div class="big" id="bTime">-</div></div>
+      <div><span>prefill cost saved</span><div class="big" id="bCost">-</div></div>
+      <div><span>route taken</span><div class="big" id="bRoute" style="font-size:22px;padding-top:9px">-</div></div>
+    </div>
+    <div class="legend"><i style="background:#c9a0ff"></i>big prefill<i style="background:#8fa8ff"></i>small prefill<i style="background:#f2b868"></i>cache transfer<i style="background:#7ee0c3"></i>first decode step</div>
+  </div>
+
+  <div class="card">
+    <h2>4. What the adapter sees</h2>
+    <canvas id="cv" width="900" height="190"></canvas>
+    <div class="legend"><i style="background:#8fa8ff"></i>big model's real attention weights<i style="background:#f2b868"></i>weights from the translated cache<span> - one query over 48 cached tokens</span></div>
+    <pre id="code"></pre>
+  </div>
+
+  <div class="card">
+    <h2>How the toy works</h2>
+    <ol style="margin:0;padding-left:20px;color:var(--mut)">
+      <li><b style="color:var(--tx)">Two fake models</b> - both read the same hidden state. The small one gets an 8-number key per token, the large one a 16-number key with a nonlinear twist.</li>
+      <li><b style="color:var(--tx)">Calibrate</b> - run both on a handful of samples, then solve a ridge regression that maps small keys to large keys.</li>
+      <li><b style="color:var(--tx)">Hold out</b> - test the map on 200 samples it never saw. Training score alone would flatter it.</li>
+      <li><b style="color:var(--tx)">Gate</b> - if held-out cosine clears your threshold the pair is allowed to transfer. Otherwise requests take the slow, safe path.</li>
+      <li><b style="color:var(--tx)">Check attention</b> - one query attends over 48 cached tokens using the real large-model keys versus the translated ones. Similar bars mean similar outputs.</li>
+    </ol>
+    <p style="color:var(--mut);font-size:13px;margin:12px 0 0">Things to try - drag calibration samples down to 8 and watch the gate close, switch to the distant pair, or lower the gate and see a bad transfer sneak through.</p>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by OneTriangle (YC S26). Not affiliated with OneTriangle.</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const DS = 8, DL = 16;           // toy key dimensions: small model, large model
+let seed = 7;
+
+// seeded RNG so a seed gives repeatable results
+function rng(s){ return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gauss(r){ return Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(2 * Math.PI * r()); }
+
+// ---- tiny linear algebra ----
+function matMul(A, B){ const n = A.length, m = B[0].length, k = B.length, C = [];
+  for (let i = 0; i < n; i++){ C[i] = new Array(m).fill(0);
+    for (let j = 0; j < m; j++){ let s = 0; for (let t = 0; t < k; t++) s += A[i][t] * B[t][j]; C[i][j] = s; } }
+  return C; }
+const T = A => A[0].map((_, j) => A.map(r => r[j]));
+function solve(A, B){ // Gauss-Jordan, solves A X = B
+  const n = A.length, M = A.map((r, i) => r.concat(B[i]));
+  for (let c = 0; c < n; c++){
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    const d = M[c][c]; for (let j = 0; j < M[c].length; j++) M[c][j] /= d;
+    for (let r = 0; r < n; r++) if (r !== c){ const f = M[r][c]; for (let j = 0; j < M[r].length; j++) M[r][j] -= f * M[c][j]; } }
+  return M.map(r => r.slice(n)); }
+const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+const cosine = (a, b) => dot(a, b) / (Math.sqrt(dot(a, a) * dot(b, b)) + 1e-12);
+
+// ---- synthetic "models": a shared hidden state -> key vectors ----
+// The small model sees a linear view of the hidden state h. The large model sees a richer
+// view with a nonlinear part. "mismatch" scales that part, which a linear adapter cannot explain.
+function makeWorld(mismatch){
+  const r = rng(seed * 101 + 3);
+  const mk = (rows, sc) => Array.from({length: rows}, () => Array.from({length: 12}, () => gauss(r) * sc));
+  const Ws = mk(DS, .5), Wl = mk(DL, .5), Wn = mk(DL, .5);
+  const sample = () => { const h = Array.from({length: 12}, () => gauss(r));
+    const ks = Ws.map(row => dot(row, h));
+    const kl = Wl.map((row, i) => dot(row, h) + mismatch * 2.4 * Math.tanh(2 * dot(Wn[i], h)));
+    return {ks, kl}; };
+  return {sample, r};
+}
+
+function fitAdapter(X, Y, lambda){ // ridge regression: W = (X'X + lI)^-1 X'Y
+  const Xt = T(X), G = matMul(Xt, X);
+  for (let i = 0; i < G.length; i++) G[i][i] += lambda;
+  return solve(G, matMul(Xt, Y)); }
+const apply = (W, x) => T(W).map(col => dot(col, x));
+const meanCos = (W, S) => S.reduce((s, p) => s + cosine(apply(W, p.ks), p.kl), 0) / S.length;
+function softmax(z){ const m = Math.max(...z), e = z.map(v => Math.exp(v - m)), s = e.reduce((a, b) => a + b, 0); return e.map(v => v / s); }
+
+// ---- latency + cost model (linear in prompt tokens, shaped like a 100k-token example) ----
+const MS_TOK = {big: 0.169, small: 0.020, xfer: 0.005}; // ms per prompt token
+const DECODE_MS = 200;                                   // first decode step on the big model
+const COST_RATIO = 0.16;                                 // small prefill $ as a fraction of big prefill $
+function timings(ctx){
+  const base = ctx * MS_TOK.big + DECODE_MS;
+  const s1 = ctx * MS_TOK.small, s2 = ctx * MS_TOK.xfer;
+  return {base, s1, s2, s3: DECODE_MS, x: s1 + s2 + DECODE_MS};
+}
+
+let state = {fitted: false};
+
+function evaluate(){
+  const mismatch = parseFloat($('pair').value);
+  const nCal = +$('cal').value, gate = +$('gate').value;
+  const w = makeWorld(mismatch);
+  const train = Array.from({length: nCal}, w.sample);
+  const held = Array.from({length: 200}, w.sample);
+  const W = fitAdapter(train.map(p => p.ks), train.map(p => p.kl), 0.5);
+  const tr = meanCos(W, train), ho = meanCos(W, held);
+
+  // attention test: one query over 48 cached tokens, big model's own keys vs translated keys
+  const q = Array.from({length: DL}, () => gauss(w.r));
+  const toks = Array.from({length: 48}, w.sample);
+  const real = softmax(toks.map(t => dot(q, t.kl) / 4));
+  const approx = softmax(toks.map(t => dot(q, apply(W, t.ks)) / 4));
+  const vs = toks.map(t => t.kl.slice(0, 4)); // value stand-in
+  const out = ws => [0, 1, 2, 3].map(d => ws.reduce((s, a, i) => s + a * vs[i][d], 0));
+  const at = cosine(out(real), out(approx));
+
+  state = {fitted: true, pass: ho >= gate, ho, tr, at, real, approx, gate, nCal};
+  render();
+}
+
+function seg(cls, left, width, total, text){
+  return `<div class="seg ${cls}" style="left:${left / total * 100}%;width:${Math.max(width / total * 100, 0)}%">${width / total > .09 ? text : ''}</div>`; }
+const fmt = ms => ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : Math.round(ms) + ' ms';
+
+function render(){
+  const ctx = +$('ctx').value, req = +$('req').value;
+  $('vCtx').textContent = ctx.toLocaleString() + ' tokens';
+  $('vReq').textContent = req + 'M';
+  $('vCal').textContent = $('cal').value;
+  $('vGate').textContent = (+$('gate').value).toFixed(3);
+  const t = timings(ctx);
+  $('tBase').textContent = fmt(t.base);
+  $('barBase').innerHTML = seg('s0', 0, t.base - DECODE_MS, t.base, 'big prefill ' + fmt(t.base - DECODE_MS)) + seg('s3', t.base - DECODE_MS, DECODE_MS, t.base, '');
+  if (!state.fitted){
+    $('verdict').className = 'verdict'; $('verdict').textContent = 'Press "Fit and evaluate" to train the adapter.';
+    $('tX').textContent = '-'; $('barX').innerHTML = ''; return; }
+  const route = state.pass;
+  $('tX').textContent = fmt(route ? t.x : t.base);
+  $('barX').innerHTML = route
+    ? seg('s1', 0, t.s1, t.base, 'small ' + fmt(t.s1)) + seg('s2', t.s1, t.s2, t.base, 'xfer') + seg('s3', t.s1 + t.s2, t.s3, t.base, '')
+    : seg('s0', 0, t.base - DECODE_MS, t.base, 'fallback: big prefill') + seg('s3', t.base - DECODE_MS, DECODE_MS, t.base, '');
+  $('lblX').textContent = route ? 'Transfer: small prefill, translate cache, big model decodes' : 'Gate closed: falling back to standard prefill';
+  $('sTr').textContent = state.tr.toFixed(4);
+  $('sHo').textContent = state.ho.toFixed(4);
+  $('sHo').className = route ? 'good' : 'warn';
+  $('sAt').textContent = state.at.toFixed(4);
+  const v = $('verdict');
+  v.className = 'verdict ' + (route ? 'ok' : 'no');
+  v.textContent = route
+    ? `Gate open: held-out cosine ${state.ho.toFixed(3)} >= ${state.gate.toFixed(3)}. This pair uses cache transfer.`
+    : `Gate closed: held-out cosine ${state.ho.toFixed(3)} < ${state.gate.toFixed(3)}. This pair quietly uses normal prefill. Try more samples, a closer pair, or a lower gate.`;
+  const saved = route ? 1 - t.x / t.base : 0;
+  $('bTime').textContent = Math.round(saved * 100) + '%';
+  $('bTime').className = 'big ' + (saved > 0 ? 'good' : '');
+  const costSaved = route ? 1 - COST_RATIO : 0;
+  $('bCost').textContent = Math.round(costSaved * 100) + '%';
+  $('bCost').className = 'big ' + (route ? 'good' : '');
+  $('bRoute').textContent = route ? 'transfer' : 'fallback';
+  $('code').textContent =
+`route(pair, ${req}M requests):
+  W = ridge_fit(small_kv[:${state.nCal}], large_kv[:${state.nCal}])   // ${DS}d -> ${DL}d
+  held_out = mean_cosine(W, 200 unseen samples)         // ${state.ho.toFixed(4)}
+  if held_out >= ${state.gate.toFixed(3)}:  prefill(small) -> W -> decode(large)
+  else:                    prefill(large)               // never worse than baseline`;
+  draw();
+}
+
+function draw(){
+  const c = $('cv'), g = c.getContext('2d'), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  if (!state.fitted) return;
+  const n = state.real.length, bw = (W - 40) / n, mx = Math.max(...state.real, ...state.approx) * 1.1;
+  g.fillStyle = '#262b36'; g.fillRect(20, H - 24, W - 40, 1);
+  for (let i = 0; i < n; i++){
+    const x = 20 + i * bw;
+    const h1 = state.real[i] / mx * (H - 40), h2 = state.approx[i] / mx * (H - 40);
+    g.fillStyle = '#8fa8ff'; g.fillRect(x + 1, H - 24 - h1, bw / 2 - 1, h1);
+    g.fillStyle = '#f2b868'; g.fillRect(x + bw / 2, H - 24 - h2, bw / 2 - 1, h2);
+  }
+  g.fillStyle = '#8a92a3'; g.font = '11px sans-serif'; g.fillText('cached token position', W / 2 - 50, H - 8);
+}
+
+// moving the gate re-decides instantly without refitting
+$('gate').addEventListener('input', () => {
+  if (state.fitted){ state.gate = +$('gate').value; state.pass = state.ho >= state.gate; }
+  render(); });
+$('ctx').addEventListener('input', render);
+$('req').addEventListener('input', render);
+$('cal').addEventListener('input', () => { $('vCal').textContent = $('cal').value; });
+$('cal').addEventListener('change', evaluate);
+$('pair').addEventListener('change', evaluate);
+$('fit').addEventListener('click', evaluate);
+$('reseed').addEventListener('click', () => { seed = Math.floor(Math.random() * 9999); evaluate(); });
+evaluate();
+</script>
+</body>
+</html>
