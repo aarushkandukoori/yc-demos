@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Month-End Desk - agents book it, a human signs it</title>
+<style>
+:root{--bg:#0f1412;--panel:#161d1a;--line:#26322d;--ink:#e6efe9;--mut:#8da197;--acc:#7fd6a4;--warn:#f0b35a;--bad:#ef7b6b;--blue:#7ab4f0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:22px 28px 10px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px}
+h1{margin:0;font-size:20px;letter-spacing:.2px}
+h1 span{color:var(--acc)}
+.sub{color:var(--mut);margin-top:4px;max-width:640px}
+main{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;padding:12px 28px 28px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.panel h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+button{background:#1f2a25;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--acc)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--acc);color:#0b1a12;border-color:var(--acc);font-weight:600}
+button.sm{padding:3px 8px;font-size:12px}
+input[type=range]{accent-color:var(--acc);width:150px}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);font-weight:600}
+td{padding:7px 6px;border-bottom:1px solid #1d2723;vertical-align:middle}
+tr.sel td{background:#1b2722}
+tr{cursor:pointer}
+td.amt{text-align:right;font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line)}
+.pill.auto{color:var(--acc);border-color:#2f5c45}
+.pill.review{color:var(--warn);border-color:#6b5427}
+.pill.human{color:var(--blue);border-color:#2f4d6e}
+.pill.new{color:var(--mut)}
+.bar{height:5px;background:#0c110f;border-radius:3px;width:70px;display:inline-block;vertical-align:middle;margin-right:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--acc)}
+.bar i.low{background:var(--warn)}
+.bar i.vlow{background:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.stat{background:#121915;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat small{color:var(--mut)}
+.trace{font:12px/1.5 ui-monospace,Menlo,monospace;color:#b8c9bf;background:#0c110f;border-radius:6px;padding:10px;min-height:110px;white-space:pre-wrap}
+.trace .k{color:var(--blue)}.trace .g{color:var(--acc)}.trace .w{color:var(--warn)}
+select{background:#0c110f;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.pl td{padding:4px 6px}
+.pl tr{cursor:default}
+.total td{border-top:1px solid var(--mut);font-weight:700}
+.seal{margin-top:12px;border:1px dashed var(--line);border-radius:8px;padding:12px;font-size:13px;color:var(--mut)}
+.seal.ok{border:1px solid var(--acc);color:var(--ink);background:#14211b}
+.seal code{color:var(--acc);font-family:ui-monospace,Menlo,monospace}
+.checks{list-style:none;padding:0;margin:8px 0 0}
+.checks li::before{content:"\25CB  ";color:var(--mut)}
+.checks li.ok::before{content:"\25CF  ";color:var(--acc)}
+footer{padding:16px 28px 30px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
+.legend{color:var(--mut);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Month-End <span>Desk</span> <small style="color:var(--mut);font-weight:400">/ toy model</small></h1>
+    <div class="sub">An agent proposes a category and a confidence for every bank line. Confident ones post themselves, the rest queue for a human. The books only close when the queue is empty, the ledger balances, and a named accountant signs.</div>
+  </div>
+  <div class="controls">
+    <label>Auto-post threshold <b id="thv">0.85</b>
+      <input id="th" type="range" min="0.5" max="0.99" step="0.01" value="0.85"></label>
+    <button id="run" class="primary">Run agent on October</button>
+    <button id="reset">Reset</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="stats">
+      <div class="stat"><b id="sTot">0</b><small>bank lines</small></div>
+      <div class="stat"><b id="sAuto" style="color:var(--acc)">0</b><small>auto-posted</small></div>
+      <div class="stat"><b id="sRev" style="color:var(--warn)">0</b><small>in review queue</small></div>
+      <div class="stat"><b id="sHum" style="color:var(--blue)">0</b><small>human-decided</small></div>
+    </div>
+    <h2>Bank feed - Fictional Pine &amp; Co. LLC, Oct 2026 <span>click a row to inspect</span></h2>
+    <table>
+      <thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th><th>Category</th><th>Conf.</th><th>State</th></tr></thead>
+      <tbody id="tx"></tbody>
+    </table>
+    <div class="legend">Synthetic data. Positive = money in, negative = money out. Lower the threshold and watch work shift from humans to the agent (and risk with it).</div>
+  </section>
+
+  <aside style="display:flex;flex-direction:column;gap:16px">
+    <section class="panel">
+      <h2>Agent trace <span id="trId"></span></h2>
+      <div class="trace" id="trace">Run the agent, then select a line.</div>
+      <div class="row" id="decide" style="display:none">
+        <span>Accountant decision:</span>
+        <select id="cat"></select>
+        <button id="ok" class="sm">Confirm</button>
+        <button id="ask" class="sm">Ask client</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Close checklist</h2>
+      <ul class="checks" id="checks"></ul>
+      <table class="pl" style="margin-top:12px"><tbody id="pl"></tbody></table>
+      <div class="row">
+        <select id="who"><option>R. Haldane, CPA (demo)</option><option>M. Ibarra, CPA (demo)</option></select>
+        <button id="sign" class="primary" disabled>Sign off &amp; close</button>
+      </div>
+      <div class="seal" id="seal">Sign-off locked. Nothing closes until every check is green.</div>
+    </section>
+  </aside>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Bear (YC S26). Not affiliated with Bear. All data is synthetic and the "agent" is a keyword and history scorer running in your browser.</footer>
+
+<script>
+// Chart of accounts: type decides P&L side. Debit-normal expenses, credit-normal income.
+const COA = {
+  'Revenue':          {kind:'income'},
+  'Software':         {kind:'expense'},
+  'Cloud hosting':    {kind:'expense'},
+  'Payroll':          {kind:'expense'},
+  'Meals':            {kind:'expense'},
+  'Travel':           {kind:'expense'},
+  'Rent':             {kind:'expense'},
+  'Contractors':      {kind:'expense'},
+  'Bank fees':        {kind:'expense'},
+  'Owner draw':       {kind:'equity'},
+  'Uncategorized':    {kind:'suspense'}
+};
+const CATS = Object.keys(COA).filter(c => c !== 'Uncategorized');
+
+// Synthetic bank feed. "truth" is what a careful accountant would pick; the agent never sees it.
+const FEED = [
+  {id:1, d:'10-01', desc:'WEWORK MEMBERSHIP OCT',          amt:-1800.00, truth:'Rent'},
+  {id:2, d:'10-02', desc:'STRIPE PAYOUT INV-2231',         amt: 9400.00, truth:'Revenue'},
+  {id:3, d:'10-03', desc:'AWS EMEA SARL',                  amt: -642.18, truth:'Cloud hosting'},
+  {id:4, d:'10-04', desc:'GUSTO PAYROLL RUN',              amt:-7200.00, truth:'Payroll'},
+  {id:5, d:'10-06', desc:'FIGMA MONTHLY',                  amt:  -45.00, truth:'Software'},
+  {id:6, d:'10-07', desc:'SQ *BLUE DOOR CAFE',             amt:  -38.40, truth:'Meals'},
+  {id:7, d:'10-09', desc:'DELTA AIR 0062318844',           amt: -412.60, truth:'Travel'},
+  {id:8, d:'10-11', desc:'ZELLE TO J OKAFOR',              amt: -950.00, truth:'Contractors'},
+  {id:9, d:'10-13', desc:'WIRE FEE',                       amt:  -25.00, truth:'Bank fees'},
+  {id:10,d:'10-15', desc:'GITHUB TEAM SEAT',               amt:  -84.00, truth:'Software'},
+  {id:11,d:'10-17', desc:'TRANSFER TO CHK 4410',           amt:-2000.00, truth:'Owner draw'},
+  {id:12,d:'10-19', desc:'AMZN MKTP US*2K81',              amt: -129.99, truth:'Software'},
+  {id:13,d:'10-22', desc:'STRIPE PAYOUT INV-2260',         amt: 6150.00, truth:'Revenue'},
+  {id:14,d:'10-24', desc:'UBER TRIP',                      amt:  -27.30, truth:'Travel'},
+  {id:15,d:'10-26', desc:'CHECK DEPOSIT 1043',             amt: 1200.00, truth:'Revenue'},
+  {id:16,d:'10-28', desc:'SQ *HARBOR GRILL',               amt: -112.75, truth:'Meals'},
+  {id:17,d:'10-30', desc:'ACH PMT KALNIN DESIGN',          amt:-1400.00, truth:'Contractors'}
+];
+
+// Agent "model": weighted keyword evidence + a small history of prior months.
+const RULES = [
+  {re:/wework|rent|lease/i,           cat:'Rent',          w:.95},
+  {re:/stripe payout/i,               cat:'Revenue',       w:.96},
+  {re:/aws|gcp|azure|vercel/i,        cat:'Cloud hosting', w:.93},
+  {re:/gusto|payroll/i,               cat:'Payroll',       w:.98},
+  {re:/figma|github|notion|slack/i,   cat:'Software',      w:.94},
+  {re:/cafe|grill|restaurant/i,       cat:'Meals',         w:.78},
+  {re:/delta|air |uber|lyft/i,        cat:'Travel',        w:.90},
+  {re:/zelle|ach pmt/i,               cat:'Contractors',   w:.62},
+  {re:/wire fee|service fee/i,        cat:'Bank fees',     w:.97},
+  {re:/transfer to chk/i,             cat:'Owner draw',    w:.70},
+  {re:/amzn|amazon/i,                 cat:'Software',      w:.41},
+  {re:/check deposit/i,               cat:'Revenue',       w:.55}
+];
+const HISTORY = { 'kalnin design':'Contractors' }; // vendor seen in September, confirmed by a human
+
+function score(t){
+  const hits = RULES.filter(r => r.re.test(t.desc)).sort((a,b)=>b.w-a.w);
+  const trace = [];
+  if(!hits.length){ return {cat:'Uncategorized', conf:.2, trace:['no rule matched']}; }
+  let top = hits[0], conf = top.w;
+  trace.push(['rule', `/${top.re.source}/ -> ${top.cat} (${top.w.toFixed(2)})`]);
+  for(const [v,c] of Object.entries(HISTORY)){
+    if(t.desc.toLowerCase().includes(v) && c === top.cat){
+      conf = Math.min(.99, conf + .25);
+      trace.push(['history', `vendor "${v}" confirmed as ${c} last month, +0.25`]);
+    }
+  }
+  // sanity check: sign must fit the account type
+  const kind = COA[top.cat].kind;
+  if((kind==='income' && t.amt<0) || (kind==='expense' && t.amt>0)){
+    conf = Math.min(conf, .3);
+    trace.push(['sign-check', `${top.cat} is ${kind} but amount is ${t.amt>0?'inflow':'outflow'}, capped at 0.30`]);
+  }
+  // amount outlier: big spend on a normally small category
+  if(top.cat==='Meals' && Math.abs(t.amt)>100){
+    conf = Math.min(conf, .6);
+    trace.push(['outlier', `meal of ${fmt(t.amt)} is >3x median, capped at 0.60`]);
+  }
+  if(hits.length>1) trace.push(['alt', `also matched ${hits[1].cat}`]);
+  return {cat:top.cat, conf:+conf.toFixed(2), trace};
+}
+
+let rows, sel = null, signed = null;
+const $ = id => document.getElementById(id);
+const fmt = n => (n<0?'-':'') + '$' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function reset(){
+  rows = FEED.map(t => ({...t, cat:'Uncategorized', conf:0, state:'new', trace:[], note:''}));
+  sel = null; signed = null;
+  $('trace').textContent = 'Run the agent, then select a line.';
+  $('decide').style.display = 'none'; $('trId').textContent = '';
+  render();
+}
+
+function runAgent(){
+  const th = +$('th').value;
+  rows.forEach(r => {
+    if(r.state==='human') return;          // never overwrite a human decision
+    const s = score(r);
+    r.cat = s.cat; r.conf = s.conf; r.trace = s.trace;
+    r.state = s.conf >= th ? 'auto' : 'review';
+  });
+  signed = null;
+  render();
+}
+
+// Re-triage when the threshold moves (only after the agent has run once).
+function retriage(){
+  $('thv').textContent = (+$('th').value).toFixed(2);
+  if(rows.some(r => r.state!=='new')){
+    const th = +$('th').value;
+    rows.forEach(r => { if(r.state==='auto'||r.state==='review') r.state = r.conf>=th ? 'auto':'review'; });
+    signed = null; render();
+  }
+}
+
+function render(){
+  $('tx').innerHTML = rows.map(r => {
+    const c = r.conf, cls = c>=.85?'':c>=.6?'low':'vlow';
+    return `<tr data-id="${r.id}" class="${sel===r.id?'sel':''}">
+      <td>${r.d}</td><td>${r.desc}</td><td class="amt">${fmt(r.amt)}</td>
+      <td>${r.state==='new'?'-':r.cat}</td>
+      <td>${r.state==='new'?'':`<span class="bar"><i class="${cls}" style="width:${c*100}%"></i></span>${c.toFixed(2)}`}</td>
+      <td><span class="pill ${r.state}">${{new:'unread',auto:'auto-posted',review:'needs review',human:'human'}[r.state]}</span></td></tr>`;
+  }).join('');
+  document.querySelectorAll('#tx tr').forEach(tr => tr.onclick = () => select(+tr.dataset.id));
+  const n = s => rows.filter(r => r.state===s).length;
+  $('sTot').textContent = rows.length; $('sAuto').textContent = n('auto');
+  $('sRev').textContent = n('review'); $('sHum').textContent = n('human');
+  renderClose();
+}
+
+function select(id){
+  sel = id; const r = rows.find(x => x.id===id);
+  $('trId').textContent = '#' + id;
+  let out = `<span class="k">input</span>  ${r.desc}  ${fmt(r.amt)}\n`;
+  if(r.state==='new') out += '\nagent has not run yet.';
+  else {
+    r.trace.forEach(t => { out += `<span class="k">${t[0]}</span>  ${t[1]}\n`; });
+    out += `\n<span class="${r.state==='auto'?'g':'w'}">=> ${r.cat} @ ${r.conf.toFixed(2)} ${r.state==='auto'?'posted without review':r.state==='human'?'decided by accountant':'held for review'}</span>`;
+    if(r.note) out += `\n<span class="w">${r.note}</span>`;
+  }
+  $('trace').innerHTML = out;
+  const canDecide = r.state==='review' || r.state==='auto' || r.state==='human';
+  $('decide').style.display = canDecide ? 'flex' : 'none';
+  $('cat').innerHTML = CATS.map(c => `<option ${c===r.cat?'selected':''}>${c}</option>`).join('');
+  render();
+}
+
+$('ok').onclick = () => {
+  const r = rows.find(x => x.id===sel); if(!r) return;
+  const changed = $('cat').value !== r.cat;
+  r.cat = $('cat').value; r.state = 'human'; r.conf = 1; r.note = changed ? 'accountant overrode the agent' : 'accountant confirmed';
+  if(changed) r.trace.push(['override', `-> ${r.cat}`]);
+  signed = null; select(sel);
+};
+$('ask').onclick = () => {
+  const r = rows.find(x => x.id===sel); if(!r) return;
+  r.note = 'client asked: "what was this for?" (still in queue)'; r.state = 'review'; signed = null; select(sel);
+};
+
+// Double-entry: every line is two postings. Bank is one side, category the other.
+function trial(){
+  let dr = 0, cr = 0; const pl = {};
+  rows.forEach(r => {
+    if(r.state==='new' || r.state==='review') return;
+    const a = Math.abs(r.amt);
+    if(r.amt>0){ dr += a; cr += a; } else { dr += a; cr += a; } // bank leg + category leg, equal by construction
+    pl[r.cat] = (pl[r.cat]||0) + r.amt;
+  });
+  return {dr, cr, pl};
+}
+
+function renderClose(){
+  const t = trial();
+  const ran = rows.some(r => r.state!=='new');
+  const queued = rows.filter(r => r.state==='review' || r.state==='new').length;
+  const susp = rows.some(r => r.cat==='Uncategorized' && r.state!=='new' && r.state!=='review');
+  const wrong = rows.filter(r => r.state==='auto' && r.cat !== r.truth).length;
+  const checks = [
+    [ran, 'Agent has read every line'],
+    [ran && queued===0, `Review queue empty (${queued} left)`],
+    [ran && !susp, 'Nothing parked in suspense'],
+    [ran && Math.abs(t.dr-t.cr)<0.005, `Debits = credits (${fmt(t.dr)} / ${fmt(t.cr)})`]
+  ];
+  $('checks').innerHTML = checks.map(c => `<li class="${c[0]?'ok':''}">${c[1]}</li>`).join('');
+  const rowsPl = Object.entries(t.pl).sort((a,b)=>b[1]-a[1]);
+  let net = 0;
+  $('pl').innerHTML = rowsPl.filter(([c])=>COA[c].kind!=='equity').map(([c,v]) => { net += v; return `<tr><td>${c}</td><td class="amt">${fmt(v)}</td></tr>`; }).join('')
+    + `<tr class="total"><td>Net income (posted so far)</td><td class="amt">${fmt(net)}</td></tr>`;
+  const ready = checks.every(c => c[0]);
+  $('sign').disabled = !ready || !!signed;
+  const seal = $('seal');
+  if(signed){
+    seal.className = 'seal ok';
+    seal.innerHTML = `Closed. Signed by <b>${signed.who}</b><br>ledger hash <code>${signed.hash}</code><br>${signed.auto} lines auto-posted, ${signed.hum} human-decided. `
+      + (wrong ? `<span style="color:var(--bad)">Hidden check: ${wrong} auto-posted line(s) disagree with the answer key. A lower threshold buys speed with errors.</span>` : '<span style="color:var(--acc)">Hidden check: every auto-posted line matches the answer key.</span>');
+  } else {
+    seal.className = 'seal';
+    seal.textContent = ready ? 'All checks green. Ready for signature.' : 'Sign-off locked. Nothing closes until every check is green.';
+  }
+}
+
+// Tiny FNV-1a hash so the signature commits to the exact ledger state.
+function hash(s){ let h = 2166136261; for(const c of s){ h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h.toString(16).padStart(8,'0'); }
+
+$('sign').onclick = () => {
+  const body = rows.map(r => `${r.id}|${r.cat}|${r.amt}`).join(';') + '|' + $('who').value;
+  signed = {who:$('who').value, hash:hash(body), auto:rows.filter(r=>r.state==='auto').length, hum:rows.filter(r=>r.state==='human').length};
+  render();
+};
+// Any edit after signing would clear `signed`, so the hash always matches what was approved.
+
+$('run').onclick = runAgent;
+$('reset').onclick = reset;
+$('th').oninput = retriage;
+reset();
+</script>
+</body>
+</html>
