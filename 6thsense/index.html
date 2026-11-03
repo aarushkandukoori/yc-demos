@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Touch Clock Lab - align a force stream to a camera stream</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #fffdf8; --ink: #1d2428; --mute: #6b747a; --line: #ddd6c7;
+    --cam: #2f6f8f; --force: #d4572f; --ok: #2f8f5b; --bad: #c0392b; --amber: #c58a12;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  header { padding: 28px 24px 8px; max-width: 1080px; margin: 0 auto; }
+  h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--mute); max-width: 760px; }
+  main { max-width: 1080px; margin: 0 auto; padding: 12px 24px 24px; display: grid;
+    grid-template-columns: 1.15fr 1fr; gap: 16px; }
+  @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: var(--mute); }
+  .wide { grid-column: 1 / -1; }
+  canvas { width: 100%; display: block; border-radius: 6px; background: #fbf8f1; border: 1px solid var(--line); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  button, select { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover, select:hover { border-color: #b9b09c; }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.primary:hover { background: #33404a; }
+  input[type=range] { flex: 1; min-width: 140px; accent-color: var(--force); }
+  label { color: var(--mute); font-size: 13px; }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .stat:last-child { border-bottom: 0; }
+  .stat b { font-variant-numeric: tabular-nums; }
+  .chip { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; color: #fff; }
+  .chip.ok { background: var(--ok); } .chip.bad { background: var(--bad); } .chip.warn { background: var(--amber); }
+  .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  pre { margin: 0; background: #20282d; color: #d8e2e8; padding: 12px; border-radius: 6px; overflow: auto;
+    font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; font-size: 13px; color: var(--mute); }
+  .legend i { width: 18px; height: 3px; display: inline-block; border-radius: 2px; }
+  ul.ev { list-style: none; margin: 0; padding: 0; }
+  ul.ev li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  ul.ev li:last-child { border: 0; }
+  .hint { color: var(--mute); font-size: 13px; margin-top: 8px; }
+  footer { max-width: 1080px; margin: 0 auto; padding: 8px 24px 36px; color: var(--mute); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Touch Clock Lab</h1>
+  <p>A camera and a tactile sensor never share a clock. Here a wearable force stream arrives late against an
+  egocentric video. Slide the offset until the force onset lands on the frame where fingers first touch,
+  or let cross-correlation find it. Everything below is synthetic and runs in your browser.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Egocentric view (synthetic, side-on)</h2>
+    <canvas id="scene" width="640" height="340"></canvas>
+    <div class="row">
+      <button id="play" class="primary">Play</button>
+      <input id="scrub" type="range" min="0" max="600" value="0" aria-label="Playhead">
+      <span id="clock" class="stat" style="border:0;padding:0;min-width:70px"><b>0.00 s</b></span>
+    </div>
+    <div class="row">
+      <label for="obj">Object</label>
+      <select id="obj">
+        <option value="box">Cardboard box</option>
+        <option value="hammer">Hammer handle</option>
+        <option value="shoe">Soft shoe</option>
+      </select>
+      <label for="speed">Speed</label>
+      <select id="speed">
+        <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option>
+      </select>
+      <button id="reroll">New recording</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Alignment</h2>
+    <div class="row" style="margin-top:0">
+      <label for="off">Tactile offset</label>
+      <input id="off" type="range" min="-500" max="500" step="5" value="0">
+      <b id="offv" style="min-width:70px;text-align:right;font-variant-numeric:tabular-nums">0 ms</b>
+    </div>
+    <div class="row">
+      <button id="auto" class="primary">Auto-align (cross-correlate)</button>
+      <button id="zero">Reset to 0</button>
+    </div>
+    <div style="margin-top:14px">
+      <div class="stat"><span>Camera says fingers touch at</span><b id="tv">-</b></div>
+      <div class="stat"><span>Aligned force crosses 0.5 N at</span><b id="tf">-</b></div>
+      <div class="stat"><span>Onset gap</span><b id="gap">-</b></div>
+      <div class="stat"><span>Correlation (camera squeeze vs force)</span><b id="rho">-</b></div>
+    </div>
+    <div style="margin-top:12px"><span id="verdict" class="chip warn">unaligned</span></div>
+    <p class="hint">The recorder's true lag is hidden. The gap is measured only from what the two streams show,
+    which is how you would check real data too.</p>
+  </section>
+
+  <section class="card wide">
+    <h2>Force vs camera squeeze, aligned</h2>
+    <canvas id="plot" width="1040" height="250"></canvas>
+    <div class="legend row">
+      <span><i style="background:var(--cam)"></i>camera: finger squeeze (from tracked aperture)</span>
+      <span><i style="background:var(--force)"></i>tactile: summed pad force, shifted by your offset</span>
+      <span><i style="background:#999;height:2px"></i>raw tactile, unshifted</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Events read from aligned force</h2>
+    <ul class="ev" id="events"></ul>
+    <p class="hint">Vision alone sees the box rise. Only the force trace shows the grip loosening before the sag,
+    so a mis-set clock moves "slip" to the wrong place in the video.</p>
+  </section>
+
+  <section class="card">
+    <h2>Synced record at playhead</h2>
+    <pre id="rec"></pre>
+    <div class="row"><button id="copy">Copy this record</button><span id="copied" class="hint" style="margin:0"></span></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by 6thSense (YC S26). Not affiliated with 6thSense.</footer>
+
+<script>
+(() => {
+  "use strict";
+  const HZ = 100, DUR = 6.0, N = Math.round(DUR * HZ) + 1;
+  const OBJECTS = {
+    box:    { name: "Cardboard box", w: 60, h: 50, k: 0.9, slip: 4.2, color: "#c9a26a" },
+    hammer: { name: "Hammer handle", w: 34, h: 70, k: 1.5, slip: 3.9, color: "#6d5a4a" },
+    shoe:   { name: "Soft shoe",     w: 84, h: 40, k: 0.45, slip: null, color: "#5b7fa6" }
+  };
+  const $ = id => document.getElementById(id);
+  const S = { obj: "box", t: 0, playing: false, est: 0, lag: 0, raw: [], seed: 1 };
+
+  // ---------- seeded noise ----------
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const lerp = (a, b, u) => a + (b - a) * clamp(u, 0, 1);
+  const ease = u => u * u * (3 - 2 * u);
+
+  // ---------- ground-truth episode: gripper aperture + height over time ----------
+  function pose(t, o) {
+    const open = o.w + 60, closed = o.w - 6;
+    let a, g;
+    if (t < 1.5)      { a = open; g = lerp(150, 28, ease(t / 1.5)); }
+    else if (t < 2.6) { a = lerp(open, closed, (t - 1.5) / 1.1); g = 28; }
+    else if (t < 3.6) { a = closed; g = lerp(28, 120, ease((t - 2.6) / 1.0)); }
+    else if (t < 4.4) { a = closed; g = 120; }
+    else if (t < 5.0) { a = closed; g = lerp(120, 28, ease((t - 4.4) / 0.6)); }
+    else              { a = lerp(closed, open, (t - 5.0) / 0.7); g = 28; }
+    // slip: object sags a little while held
+    let sag = 0;
+    if (o.slip) sag = 10 * Math.exp(-Math.pow((t - o.slip - 0.08) / 0.12, 2));
+    return { a, g, sag };
+  }
+  const squeeze = (t, o) => Math.max(0, o.w - pose(t, o).a);       // what the camera can track
+  function force(t, o) {                                           // true summed pad force, N
+    const p = pose(t, o);
+    let f = o.k * Math.max(0, o.w - p.a) * 0.9;
+    if (t > 2.6 && t < 4.4) f += 0.9 * o.k * Math.sin(Math.PI * clamp((t - 2.6) / 1.8, 0, 1)); // lift load
+    if (o.slip) f *= 1 - 0.55 * Math.exp(-Math.pow((t - o.slip) / 0.07, 2));                   // grip dips, then sag
+    return f;
+  }
+
+  // ---------- recording: tactile stream is stamped late by a hidden lag ----------
+  function record() {
+    const o = OBJECTS[S.obj], r = rng(S.seed * 7919 + S.obj.length);
+    S.lag = Math.round((90 + r() * 220)) / 1000;                 // 90-310 ms
+    S.raw = new Array(N);
+    for (let i = 0; i < N; i++) {
+      const tau = i / HZ;                                         // timestamp on the tactile clock
+      S.raw[i] = Math.max(0, force(tau - S.lag, o) + (r() - 0.5) * 0.12);
+    }
+  }
+  function rawAt(tau) {                                           // interpolated read of the raw stream
+    const x = clamp(tau, 0, DUR) * HZ, i = Math.floor(x), j = Math.min(N - 1, i + 1);
+    return lerp(S.raw[i], S.raw[j], x - i);
+  }
+  const alignedAt = t => rawAt(t + S.est);                       // force "at" video time t
+
+  // ---------- analysis ----------
+  function pearson(xs, ys) {
+    const n = xs.length; let mx = 0, my = 0;
+    for (let i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+    mx /= n; my /= n; let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+    return sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
+  }
+  function corrAt(estSec) {
+    const o = OBJECTS[S.obj], xs = [], ys = [];
+    for (let i = 0; i < N; i += 2) { const t = i / HZ; xs.push(squeeze(t, o)); ys.push(rawAt(t + estSec)); }
+    return pearson(xs, ys);
+  }
+  function firstCross(fn, thr, from = 0) {
+    for (let i = Math.round(from * HZ); i < N - 1; i++) {
+      const a = fn(i / HZ), b = fn((i + 1) / HZ);
+      if (a < thr && b >= thr) return (i + (thr - a) / (b - a)) / HZ;
+    }
+    return null;
+  }
+  const fmtMs = s => s == null ? "-" : (s * 1000).toFixed(0) + " ms";
+  const fmtS = s => s == null ? "-" : s.toFixed(3) + " s";
+
+  function autoAlign() {
+    let best = -2, bestE = 0;
+    for (let e = -500; e <= 500; e += 5) { const c = corrAt(e / 1000); if (c > best) { best = c; bestE = e; } }
+    animateOffset(bestE);
+  }
+  let anim = null;
+  function animateOffset(target) {
+    cancelAnimationFrame(anim);
+    const from = S.est * 1000, t0 = performance.now();
+    const step = now => {
+      const u = clamp((now - t0) / 450, 0, 1), v = Math.round(lerp(from, target, ease(u)) / 5) * 5;
+      setOffset(v);
+      if (u < 1) anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
+  }
+  function setOffset(ms) { S.est = ms / 1000; $("off").value = ms; $("offv").textContent = ms + " ms"; refresh(); }
+
+  // ---------- drawing ----------
+  function setupCanvas(c) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), w = c.width, h = c.height;
+    if (!c._s) { c.width = w * dpr; c.height = h * dpr; c._s = [w, h]; }
+    const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return ctx;
+  }
+  function drawScene() {
+    const c = $("scene"), ctx = setupCanvas(c), [W, H] = c._s, o = OBJECTS[S.obj], p = pose(S.t, o);
+    ctx.clearRect(0, 0, W, H);
+    const tableY = H - 50, sc = 1.55, cx = W / 2;
+    ctx.fillStyle = "#e7dfcd"; ctx.fillRect(0, tableY, W, 50);
+    ctx.fillStyle = "#cfc5ae"; ctx.fillRect(0, tableY, W, 3);
+
+    // object: rides with the gripper only while it is actually squeezed
+    const gripped = o.w - p.a > 0.5 && S.t > 2.5 && S.t < 5.0;
+    const baseY = gripped ? tableY - (p.g - 28) * sc - p.sag * sc : tableY;
+    ctx.fillStyle = o.color;
+    if (S.obj === "shoe") { ctx.beginPath(); ctx.ellipse(cx, baseY - o.h * sc / 2, o.w * sc / 2, o.h * sc / 2, 0, 0, 7); ctx.fill(); }
+    else ctx.fillRect(cx - o.w * sc / 2, baseY - o.h * sc, o.w * sc, o.h * sc);
+
+    // gripper fingers
+    const fy = tableY - (p.g - 28) * sc - 25 * sc * 0.5, half = p.a * sc / 2;
+    const f = alignedAt(S.t), heat = clamp(f / 5, 0, 1);
+    ctx.fillStyle = "#8a949a"; ctx.fillRect(cx - half - 70 * 0.2 - 14, fy - 90 - 20, 2 * half + 28 + 14, 14);
+    ctx.fillRect(cx - half - 14, fy - 98, 10, 98); ctx.fillRect(cx + half + 4, fy - 98, 10, 98);
+    for (const side of [-1, 1]) {                                // 4 taxels per pad, load shifts during lift
+      const px = side < 0 ? cx - half - 4 : cx + half - 0;
+      for (let k = 0; k < 4; k++) {
+        const share = [0.2, 0.3, 0.3, 0.2][k] * (1 + (k - 1.5) * 0.18 * clamp((S.t - 2.6) / 1.0, 0, 1) * (S.t < 4.4 ? 1 : 0));
+        const v = clamp(heat * share * 4, 0, 1);
+        ctx.fillStyle = `rgb(${Math.round(210 * v + 120 * (1 - v))},${Math.round(87 * v + 140 * (1 - v))},${Math.round(47 * v + 150 * (1 - v))})`;
+        ctx.fillRect(px, fy - 96 + k * 24 + 2, 4, 20);
+      }
+    }
+    ctx.fillStyle = "#1d2428"; ctx.font = "12px ui-monospace, Menlo, monospace";
+    ctx.fillText("t=" + S.t.toFixed(2) + "s  frame " + Math.round(S.t * 30), 12, 20);
+    ctx.fillStyle = o.w - p.a > 0 ? "#d4572f" : "#6b747a";
+    ctx.fillText(o.w - p.a > 0 ? "camera: contact" : "camera: no contact", 12, 38);
+    ctx.fillStyle = f > 0.5 ? "#d4572f" : "#6b747a";
+    ctx.fillText("tactile (aligned): " + f.toFixed(2) + " N", 12, 56);
+  }
+
+  function drawPlot() {
+    const c = $("plot"), ctx = setupCanvas(c), [W, H] = c._s, o = OBJECTS[S.obj];
+    const L = 44, R = 12, T = 12, B = 26, pw = W - L - R, ph = H - T - B;
+    ctx.clearRect(0, 0, W, H);
+    let fmax = 1;
+    for (let i = 0; i < N; i++) fmax = Math.max(fmax, S.raw[i]);
+    fmax = Math.ceil(fmax + 0.5);
+    const X = t => L + (t / DUR) * pw, Y = f => T + ph - (f / fmax) * ph;
+    ctx.strokeStyle = "#e6dfcf"; ctx.fillStyle = "#6b747a"; ctx.font = "11px sans-serif"; ctx.lineWidth = 1;
+    for (let f = 0; f <= fmax; f++) { ctx.beginPath(); ctx.moveTo(L, Y(f)); ctx.lineTo(W - R, Y(f)); ctx.stroke(); ctx.fillText(f + " N", 8, Y(f) + 4); }
+    for (let t = 0; t <= DUR; t++) ctx.fillText(t + "s", X(t) - 6, H - 8);
+    const line = (fn, color, w, dash) => {
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash || []);
+      for (let i = 0; i < N; i++) { const t = i / HZ, y = fn(t); i ? ctx.lineTo(X(t), y) : ctx.moveTo(X(t), y); }
+      ctx.stroke(); ctx.setLineDash([]);
+    };
+    const sqMax = Math.max(1, ...Array.from({ length: N }, (_, i) => squeeze(i / HZ, o)));
+    line(t => Y(rawAt(t)), "#999", 1.2, [4, 4]);
+    line(t => Y(squeeze(t, o) / sqMax * (fmax - 0.5)), "#2f6f8f", 2);
+    line(t => Y(alignedAt(t)), "#d4572f", 2);
+    const ev = events();
+    ctx.fillStyle = "#1d2428";
+    ev.forEach(e => { if (e.t == null) return; ctx.fillRect(X(e.t) - 0.5, T, 1, ph); ctx.fillText(e.label, X(e.t) + 3, T + 10 + (e.row || 0) * 12); });
+    ctx.fillStyle = "rgba(29,36,40,.85)"; ctx.fillRect(X(S.t) - 1, T, 2, ph);
+  }
+
+  // ---------- events read off the aligned force ----------
+  function events() {
+    const o = OBJECTS[S.obj], f = alignedAt;
+    const contact = firstCross(f, 0.5);
+    let peakT = 0, peak = 0;
+    for (let i = 0; i < N; i++) { const v = f(i / HZ); if (v > peak) { peak = v; peakT = i / HZ; } }
+    let slip = null;
+    for (let i = Math.round(3.0 * HZ); i < Math.round(5 * HZ); i++) {           // sharp dip while holding
+      const now = f(i / HZ), before = Math.max(...[1, 2, 3, 4, 5].map(k => f((i - 5 * k) / HZ)));
+      if (before > 1 && now < before * 0.62) { slip = i / HZ; break; }
+    }
+    let release = null;
+    for (let i = Math.round(4.8 * HZ); i < N; i++) if (f(i / HZ) < 0.5) { release = i / HZ; break; }
+    return [
+      { key: "Contact", label: "contact", t: contact, row: 0 },
+      { key: "Peak load", label: "peak", t: peakT, row: 1 },
+      { key: "Slip", label: "slip", t: slip, row: 2 },
+      { key: "Release", label: "release", t: release, row: 0 }
+    ];
+  }
+
+  // ---------- readouts ----------
+  function refresh() {
+    const o = OBJECTS[S.obj];
+    const tv = firstCross(t => squeeze(t, o), 0.01), tf = firstCross(alignedAt, 0.5);
+    const gap = tv != null && tf != null ? tf - tv : null, c = corrAt(S.est);
+    $("tv").textContent = fmtS(tv); $("tf").textContent = fmtS(tf);
+    $("gap").textContent = gap == null ? "-" : (gap >= 0 ? "+" : "") + (gap * 1000).toFixed(0) + " ms";
+    $("rho").textContent = c.toFixed(3);
+    const v = $("verdict"), m = gap == null ? 999 : Math.abs(gap * 1000);
+    if (m <= 25 && c > 0.9) { v.className = "chip ok"; v.textContent = "aligned (within 25 ms)"; }
+    else if (m <= 80) { v.className = "chip warn"; v.textContent = "close, nudge it"; }
+    else { v.className = "chip bad"; v.textContent = "force arrives " + (gap > 0 ? "after" : "before") + " touch"; }
+    $("events").innerHTML = events().map(e => `<li><span>${e.key}</span><b>${fmtS(e.t)}</b></li>`).join("");
+    draw();
+  }
+  function record_() {
+    const f = alignedAt(S.t), o = OBJECTS[S.obj];
+    return JSON.stringify({
+      t: +S.t.toFixed(3), video_frame: Math.round(S.t * 30), object: o.name,
+      tactile_offset_ms: Math.round(S.est * 1000),
+      force_n: { pad_left: +(f * 0.52).toFixed(3), pad_right: +(f * 0.48).toFixed(3), total: +f.toFixed(3) },
+      camera_squeeze_px: +squeeze(S.t, o).toFixed(2)
+    }, null, 2);
+  }
+  function draw() {
+    drawScene(); drawPlot();
+    $("clock").innerHTML = "<b>" + S.t.toFixed(2) + " s</b>";
+    $("scrub").value = Math.round(S.t * 100);
+    $("rec").textContent = record_();
+  }
+
+  // ---------- wiring ----------
+  let last = 0;
+  function tick(now) {
+    if (!S.playing) return;
+    const dt = (now - last) / 1000; last = now;
+    S.t += dt * parseFloat($("speed").value);
+    if (S.t >= DUR) { S.t = DUR; setPlaying(false); }
+    draw(); requestAnimationFrame(tick);
+  }
+  function setPlaying(p) {
+    S.playing = p; $("play").textContent = p ? "Pause" : "Play";
+    if (p) { if (S.t >= DUR) S.t = 0; last = performance.now(); requestAnimationFrame(tick); }
+  }
+  $("play").onclick = () => setPlaying(!S.playing);
+  $("scrub").oninput = e => { S.t = e.target.value / 100; draw(); };
+  $("off").oninput = e => { cancelAnimationFrame(anim); setOffset(+e.target.value); };
+  $("auto").onclick = autoAlign;
+  $("zero").onclick = () => animateOffset(0);
+  $("obj").onchange = e => { S.obj = e.target.value; record(); setOffset(0); };
+  $("reroll").onclick = () => { S.seed++; record(); setOffset(0); };
+  $("copy").onclick = () => {
+    const done = () => { $("copied").textContent = "copied"; setTimeout(() => $("copied").textContent = "", 1200); };
+    if (navigator.clipboard) navigator.clipboard.writeText($("rec").textContent).then(done, () => {});
+  };
+
+  record(); S.t = 2.4; setOffset(0);
+})();
+</script>
+</body>
+</html>

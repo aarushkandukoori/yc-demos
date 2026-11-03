@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mandate Desk - a toy authorization engine for agent spending</title>
+<style>
+:root{
+  --bg:#f4efe6; --ink:#1d1b17; --mute:#6f695d; --line:#d9d0bf; --panel:#fbf8f2;
+  --accent:#0f6b5c; --accent2:#e0a526; --bad:#b3341f; --ok:#2c7a3f;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+header{padding:28px 32px 8px;max-width:1240px;margin:0 auto}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+header p{margin:0;color:var(--mute);max-width:760px}
+main{max-width:1240px;margin:0 auto;padding:16px 32px 32px;display:grid;grid-template-columns:320px 1fr 340px;gap:18px}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute);margin:0 0 12px}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+input[type=text],input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips label{margin:0;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--line);border-radius:99px;background:#fff;cursor:pointer;color:var(--ink);font-size:13px}
+.chips input:checked + span{font-weight:600;color:var(--accent)}
+button{font:inherit;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px}
+button:hover{opacity:.88}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button.ok{background:var(--ok);border-color:var(--ok)}
+button.bad{background:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.35;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.card{position:relative;border-radius:14px;padding:16px 18px;color:#fff;background:linear-gradient(135deg,#0f6b5c,#0b3d44);min-height:150px;cursor:pointer;box-shadow:0 6px 18px rgba(15,60,60,.25);transition:transform .15s}
+.card:hover{transform:translateY(-2px)}
+.card.sel{outline:3px solid var(--accent2)}
+.card.dead{background:linear-gradient(135deg,#6a6a6a,#3b3b3b)}
+.card .num{font-family:var(--mono);letter-spacing:.12em;margin:16px 0 8px;font-size:15px}
+.card .top{display:flex;justify-content:space-between;font-size:12px;opacity:.85}
+.card .meta{display:flex;justify-content:space-between;font-size:12px;opacity:.9}
+.bar{height:6px;background:rgba(255,255,255,.25);border-radius:9px;margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent2);transition:width .3s}
+.cards{display:grid;gap:12px}
+.empty{color:var(--mute);font-size:14px;padding:20px 0;text-align:center}
+.cart{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:7px;cursor:pointer}
+.cart:hover{border-color:var(--accent)}
+.cart small{color:var(--mute);display:block}
+.tag{font-size:11px;padding:1px 7px;border-radius:99px;background:#ece5d5;color:var(--mute)}
+.log{font-family:var(--mono);font-size:12.5px;background:#1d1b17;color:#e8e1d0;border-radius:9px;padding:12px;height:300px;overflow:auto;white-space:pre-wrap}
+.log .p{color:#7fd1b9}.log .f{color:#ff8f7a}.log .w{color:#f0c35b}.log .d{color:#8f897b}
+.approval{border:2px dashed var(--accent2);background:#fff7e0;border-radius:10px;padding:12px;margin-top:12px}
+.approval p{margin:0 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+th{color:var(--mute);font-weight:500;font-size:12px}
+.st-approved{color:var(--ok);font-weight:600}.st-declined{color:var(--bad);font-weight:600}
+pre.snip{margin:0;font-family:var(--mono);font-size:12px;background:#ece5d5;border-radius:8px;padding:10px;overflow:auto;white-space:pre-wrap}
+.wide{grid-column:1/-1}
+footer{max-width:1240px;margin:0 auto;padding:8px 32px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+footer p{margin:14px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mandate Desk</h1>
+  <p>A toy authorization engine for agent spending. Mint a card with a mandate (limit, merchant categories, transaction cap), then watch an "agent" try to check out. Every purchase runs through the same rule chain a real issuer would, and anything over your auto-approve line waits for a human. All data is synthetic.</p>
+</header>
+
+<main>
+  <!-- Column 1: mint -->
+  <section>
+    <h2>1. Mint a card</h2>
+    <label for="cname">Agent / purpose</label>
+    <input type="text" id="cname" value="Errand bot" maxlength="24">
+    <div class="row">
+      <div><label for="cap">Spend limit ($)</label><input type="number" id="cap" value="150" min="1"></div>
+      <div><label for="maxtx">Max transactions</label><input type="number" id="maxtx" value="3" min="1"></div>
+    </div>
+    <label for="auto">Auto-approve under ($)</label>
+    <input type="number" id="auto" value="40" min="0">
+    <label>Allowed categories</label>
+    <div class="chips" id="cats"></div>
+    <label>Card type</label>
+    <select id="ctype">
+      <option value="multi">Multi-use (until limit)</option>
+      <option value="single">Single-use (closes after first charge)</option>
+    </select>
+    <div style="margin-top:14px" class="row">
+      <button id="mint">Mint card</button>
+      <button class="ghost" id="reset">Reset</button>
+    </div>
+    <h2 style="margin-top:20px">Your cards</h2>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <!-- Column 2: agent -->
+  <section>
+    <h2>2. Agent checkout</h2>
+    <div id="agentTarget" class="empty">Mint a card first, then select it.</div>
+    <div id="agentUI" style="display:none">
+      <p style="margin:0 0 10px;color:var(--mute)">Pick a cart the agent wants to buy. It will submit the charge to the selected card.</p>
+      <div id="carts"></div>
+      <div class="row" style="margin-top:6px">
+        <input type="text" id="cmerch" placeholder="Custom merchant" maxlength="26">
+        <select id="ccat"></select>
+        <input type="number" id="camt" placeholder="$" min="1" style="max-width:80px">
+        <button class="ghost" id="cgo" style="flex:0 0 auto">Try</button>
+      </div>
+      <div id="approval"></div>
+    </div>
+    <h2 style="margin-top:20px">Authorization trace</h2>
+    <div class="log" id="log"><span class="d">// waiting for a charge request...</span></div>
+  </section>
+
+  <!-- Column 3: ledger -->
+  <section>
+    <h2>3. Ledger</h2>
+    <table>
+      <thead><tr><th>Card</th><th>Merchant</th><th>$</th><th>Result</th></tr></thead>
+      <tbody id="ledger"></tbody>
+    </table>
+    <div id="ledgerEmpty" class="empty">No charges yet.</div>
+    <h2 style="margin-top:20px">Equivalent API call</h2>
+    <pre class="snip" id="snip">// mint a card to see the request</pre>
+  </section>
+</main>
+
+<footer>
+  <div>Rule chain: card state, then merchant category, then amount vs. remaining limit, then transaction count, then approval policy. The first failing rule declines the charge and the rest are skipped.</div>
+  <p>Independent demo built by Aarush Kandukoori, inspired by Agentcard (YC S26). Not affiliated with Agentcard.</p>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var CATS = ['groceries','travel','software','dining','electronics','gambling'];
+  var CARTS = [
+    {m:'Corner Market',c:'groceries',a:23.40},
+    {m:'Skyline Air (SFO-PIT)',c:'travel',a:212.00},
+    {m:'Notebook Cloud Pro',c:'software',a:29.00},
+    {m:'Noodle House',c:'dining',a:36.75},
+    {m:'Gadget Depot USB-C hub',c:'electronics',a:64.99},
+    {m:'Lucky Spin Casino',c:'gambling',a:20.00},
+    {m:'Corner Market (weekly)',c:'groceries',a:88.10}
+  ];
+  var cards = [], ledger = [], selected = null, pending = null, seq = 0;
+  var $ = function(id){ return document.getElementById(id); };
+
+  function money(n){ return '$' + n.toFixed(2); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  // ---------- setup ----------
+  (function initCats(){
+    var html = '', opts = '';
+    CATS.forEach(function(c){
+      var on = (c !== 'gambling' && c !== 'travel') ? ' checked' : '';
+      html += '<label><input type="checkbox" value="' + c + '"' + on + '><span>' + c + '</span></label>';
+      opts += '<option value="' + c + '">' + c + '</option>';
+    });
+    $('cats').innerHTML = html;
+    $('ccat').innerHTML = opts;
+  })();
+
+  // ---------- logging ----------
+  function log(txt, cls){
+    var el = $('log');
+    if (el.firstChild && el.firstChild.className === 'd' && el.childNodes.length === 1) el.innerHTML = '';
+    var s = document.createElement('span');
+    s.className = cls || '';
+    s.textContent = txt + '\n';
+    el.appendChild(s);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // ---------- card model ----------
+  function fakePan(){
+    // synthetic, non-routable-looking digits; only last 4 shown
+    var d = '';
+    for (var i = 0; i < 4; i++) d += String(Math.floor(Math.random() * 10));
+    return d;
+  }
+
+  function mint(){
+    var cats = [].slice.call(document.querySelectorAll('#cats input:checked')).map(function(i){ return i.value; });
+    var cap = parseFloat($('cap').value), maxtx = parseInt($('maxtx').value, 10), auto = parseFloat($('auto').value);
+    if (!(cap > 0) || !(maxtx > 0) || isNaN(auto) || auto < 0) { log('mint rejected: limit, tx cap and auto-approve must be valid numbers', 'f'); return; }
+    if (!cats.length) { log('mint rejected: pick at least one allowed category', 'f'); return; }
+    var card = {
+      id: 'card_' + (++seq), name: $('cname').value.trim() || 'Unnamed agent', last4: fakePan(),
+      cap: cap, spent: 0, maxtx: maxtx, used: 0, auto: auto, cats: cats,
+      single: $('ctype').value === 'single', state: 'active'
+    };
+    cards.push(card);
+    selected = card.id;
+    log('minted ' + card.id + ' ending ' + card.last4 + ' limit ' + money(cap) + ' cats=[' + cats.join(',') + '] ' + (card.single ? 'single-use' : 'multi-use'), 'p');
+    render();
+  }
+
+  function sel(){ return cards.filter(function(c){ return c.id === selected; })[0]; }
+
+  // ---------- authorization engine ----------
+  // Returns {ok:boolean, rule:string, detail:string, needsHuman:boolean}
+  function authorize(card, req){
+    var trace = [];
+    function step(name, pass, detail){ trace.push({name:name, pass:pass, detail:detail}); return pass; }
+    var remaining = card.cap - card.spent;
+    var verdict = null;
+
+    if (!step('card_state', card.state === 'active', 'state=' + card.state)) verdict = 'card is ' + card.state;
+    else if (!step('merchant_category', card.cats.indexOf(req.c) >= 0, req.c + ' in [' + card.cats.join(',') + ']')) verdict = 'category "' + req.c + '" not in mandate';
+    else if (!step('amount_vs_limit', req.a <= remaining + 1e-9, money(req.a) + ' <= ' + money(remaining) + ' remaining')) verdict = 'exceeds remaining limit by ' + money(req.a - remaining);
+    else if (!step('txn_count', card.used < card.maxtx, card.used + '/' + card.maxtx + ' used')) verdict = 'transaction cap reached';
+    return {trace: trace, declineReason: verdict};
+  }
+
+  function attempt(req){
+    var card = sel();
+    if (!card) return;
+    if (pending) { log('agent is blocked: waiting on a human decision for ' + pending.req.m, 'w'); return; }
+    var rid = 'req_' + Math.random().toString(36).slice(2, 7);
+    log('\n> ' + rid + ' ' + card.id + ' charge ' + money(req.a) + ' @ ' + req.m + ' [' + req.c + ']', '');
+    var r = authorize(card, req);
+    r.trace.forEach(function(t){ log('  ' + (t.pass ? 'PASS ' : 'FAIL ') + t.name + '  ' + t.detail, t.pass ? 'p' : 'f'); });
+    if (r.declineReason) { finish(card, req, false, r.declineReason); return; }
+    if (req.a <= card.auto) {
+      log('  PASS approval_policy  ' + money(req.a) + ' <= auto-approve ' + money(card.auto), 'p');
+      finish(card, req, true, 'auto-approved');
+    } else {
+      log('  HOLD approval_policy  ' + money(req.a) + ' > auto-approve ' + money(card.auto) + ' -> asking the human', 'w');
+      pending = {card: card, req: req};
+      renderApproval();
+    }
+  }
+
+  function finish(card, req, ok, why){
+    if (ok) {
+      card.spent += req.a; card.used += 1;
+      if (card.single) { card.state = 'closed'; log('  single-use card closed after first charge', 'd'); }
+      else if (card.used >= card.maxtx) { card.state = 'exhausted'; log('  transaction cap hit, card exhausted', 'd'); }
+      else if (card.cap - card.spent < 0.01) { card.state = 'exhausted'; log('  limit fully spent, card exhausted', 'd'); }
+    }
+    log('  => ' + (ok ? 'APPROVED' : 'DECLINED') + ' (' + why + ')', ok ? 'p' : 'f');
+    ledger.unshift({card: card.name + ' ..' + card.last4, m: req.m, a: req.a, ok: ok, why: why});
+    render();
+  }
+
+  // ---------- rendering ----------
+  function renderCards(){
+    if (!cards.length) { $('cards').innerHTML = '<div class="empty">No cards yet.</div>'; return; }
+    $('cards').innerHTML = cards.map(function(c){
+      var pct = Math.max(0, Math.min(100, (c.cap - c.spent) / c.cap * 100));
+      return '<div class="card' + (c.id === selected ? ' sel' : '') + (c.state !== 'active' ? ' dead' : '') + '" data-id="' + c.id + '">' +
+        '<div class="top"><span>' + esc(c.name) + '</span><span>' + c.state + (c.single ? ' / single-use' : '') + '</span></div>' +
+        '<div class="num">•••• •••• •••• ' + c.last4 + '</div>' +
+        '<div class="meta"><span>' + money(c.cap - c.spent) + ' left of ' + money(c.cap) + '</span><span>' + c.used + '/' + c.maxtx + ' tx</span></div>' +
+        '<div class="bar"><i style="width:' + pct + '%"></i></div></div>';
+    }).join('');
+    [].forEach.call(document.querySelectorAll('.card'), function(el){
+      el.onclick = function(){ if (pending) return; selected = el.getAttribute('data-id'); render(); };
+    });
+  }
+
+  function renderAgent(){
+    var c = sel();
+    $('agentTarget').style.display = c ? 'none' : 'block';
+    $('agentUI').style.display = c ? 'block' : 'none';
+    if (!c) return;
+    $('carts').innerHTML = CARTS.map(function(k, i){
+      return '<div class="cart" data-i="' + i + '"><div>' + esc(k.m) + '<small>agent wants to buy</small></div>' +
+        '<div style="text-align:right">' + money(k.a) + '<small><span class="tag">' + k.c + '</span></small></div></div>';
+    }).join('');
+    [].forEach.call(document.querySelectorAll('.cart'), function(el){
+      el.onclick = function(){ attempt(CARTS[+el.getAttribute('data-i')]); };
+    });
+  }
+
+  function renderApproval(){
+    var box = $('approval');
+    if (!pending) { box.innerHTML = ''; return; }
+    var r = pending.req;
+    box.innerHTML = '<div class="approval"><p><b>Approval needed.</b> ' + esc(pending.card.name) + ' wants to pay <b>' + money(r.a) + '</b> at ' + esc(r.m) + ' (' + r.c + ').</p>' +
+      '<div class="row"><button class="ok" id="yes">Approve</button><button class="bad" id="no">Decline</button></div></div>';
+    $('yes').onclick = function(){ resolve(true); };
+    $('no').onclick = function(){ resolve(false); };
+  }
+
+  function resolve(ok){
+    var p = pending; pending = null;
+    log('  human ' + (ok ? 'approved' : 'declined') + ' the charge', ok ? 'p' : 'f');
+    renderApproval();
+    finish(p.card, p.req, ok, ok ? 'human-approved' : 'human-declined');
+  }
+
+  function renderLedger(){
+    $('ledgerEmpty').style.display = ledger.length ? 'none' : 'block';
+    $('ledger').innerHTML = ledger.map(function(l){
+      return '<tr title="' + esc(l.why) + '"><td>' + esc(l.card) + '</td><td>' + esc(l.m) + '</td><td>' + l.a.toFixed(2) + '</td>' +
+        '<td class="' + (l.ok ? 'st-approved' : 'st-declined') + '">' + (l.ok ? 'OK' : 'NO') + '</td></tr>';
+    }).join('');
+  }
+
+  function renderSnip(){
+    var c = sel();
+    if (!c) { $('snip').textContent = '// mint a card to see the request'; return; }
+    $('snip').textContent = 'POST /v1/cards\n' +
+      'Authorization: Bearer YOUR_API_KEY\n\n' +
+      JSON.stringify({
+        label: c.name, type: c.single ? 'single_use' : 'multi_use',
+        spend_limit_usd: c.cap, max_transactions: c.maxtx,
+        allowed_categories: c.cats, auto_approve_under_usd: c.auto
+      }, null, 2);
+  }
+
+  function render(){ renderCards(); renderAgent(); renderLedger(); renderSnip(); }
+
+  // ---------- events ----------
+  $('mint').onclick = mint;
+  $('reset').onclick = function(){
+    cards = []; ledger = []; selected = null; pending = null; seq = 0;
+    $('log').innerHTML = '<span class="d">// waiting for a charge request...</span>';
+    renderApproval(); render();
+  };
+  $('cgo').onclick = function(){
+    var m = $('cmerch').value.trim(), a = parseFloat($('camt').value);
+    if (!m || !(a > 0)) { log('custom charge needs a merchant and a positive amount', 'f'); return; }
+    attempt({m: m, c: $('ccat').value, a: a});
+  };
+
+  render();
+  log('// ready. mint a card, pick it, then click a cart.', 'd');
+  log('// try: Skyline Air (travel is off by default), then Corner Market (weekly) which exceeds auto-approve.', 'd');
+})();
+</script>
+</body>
+</html>
