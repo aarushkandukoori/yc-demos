@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DutyLens - a toy duty overpayment auditor</title>
+<style>
+:root{--paper:#f4efe6;--card:#fffdf8;--ink:#1d2a24;--mute:#6b746e;--line:#ddd5c6;--hot:#c2410c;--good:#2f6f4f;--warn:#a16207}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 32px 8px;max-width:1180px;margin:0 auto}
+h1{font:700 28px/1.2 Georgia,"Times New Roman",serif;margin:0 0 6px}
+header p{margin:0;color:var(--mute);max-width:760px}
+main{max-width:1180px;margin:0 auto;padding:16px 32px 32px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat b{display:block;font:700 22px Georgia,serif}
+.stat span{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.stat.hot b{color:var(--hot)}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+button{font:inherit;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:8px}
+button.ghost{background:transparent;color:var(--ink)}
+button:disabled{opacity:.5;cursor:default}
+.prog{flex:1;min-width:140px;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--hot);transition:width .15s}
+.cols{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;align-items:start}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.entry{margin-bottom:14px}
+.entry h3{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between;gap:8px;color:var(--mute);font-weight:600}
+.tag{font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);white-space:nowrap}
+.tag.open{color:var(--good);border-color:var(--good)}
+.tag.closed{color:var(--hot);border-color:var(--hot)}
+.row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;background:#fff}
+.row:hover{border-color:var(--ink)}
+.row.sel{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset}
+.row small{color:var(--mute);display:block}
+.amt{font:700 15px Georgia,serif;text-align:right;color:var(--mute)}
+.amt.bad{color:var(--hot)}
+.amt.ok{color:var(--good)}
+label{display:block;font-size:12px;color:var(--mute);margin:8px 0 2px}
+input[type=text],input[type=number],select{width:100%;font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chk{display:flex;gap:6px;align-items:center;margin:4px 0;font-size:13px;color:var(--ink)}
+.chk input{width:auto}
+.find{border-left:4px solid var(--hot);background:#fff4ec;padding:8px 10px;margin:8px 0;border-radius:0 8px 8px 0}
+.find.warn{border-color:var(--warn);background:#fdf6e3}
+.find.clean{border-color:var(--good);background:#eef6f0}
+.find b{display:flex;justify-content:space-between;gap:8px}
+.find p{margin:2px 0 0;font-size:13px;color:#47524b}
+.math{font:12px ui-monospace,Menlo,monospace;color:var(--mute);margin-top:8px}
+pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);border-radius:8px;padding:12px;font:12.5px/1.5 ui-monospace,Menlo,monospace;margin:10px 0 0}
+.note{font-size:12px;color:var(--mute);margin-top:10px}
+footer{max-width:1180px;margin:0 auto;padding:16px 32px 40px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+@media(max-width:860px){.cols{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>DutyLens</h1>
+  <p>A toy post-entry auditor. Six synthetic customs entry lines were filed with duty errors baked in. Run the audit, click a line, edit its fields, and watch the overpayment math change. Tariff rates and programs below are invented for illustration and are not real law.</p>
+</header>
+<main>
+  <div class="stats" id="stats"></div>
+  <div class="panel" style="margin-bottom:14px">
+    <b>Live program rates</b> <span class="note">Edit a rate and every line recomputes. This is the "rate change" half of the idea: the same engine prices past and future entries.</span>
+    <div class="g2" id="rates" style="margin-top:6px"></div>
+  </div>
+  <div class="bar">
+    <button id="run">Run audit</button>
+    <div class="prog"><i id="progbar"></i></div>
+    <button class="ghost" id="reset">Reset sample data</button>
+    <label class="chk" style="margin:0"><input type="checkbox" id="onlyopen"> claim only entries still in the protest window</label>
+  </div>
+  <div class="cols">
+    <div id="entries"></div>
+    <div>
+      <div class="panel" id="detail"></div>
+      <div class="panel" style="margin-top:16px">
+        <b>Refund claim draft</b>
+        <pre id="claim">Run the audit to generate a draft.</pre>
+        <div class="bar" style="margin:10px 0 0"><button class="ghost" id="copy">Copy draft</button></div>
+        <div class="note">Illustrative only. Not legal advice and not a real filing.</div>
+      </div>
+    </div>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Tarifflo Inc. (YC S26). Not affiliated with Tarifflo Inc..</footer>
+
+<script>
+'use strict';
+// ---- synthetic tariff data (invented rates, not real) ----
+const TODAY = new Date('2026-11-04T00:00:00Z');
+const TARIFF = {
+  '6110.20.20': {d: 'Cotton knit pullovers', r: 16.5},
+  '6110.30.30': {d: 'Man-made fibre knit pullovers', r: 32},
+  '4202.92.31': {d: 'Backpacks, textile outer', r: 17.6},
+  '8471.30.01': {d: 'Portable computers', r: 0},
+  '9403.20.00': {d: 'Metal furniture', r: 0},
+  '9403.60.80': {d: 'Wooden furniture', r: 0},
+  '3926.90.99': {d: 'Other plastic articles', r: 5.3},
+  '3924.10.40': {d: 'Plastic tableware', r: 3.4}
+};
+// kind: "origin" programs hinge on country of origin, "hts" programs hinge on the classification
+const PROG = {
+  A: {name: '9903.A1 origin surcharge, list 1', r: 25, kind: 'origin'},
+  B: {name: '9903.A2 origin surcharge, list 2', r: 7.5, kind: 'origin'},
+  C: {name: '9903.M1 metal-furniture levy', r: 50, kind: 'hts'}
+};
+const COUNTRIES = ['CN', 'VN', 'MX', 'DE', 'IN', 'US'];
+// keyword -> classification hint the "model" uses
+const RULES = [
+  [/sweater|pullover/i, d => /cotton/i.test(d) ? '6110.20.20' : /polyester|acrylic|nylon|man-?made/i.test(d) ? '6110.30.30' : null],
+  [/backpack/i, () => '4202.92.31'],
+  [/laptop|notebook computer/i, () => '8471.30.01'],
+  [/wood(en)?\b.*(bookcase|shelf|table|furniture|desk)|bookcase/i, () => '9403.60.80'],
+  [/(steel|metal).*(shelv|rack|furniture|desk)/i, () => '9403.20.00'],
+  [/tableware|cups?\b|plates?\b|bowls?\b/i, () => '3924.10.40'],
+  [/container|plastic/i, () => '3926.90.99']
+];
+
+const SAMPLE = () => [
+  {id: 'DEMO-1001', liq: '2026-06-20', lines: [
+    {desc: "Women's knit pullover sweater, 100% cotton", hts: '6110.30.30', origin: 'CN', madeIn: 'CN', value: 48000, freight: 0, freightIn: false, programs: ['A', 'B']},
+    {desc: 'Laptop computer, 14 inch', hts: '8471.30.01', origin: 'CN', madeIn: 'VN', value: 120000, freight: 0, freightIn: false, programs: ['A']}
+  ]},
+  {id: 'DEMO-1002', liq: '2026-02-10', lines: [
+    {desc: 'Wooden bookcase, assembled', hts: '9403.20.00', origin: 'DE', madeIn: 'DE', value: 30000, freight: 0, freightIn: false, programs: ['C']},
+    {desc: 'Plastic food storage containers', hts: '3926.90.99', origin: 'MX', madeIn: 'MX', value: 22000, freight: 1800, freightIn: true, programs: []}
+  ]},
+  {id: 'DEMO-1003', liq: '2026-09-15', lines: [
+    {desc: 'Nylon backpack with textile outer', hts: '4202.92.31', origin: 'IN', madeIn: 'IN', value: 15000, freight: 0, freightIn: false, programs: []},
+    {desc: 'Reusable plastic tableware cups', hts: '3926.90.99', origin: 'CN', madeIn: 'CN', value: 18000, freight: 900, freightIn: true, programs: ['A', 'B']}
+  ]}
+];
+
+// ---- engine ----
+const rateOf = l => TARIFF[l.hts].r + l.programs.reduce((s, p) => s + PROG[p].r, 0);
+const dutyOf = l => Math.max(0, l.value) * rateOf(l) / 100;
+const classify = d => { for (const [re, fn] of RULES) if (re.test(d)) { const h = fn(d); if (h) return h; } return null; };
+const clone = l => ({...l, programs: [...l.programs]});
+
+// Apply corrections one at a time so each finding carries only its own dollars (no double counting).
+function audit(line) {
+  let cur = clone(line), before = dutyOf(cur);
+  const found = [], warns = [];
+  const push = (kind, title, why) => {
+    const after = dutyOf(cur), amt = before - after;
+    if (amt > 0.005) found.push({kind, title, why, amt});
+    before = after;
+  };
+  const best = classify(cur.desc);
+  if (best && best !== cur.hts) {
+    const trial = clone(cur);
+    trial.hts = best;
+    if (trial.hts.slice(0, 7) !== '9403.20') trial.programs = trial.programs.filter(p => PROG[p].kind !== 'hts');
+    if (dutyOf(trial) < dutyOf(cur)) {
+      const oldH = cur.hts;
+      cur = trial;
+      push('Classification', `${oldH} -> ${best}`, `Description reads as "${TARIFF[best].d}" (${TARIFF[best].r}%), filed as "${TARIFF[oldH].d}" (${TARIFF[oldH].r}%).`);
+    } else {
+      warns.push({title: `Possible under-declaration: ${best}`, why: `Description suggests "${TARIFF[best].d}", which would cost more than the filed code. Review before relying on this line.`});
+    }
+  }
+  if (cur.origin === 'CN' && cur.madeIn !== 'CN') {
+    cur.origin = cur.madeIn;
+    cur.programs = cur.programs.filter(p => PROG[p].kind !== 'origin');
+    push('Origin', `CN -> ${cur.madeIn}`, `Mill certificate says last substantial transformation happened in ${cur.madeIn}, so the CN-only surcharges should not have been paid.`);
+  }
+  if (cur.programs.includes('A') && cur.programs.includes('B')) {
+    cur.programs = cur.programs.filter(p => p !== 'B');
+    push('Tariff stacking', 'Program B removed', 'Programs A and B are mutually exclusive on one line. Only the higher one applies; B was paid on top.');
+  }
+  if (cur.freightIn && cur.freight > 0) {
+    cur.value -= cur.freight;
+    push('Valuation', `Deduct freight ${money(cur.freight)}`, 'International freight was left inside the entered value. Customs value excludes it, so duty was charged on a non-dutiable amount.');
+  }
+  return {found, warns, fixed: cur, filed: dutyOf(line), total: found.reduce((s, f) => s + f.amt, 0)};
+}
+
+// ---- state + helpers ----
+let data = SAMPLE(), sel = {e: 0, l: 0}, audited = false, running = false;
+const $ = id => document.getElementById(id);
+const money = n => new Intl.NumberFormat('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 2}).format(n);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const deadline = e => { const d = new Date(e.liq + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 180); return d; };
+const daysLeft = e => Math.ceil((deadline(e) - TODAY) / 864e5);
+const fmtDate = d => d.toISOString().slice(0, 10);
+const inWindow = e => daysLeft(e) >= 0;
+
+// ---- render ----
+function render() {
+  const all = data.flatMap(e => e.lines.map(l => ({e, l, a: audit(l)})));
+  const filed = all.reduce((s, x) => s + x.a.filed, 0);
+  const over = all.reduce((s, x) => s + x.a.total, 0);
+  const claimable = all.filter(x => inWindow(x.e)).reduce((s, x) => s + x.a.total, 0);
+  const bad = all.filter(x => x.a.found.length).length;
+  $('stats').innerHTML = [
+    ['Duty paid', money(filed), ''],
+    ['Overpaid, found', audited ? money(over) : '?', 'hot'],
+    ['Still claimable', audited ? money(claimable) : '?', 'hot'],
+    ['Lines with errors', audited ? `${bad} of ${all.length}` : '?', '']
+  ].map(([k, v, c]) => `<div class="stat ${c}"><span>${k}</span><b>${v}</b></div>`).join('');
+
+  $('entries').innerHTML = data.map((e, ei) => {
+    const dl = daysLeft(e);
+    const tag = dl >= 0 ? `<span class="tag open">protest window: ${dl}d left</span>` : `<span class="tag closed">window closed ${-dl}d ago</span>`;
+    const rows = e.lines.map((l, li) => {
+      const a = audit(l);
+      const cls = !audited ? '' : a.total > 0 ? 'bad' : 'ok';
+      const right = !audited ? money(a.filed) : a.total > 0 ? '-' + money(a.total) : 'clean';
+      return `<div class="row ${sel.e === ei && sel.l === li ? 'sel' : ''}" data-e="${ei}" data-l="${li}">
+        <div>${esc(l.desc)}<small>${l.hts} · origin ${l.origin} · ${money(l.value)} · filed duty ${money(a.filed)}</small></div>
+        <div class="amt ${cls}">${right}</div></div>`;
+    }).join('');
+    return `<div class="panel entry"><h3><span>Entry ${e.id} · liquidated ${e.liq}</span>${tag}</h3>${rows}</div>`;
+  }).join('');
+  document.querySelectorAll('.row').forEach(r => r.onclick = () => { sel = {e: +r.dataset.e, l: +r.dataset.l}; render(); });
+  renderDetail();
+  renderClaim();
+}
+
+function renderDetail() {
+  const e = data[sel.e], l = e.lines[sel.l], a = audit(l);
+  const f = a.found.map(x => `<div class="find"><b><span>${x.kind}: ${esc(x.title)}</span><span>${money(x.amt)}</span></b><p>${esc(x.why)}</p></div>`).join('');
+  const w = a.warns.map(x => `<div class="find warn"><b><span>${esc(x.title)}</span></b><p>${esc(x.why)}</p></div>`).join('');
+  const res = !audited ? '<p class="note">Press "Run audit" to see findings for this line.</p>'
+    : (f + w) || '<div class="find clean"><b><span>No overpayment found on this line</span></b></div>';
+  const hts = Object.keys(TARIFF).map(h => `<option value="${h}" ${h === l.hts ? 'selected' : ''}>${h} - ${TARIFF[h].d} (${TARIFF[h].r}%)</option>`).join('');
+  const cty = k => COUNTRIES.map(c => `<option ${c === l[k] ? 'selected' : ''}>${c}</option>`).join('');
+  const progs = Object.entries(PROG).map(([k, p]) => `<label class="chk"><input type="checkbox" data-prog="${k}" ${l.programs.includes(k) ? 'checked' : ''}> ${p.name} (${p.r}%)</label>`).join('');
+  $('detail').innerHTML = `<b>Line editor · ${e.id}</b>
+    <label>Description</label><input type="text" data-f="desc" value="${esc(l.desc)}">
+    <label>Filed HTS code</label><select data-f="hts">${hts}</select>
+    <div class="g2"><div><label>Declared origin</label><select data-f="origin">${cty('origin')}</select></div>
+    <div><label>Mill-cert transformation country</label><select data-f="madeIn">${cty('madeIn')}</select></div>
+    <div><label>Entered value (USD)</label><input type="number" min="0" data-f="value" value="${l.value}"></div>
+    <div><label>Intl. freight (USD)</label><input type="number" min="0" data-f="freight" value="${l.freight}"></div></div>
+    <label class="chk"><input type="checkbox" data-f="freightIn" ${l.freightIn ? 'checked' : ''}> freight is included in entered value</label>
+    <label>Chapter 99 programs paid</label>${progs}
+    <div class="math">filed rate ${rateOf(l).toFixed(1)}% → duty ${money(a.filed)}<br>corrected rate ${rateOf(a.fixed).toFixed(1)}% on ${money(a.fixed.value)} → duty ${money(dutyOf(a.fixed))}</div>
+    <div style="margin-top:10px">${res}</div>`;
+  $('detail').querySelectorAll('[data-f]').forEach(el => el.onchange = () => {
+    const k = el.dataset.f;
+    l[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Math.max(0, +el.value || 0) : el.value;
+    render();
+  });
+  $('detail').querySelectorAll('[data-prog]').forEach(el => el.onchange = () => {
+    const k = el.dataset.prog;
+    l.programs = l.programs.filter(p => p !== k);
+    if (el.checked) l.programs.push(k);
+    l.programs.sort();
+    render();
+  });
+}
+
+function renderClaim() {
+  if (!audited) { $('claim').textContent = 'Run the audit to generate a draft.'; return; }
+  const only = $('onlyopen').checked;
+  const out = [];
+  let sum = 0;
+  for (const e of data) {
+    if (only && !inWindow(e)) continue;
+    const items = e.lines.map(l => ({l, a: audit(l)})).filter(x => x.a.total > 0);
+    if (!items.length) continue;
+    out.push(`Entry ${e.id} (liquidated ${e.liq}, protest by ${fmtDate(deadline(e))}${inWindow(e) ? '' : ' - WINDOW CLOSED'})`);
+    for (const {l, a} of items) {
+      out.push(`  - ${l.desc}`);
+      a.found.forEach(f => out.push(`      ${f.kind}: ${f.title}  ${money(f.amt)}`));
+      sum += a.total;
+    }
+  }
+  $('claim').textContent = out.length
+    ? `Requested refund of excess duty, ${fmtDate(TODAY)}\n\n${out.join('\n')}\n\nTotal requested: ${money(sum)}`
+    : 'Nothing to claim with the current settings.';
+}
+
+// ---- wiring ----
+function renderRates() {
+  $('rates').innerHTML = Object.entries(PROG).map(([k, p]) =>
+    `<div><label>${p.name}: <span id="rv${k}">${p.r}</span>%</label>
+     <input type="range" min="0" max="100" step="0.5" value="${p.r}" data-rate="${k}" style="width:100%"></div>`).join('');
+  $('rates').querySelectorAll('[data-rate]').forEach(el => el.oninput = () => {
+    PROG[el.dataset.rate].r = +el.value;
+    $('rv' + el.dataset.rate).textContent = el.value;
+    render();
+  });
+}
+$('run').onclick = () => {
+  if (running) return;
+  running = true; audited = false; $('run').disabled = true; render();
+  let p = 0;
+  const t = setInterval(() => {
+    p += 8 + Math.random() * 14;
+    $('progbar').style.width = Math.min(p, 100) + '%';
+    if (p >= 100) { clearInterval(t); audited = true; running = false; $('run').disabled = false; $('run').textContent = 'Re-run audit'; render(); }
+  }, 110);
+};
+const DEFAULT_RATES = {A: 25, B: 7.5, C: 50};
+$('reset').onclick = () => { Object.keys(PROG).forEach(k => PROG[k].r = DEFAULT_RATES[k]); renderRates(); data = SAMPLE(); sel = {e: 0, l: 0}; audited = false; $('run').textContent = 'Run audit'; $('progbar').style.width = '0'; render(); };
+$('onlyopen').onchange = renderClaim;
+$('copy').onclick = () => {
+  const t = $('claim').textContent;
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => $('copy').textContent = 'Copied', () => {
+    const r = document.createRange(); r.selectNodeContents($('claim')); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    $('copy').textContent = 'Selected - press Ctrl/Cmd+C';
+  });
+  setTimeout(() => $('copy').textContent = 'Copy draft', 1800);
+};
+renderRates();
+render();
+</script>
+</body>
+</html>

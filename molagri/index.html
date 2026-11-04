@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resistance Runway - a toy resistance-evolution simulator</title>
+<style>
+  :root {
+    --bg: #12150f;
+    --panel: #1b2016;
+    --line: #2d3526;
+    --ink: #e8ecdf;
+    --dim: #97a28a;
+    --a: #c9e265;
+    --b: #5fc7b0;
+    --c: #f2a65a;
+    --d: #e5708a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { max-width: 1080px; margin: 0 auto; padding: 36px 20px 8px; }
+  h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.02em; }
+  h1 span { color: var(--a); }
+  header p { margin: 0; color: var(--dim); max-width: 760px; }
+  main {
+    max-width: 1080px; margin: 0 auto; padding: 16px 20px 24px;
+    display: grid; grid-template-columns: 300px 1fr; gap: 16px;
+  }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .panel h2 { margin: 0 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--dim); font-weight: 600; }
+  label { display: block; margin: 12px 0 2px; font-size: 13px; color: var(--dim); }
+  label b { color: var(--ink); font-weight: 600; float: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--a); }
+  .strategies { display: grid; gap: 6px; }
+  .strategies button {
+    text-align: left; background: transparent; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; cursor: pointer; font: inherit;
+  }
+  .strategies button small { display: block; color: var(--dim); font-size: 12px; }
+  .strategies button.on { border-color: var(--a); background: #232b1a; }
+  .strategies button:hover { border-color: #55633f; }
+  .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .actions button {
+    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--a); cursor: pointer;
+    background: var(--a); color: #18200c; font: inherit; font-weight: 600;
+  }
+  .actions button.ghost { background: transparent; color: var(--a); }
+  .actions button:disabled { opacity: .5; cursor: default; }
+  canvas { width: 100%; height: 340px; display: block; background: #151a11; border-radius: 8px; border: 1px solid var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 0; font-size: 13px; color: var(--dim); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .stat div:first-child { font-size: 12px; color: var(--dim); }
+  .stat div:last-child { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th { color: var(--dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .bar { height: 8px; border-radius: 4px; background: var(--a); min-width: 2px; }
+  .note { color: var(--dim); font-size: 13px; margin: 10px 0 0; }
+  .full { grid-column: 1 / -1; }
+  footer { max-width: 1080px; margin: 0 auto; padding: 8px 20px 40px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Resistance <span>Runway</span></h1>
+  <p>A toy population-genetics model of how long a crop-protection product keeps working. Pick a deployment
+  strategy, tune the biology, and watch resistance alleles take over (or not). All numbers are synthetic.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Strategy</h2>
+    <div class="strategies" id="strategies"></div>
+
+    <h2 style="margin-top:20px">Biology</h2>
+    <label>Kill rate on susceptible pests <b id="vK"></b></label>
+    <input type="range" id="k" min="50" max="99" value="90">
+    <label>Untreated refuge share <b id="vF"></b></label>
+    <input type="range" id="f" min="0" max="50" value="10">
+    <label>Starting resistance allele freq <b id="vP"></b></label>
+    <input type="range" id="p0" min="-6" max="-2" step="0.1" value="-4">
+    <label>Resistance dominance <b id="vH"></b></label>
+    <input type="range" id="h" min="0" max="100" value="10">
+    <label>Mutation rate per generation <b id="vMu"></b></label>
+    <input type="range" id="mu" min="-9" max="-5" step="0.1" value="-7">
+    <label>Rotation interval (generations) <b id="vRot"></b></label>
+    <input type="range" id="rot" min="1" max="12" value="3">
+    <div class="actions">
+      <button id="run">Run</button>
+      <button id="compare" class="ghost">Compare all</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Resistance allele frequency vs. pest generation</h2>
+    <canvas id="chart" width="1200" height="680"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="stats">
+      <div class="stat"><div>Generation</div><div id="sGen">0</div></div>
+      <div class="stat"><div>Pest control now</div><div id="sCtl">-</div></div>
+      <div class="stat"><div>Resistance (mode A)</div><div id="sA">-</div></div>
+      <div class="stat"><div>Resistance (mode B)</div><div id="sB">-</div></div>
+      <div class="stat"><div>Product failed at</div><div id="sFail">-</div></div>
+    </div>
+    <p class="note">Failure means field control drops below 50%. The dashed line marks that point. Hover the chart to read values.</p>
+  </section>
+
+  <section class="panel full">
+    <h2>Head-to-head: generations of useful life</h2>
+    <p class="note" style="margin-top:0">Runs every strategy for up to 300 generations with your current biology settings.
+    Bars show generations until control falls below 50%.</p>
+    <table id="tbl"><thead><tr><th>Strategy</th><th>Useful life</th><th style="width:45%"></th></tr></thead><tbody></tbody></table>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Molagri (YC S26). Not affiliated with Molagri.
+  <br>Model: one diploid locus per mode of action, random mating, linkage equilibrium between loci, no fitness cost. A teaching toy, not a forecast.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- strategies ----------
+  const STRATS = {
+    single:   { name: "Single mode, season after season", note: "One mode of action, used every generation", color: "#e5708a" },
+    rotation: { name: "Rotate two modes",                 note: "Swap A and B on a fixed interval",           color: "#f2a65a" },
+    mixture:  { name: "Stack two modes together",         note: "Every application hits both targets",        color: "#c9e265" },
+    adaptive: { name: "Forecast-and-switch",              note: "Pre-empt: switch when a mode nears 1% resistance", color: "#5fc7b0" }
+  };
+  const MAX_GEN = 300;
+  const FAIL_AT = 0.5;
+  let current = "mixture";
+
+  const $ = id => document.getElementById(id);
+  const sliders = ["k", "f", "p0", "h", "mu", "rot"];
+
+  // ---------- parameter handling ----------
+  function params() {
+    return {
+      k:   +$("k").value / 100,
+      f:   +$("f").value / 100,
+      p0:  Math.pow(10, +$("p0").value),
+      h:   +$("h").value / 100,
+      mu:  Math.pow(10, +$("mu").value),
+      rot: +$("rot").value
+    };
+  }
+  function fmtPct(x) { return x < 0.001 ? (x * 100).toExponential(1) + "%" : (x * 100).toFixed(x < 0.1 ? 2 : 1) + "%"; }
+  function labels() {
+    const P = params();
+    $("vK").textContent = (P.k * 100).toFixed(0) + "%";
+    $("vF").textContent = (P.f * 100).toFixed(0) + "%";
+    $("vP").textContent = "1e" + (+$("p0").value).toFixed(1);
+    $("vH").textContent = (P.h * 100).toFixed(0) + "%";
+    $("vMu").textContent = "1e" + (+$("mu").value).toFixed(1);
+    $("vRot").textContent = P.rot;
+    $("rot").disabled = current !== "rotation";
+    $("rot").style.opacity = current === "rotation" ? 1 : 0.4;
+  }
+
+  // ---------- core model ----------
+  // Treated survival of each genotype at one locus: SS, RS, RR.
+  function treatedW(k, h) { return [1 - k, 1 - k * (1 - h), 1]; }
+
+  // One generation of selection + mutation at a locus.
+  // wT: treated genotype survivals, mult: survival factor from other mode in a stack,
+  // f: refuge share. Returns new allele frequency and mean treated survival.
+  function step(p, wT, mult, f, mu) {
+    const q = 1 - p;
+    const w = wT.map(x => f + (1 - f) * x * mult);
+    const wbar = q * q * w[0] + 2 * p * q * w[1] + p * p * w[2];
+    let pn = (p * p * w[2] + p * q * w[1]) / wbar;
+    pn = pn + (1 - pn) * mu;
+    const meanTreated = q * q * wT[0] + 2 * p * q * wT[1] + p * p * wT[2];
+    return { p: Math.min(pn, 1), meanTreated };
+  }
+
+  function simulate(kind, P, maxGen) {
+    const wT = treatedW(P.k, P.h);
+    let pA = P.p0, pB = P.p0;
+    let active = 0;             // adaptive: which mode is in use
+    const rows = [];
+    let fail = null;
+    for (let g = 0; g <= maxGen; g++) {
+      // current survival of a pest under the chosen treatment
+      const mA = pA * pA * wT[2] + 2 * pA * (1 - pA) * wT[1] + (1 - pA) * (1 - pA) * wT[0];
+      const mB = pB * pB * wT[2] + 2 * pB * (1 - pB) * wT[1] + (1 - pB) * (1 - pB) * wT[0];
+      let surv;
+      if (kind === "single") surv = mA;
+      else if (kind === "mixture") surv = mA * mB;
+      else if (kind === "rotation") surv = (Math.floor(g / P.rot) % 2 === 0) ? mA : mB;
+      else surv = active === 0 ? mA : mB;
+      // Control on the treated area is what the grower sees; refuge is untreated by design.
+      const ctl = (1 - P.f) * (1 - surv);
+      const treatedControl = 1 - surv;
+      rows.push({ g, pA, pB, ctl: treatedControl, fieldCtl: ctl, mode: kind === "mixture" ? "AB" : (kind === "single" ? "A" : (kind === "rotation" ? ((Math.floor(g / P.rot) % 2) ? "B" : "A") : (active ? "B" : "A"))) });
+      if (fail === null && treatedControl < FAIL_AT) fail = g;
+      if (g === maxGen) break;
+
+      // advance one generation
+      if (kind === "single") {
+        pA = step(pA, wT, 1, P.f, P.mu).p;
+        pB = Math.min(pB + (1 - pB) * P.mu, 1);
+      } else if (kind === "mixture") {
+        pA = step(pA, wT, mB, P.f, P.mu).p;
+        pB = step(pB, wT, mA, P.f, P.mu).p;
+      } else {
+        const useA = kind === "rotation" ? (Math.floor(g / P.rot) % 2 === 0) : active === 0;
+        if (useA) { pA = step(pA, wT, 1, P.f, P.mu).p; pB = pB + (1 - pB) * P.mu; }
+        else      { pB = step(pB, wT, 1, P.f, P.mu).p; pA = pA + (1 - pA) * P.mu; }
+        if (kind === "adaptive") {
+          // look ahead 5 generations; if the active mode would cross 1%, hand over to the other
+          const cur = useA ? pA : pB;
+          const proj = projectFreq(cur, wT, P, 5);
+          const other = useA ? pB : pA;
+          if (proj > 0.01 && other < cur) active = 1 - active;
+        }
+      }
+    }
+    return { rows, fail };
+  }
+
+  // Forward projection used by the forecast-and-switch strategy.
+  function projectFreq(p, wT, P, n) {
+    for (let i = 0; i < n; i++) p = step(p, wT, 1, P.f, P.mu).p;
+    return p;
+  }
+
+  // ---------- chart ----------
+  const cv = $("chart"), ctx = cv.getContext("2d");
+  let layers = [];      // {name,color,rows,fail}
+  let hoverG = null;
+  const pad = { l: 70, r: 20, t: 20, b: 46 };
+
+  function xOf(g, n) { return pad.l + (g / n) * (cv.width - pad.l - pad.r); }
+  function yOf(p) {
+    // log scale from 1e-8 to 1
+    const lo = -8, hi = 0;
+    const v = Math.log10(Math.max(p, 1e-8));
+    return cv.height - pad.b - ((v - lo) / (hi - lo)) * (cv.height - pad.t - pad.b);
+  }
+
+  function draw(upTo) {
+    const n = layers.length ? Math.max(...layers.map(l => l.rows.length - 1)) : MAX_GEN;
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = "22px ui-sans-serif, system-ui, sans-serif";
+    ctx.strokeStyle = "#2d3526"; ctx.fillStyle = "#97a28a"; ctx.lineWidth = 1;
+    for (let e = -8; e <= 0; e += 2) {
+      const y = yOf(Math.pow(10, e));
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      ctx.textAlign = "right"; ctx.fillText(e === 0 ? "100%" : "1e" + e, pad.l - 8, y + 7);
+    }
+    ctx.textAlign = "center";
+    const ticks = 6;
+    for (let i = 0; i <= ticks; i++) {
+      const g = Math.round((n * i) / ticks);
+      ctx.fillText(g, xOf(g, n), H - pad.b + 28);
+    }
+    ctx.fillText("pest generations", (W + pad.l) / 2, H - 6);
+
+    layers.forEach(l => {
+      const lim = upTo == null ? l.rows.length - 1 : Math.min(upTo, l.rows.length - 1);
+      // each strategy draws the max of its two alleles so the line shows the worst-case threat
+      ctx.strokeStyle = l.color; ctx.lineWidth = 3; ctx.beginPath();
+      for (let i = 0; i <= lim; i++) {
+        const r = l.rows[i], v = Math.max(r.pA, r.pB);
+        i ? ctx.lineTo(xOf(r.g, n), yOf(v)) : ctx.moveTo(xOf(r.g, n), yOf(v));
+      }
+      ctx.stroke();
+      if (l.fail !== null && l.fail <= lim) {
+        ctx.setLineDash([6, 6]); ctx.lineWidth = 2; ctx.beginPath();
+        ctx.moveTo(xOf(l.fail, n), pad.t); ctx.lineTo(xOf(l.fail, n), H - pad.b); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(xOf(l.fail, n), yOf(Math.max(l.rows[l.fail].pA, l.rows[l.fail].pB)), 7, 0, 7); ctx.fillStyle = l.color; ctx.fill();
+        ctx.fillStyle = "#97a28a";
+      }
+    });
+
+    if (hoverG !== null && layers.length) {
+      const x = xOf(hoverG, n);
+      ctx.strokeStyle = "#55633f"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, H - pad.b); ctx.stroke();
+      ctx.textAlign = x > W * 0.7 ? "right" : "left";
+      layers.forEach((l, i) => {
+        const r = l.rows[Math.min(hoverG, l.rows.length - 1)];
+        ctx.fillStyle = l.color;
+        const dx = x > W * 0.7 ? -10 : 10;
+        ctx.fillText("gen " + r.g + "  " + fmtPct(Math.max(r.pA, r.pB)) + "  control " + (r.ctl * 100).toFixed(0) + "%", x + dx, pad.t + 24 + i * 28);
+      });
+    }
+  }
+
+  function legend() {
+    $("legend").innerHTML = layers.map(l =>
+      '<span><i style="background:' + l.color + '"></i>' + l.name + (l.fail !== null ? " (fails at " + l.fail + ")" : " (holds)") + "</span>").join("");
+  }
+
+  function readout(row, fail) {
+    $("sGen").textContent = row.g;
+    $("sCtl").textContent = (row.ctl * 100).toFixed(1) + "%";
+    $("sA").textContent = fmtPct(row.pA);
+    $("sB").textContent = fmtPct(row.pB);
+    $("sFail").textContent = fail === null ? "none in " + MAX_GEN : "gen " + fail;
+  }
+
+  // ---------- running ----------
+  let timer = null;
+  function run() {
+    clearInterval(timer);
+    const P = params();
+    const sim = simulate(current, P, MAX_GEN);
+    const stopAt = sim.fail !== null ? Math.min(sim.fail + 25, MAX_GEN) : MAX_GEN;
+    sim.rows.length = stopAt + 1;
+    layers = [{ name: STRATS[current].name, color: STRATS[current].color, rows: sim.rows, fail: sim.fail }];
+    legend();
+    let g = 0;
+    $("run").disabled = true;
+    timer = setInterval(() => {
+      g = Math.min(g + 2, stopAt);
+      draw(g); readout(sim.rows[g], sim.fail !== null && sim.fail <= g ? sim.fail : null);
+      if (g >= stopAt) { clearInterval(timer); $("run").disabled = false; }
+    }, 16);
+  }
+
+  function compare() {
+    clearInterval(timer);
+    const P = params();
+    const results = Object.keys(STRATS).map(key => {
+      const s = simulate(key, P, MAX_GEN);
+      return { key, name: STRATS[key].name, color: STRATS[key].color, rows: s.rows, fail: s.fail };
+    });
+    layers = results.map(r => ({ name: r.name, color: r.color, rows: r.rows, fail: r.fail }));
+    legend(); draw(null);
+    const last = layers[0].rows[layers[0].rows.length - 1];
+    readout(last, layers[0].fail);
+    const tb = document.querySelector("#tbl tbody");
+    tb.innerHTML = results.map(r => {
+      const life = r.fail === null ? MAX_GEN : r.fail;
+      return "<tr><td>" + r.name + '<div class="note" style="margin:0">' + STRATS[r.key].note + "</div></td><td>" +
+        (r.fail === null ? MAX_GEN + "+ gens" : r.fail + " gens") + '</td><td><div class="bar" style="width:' +
+        Math.max(1, (life / MAX_GEN) * 100) + "%;background:" + r.color + '"></div></td></tr>';
+    }).join("");
+  }
+
+  // ---------- wiring ----------
+  const box = $("strategies");
+  Object.keys(STRATS).forEach(key => {
+    const b = document.createElement("button");
+    b.innerHTML = STRATS[key].name + "<small>" + STRATS[key].note + "</small>";
+    b.dataset.key = key;
+    b.onclick = () => { current = key; refreshButtons(); labels(); run(); };
+    box.appendChild(b);
+  });
+  function refreshButtons() {
+    box.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.key === current));
+  }
+  sliders.forEach(id => $(id).addEventListener("input", () => { labels(); compare(); }));
+  $("run").onclick = run;
+  $("compare").onclick = compare;
+
+  cv.addEventListener("mousemove", e => {
+    if (!layers.length) return;
+    const rect = cv.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (cv.width / rect.width);
+    const n = Math.max(...layers.map(l => l.rows.length - 1));
+    const g = Math.round(((x - pad.l) / (cv.width - pad.l - pad.r)) * n);
+    hoverG = g >= 0 && g <= n ? g : null;
+    draw(null);
+  });
+  cv.addEventListener("mouseleave", () => { hoverG = null; draw(null); });
+
+  refreshButtons(); labels(); compare();
+})();
+</script>
+</body>
+</html>
