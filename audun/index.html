@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledgerhand - a toy plan negotiator</title>
+<style>
+:root{--paper:#f6f1e7;--ink:#1f2a2e;--mute:#6b746f;--line:#d9d0bc;--card:#fffdf8;--moss:#3f6b4f;--rust:#b4532a;--sand:#e9dfc8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 Georgia,'Times New Roman',serif}
+header{padding:28px 32px 8px;max-width:1120px;margin:0 auto}
+h1{margin:0;font-size:28px;letter-spacing:-.5px}
+header p{margin:6px 0 0;color:var(--mute);max-width:720px}
+main{max-width:1120px;margin:0 auto;padding:16px 32px 24px;display:grid;grid-template-columns:260px 1fr 340px;gap:18px}
+@media(max-width:980px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+h2{margin:0 0 10px;font:600 11px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute)}
+.who{width:100%;text-align:left;background:none;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;font:inherit;color:inherit}
+.who:hover{background:var(--sand)}
+.who.on{border-color:var(--moss);background:#eef3ea}
+.who b{display:block}.who small{color:var(--mute);font-family:system-ui,sans-serif;font-size:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font:13px system-ui,sans-serif;margin:0}
+.kv dt{color:var(--mute)}.kv dd{margin:0;text-align:right}
+.bar{height:8px;background:var(--sand);border-radius:4px;overflow:hidden;margin:2px 0 8px}
+.bar i{display:block;height:100%;background:var(--moss)}
+.steps{list-style:none;margin:0;padding:0;font:13px system-ui,sans-serif}
+.steps li{padding:6px 0 6px 22px;position:relative;color:var(--mute);border-bottom:1px dashed var(--line)}
+.steps li:before{content:"";position:absolute;left:3px;top:11px;width:9px;height:9px;border-radius:50%;border:2px solid var(--line)}
+.steps li.done{color:var(--ink)}.steps li.done:before{background:var(--moss);border-color:var(--moss)}
+.steps li.now{color:var(--ink);font-weight:600}.steps li.now:before{border-color:var(--rust);background:var(--rust)}
+.chat{height:300px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px}
+.m{max-width:82%;padding:8px 11px;border-radius:12px;font:14px/1.4 system-ui,sans-serif;white-space:pre-wrap}
+.m.us{align-self:flex-start;background:var(--sand);border-bottom-left-radius:3px}
+.m.them{align-self:flex-end;background:var(--moss);color:#fff;border-bottom-right-radius:3px}
+.m.sys{align-self:center;background:none;color:var(--rust);font-size:12px;border:1px dashed var(--rust)}
+.replies{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+button.r{font:13px system-ui,sans-serif;border:1px solid var(--ink);background:var(--card);border-radius:16px;padding:6px 12px;cursor:pointer;color:var(--ink)}
+button.r:hover{background:var(--ink);color:var(--card)}
+button.r:disabled{opacity:.35;cursor:default;background:var(--card);color:var(--ink)}
+.slide{display:flex;align-items:center;gap:8px;font:13px system-ui,sans-serif;margin-top:8px}
+.slide input{flex:1}
+.sched{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:8px}
+.sched i{flex:1;background:var(--moss);border-radius:2px 2px 0 0;min-width:3px}
+.sched i.last{background:var(--rust)}
+.pill{display:inline-block;font:600 11px system-ui,sans-serif;padding:3px 8px;border-radius:10px;background:var(--sand);margin:0 4px 4px 0}
+.pill.h{background:var(--rust);color:#fff}.pill.g{background:var(--moss);color:#fff}
+pre{margin:0;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:#34423a}
+.log{height:150px;overflow:auto;background:#1f2a2e;color:#cfe3d4;border-radius:8px;padding:8px 10px;font:11.5px/1.5 ui-monospace,Menlo,monospace}
+.log div{margin:0}.log .w{color:#f0b48f}
+footer{max-width:1120px;margin:0 auto;padding:10px 32px 30px;color:var(--mute);font:13px system-ui,sans-serif;border-top:1px solid var(--line)}
+button.reset{font:12px system-ui,sans-serif;background:none;border:none;color:var(--rust);cursor:pointer;text-decoration:underline;padding:0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ledgerhand</h1>
+  <p>A toy plan negotiator. Pick an overdue account, read the strategy the engine builds from the profile, then play the debtor and watch it re-plan, concede, or hand off to a person. All data is synthetic and every rule runs in your browser.</p>
+</header>
+<main>
+  <section>
+    <div class="card"><h2>1 &middot; Pick an account</h2><div id="list"></div></div>
+    <div class="card" style="margin-top:14px"><h2>Pipeline</h2><ol class="steps" id="steps"></ol></div>
+  </section>
+
+  <section>
+    <div class="card"><h2>2 &middot; Strategy from profile</h2>
+      <div id="profile"></div>
+      <div id="strategy" style="margin-top:10px"></div>
+    </div>
+    <div class="card" style="margin-top:14px"><h2>3 &middot; Conversation (you are the debtor)</h2>
+      <div class="chat" id="chat"></div>
+      <div class="replies" id="replies"></div>
+      <div class="slide" id="slideRow">
+        <span>I can pay</span><input type="range" id="slide" min="10" max="800" step="5" value="100">
+        <b id="slideVal">$100</b>/mo <button class="r" id="offerBtn">Offer</button>
+      </div>
+      <p style="text-align:right;margin:8px 0 0"><button class="reset" id="reset">restart this account</button></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="card"><h2>Plan on the table</h2><div id="plan"></div></div>
+    <div class="card" style="margin-top:14px"><h2>Decision log</h2><div class="log" id="log"></div></div>
+    <div class="card" style="margin-top:14px"><h2>Rules the engine follows</h2>
+      <pre>stop-contact   -> halt all outreach
+dispute        -> pause, human reviews
+hardship       -> 60 day hold, human calls
+offer &gt;= floor  -> accept, schedule
+offer &lt; floor   -> stretch to 24 months,
+                  conditional write-down
+still too low  -> human owns the case</pre>
+    </div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Audun (YC S26). Not affiliated with Audun.</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const money = n => '$' + Math.round(n).toLocaleString('en-US');
+
+// Synthetic accounts. Names and numbers are made up.
+const ACCOUNTS = [
+  {id:1, name:'Dana Okafor', creditor:'Brightwater Dental', balance:640, dpd:21, surplus:210, channel:'sms', reply:0.7, broken:0, note:'Pays small bills fast, forgot this one.'},
+  {id:2, name:'Marcus Telleman', creditor:'Northline Fiber', balance:1850, dpd:74, surplus:140, channel:'email', reply:0.35, broken:1, note:'One plan missed in the spring.'},
+  {id:3, name:'Priya Venkataraman', creditor:'Halden Medical Group', balance:4200, dpd:128, surplus:320, channel:'call', reply:0.2, broken:2, note:'Two broken plans, rarely answers.'},
+  {id:4, name:'Leo Brandt', creditor:'Corvid Auto Finance', balance:980, dpd:48, surplus:60, channel:'sms', reply:0.55, broken:0, note:'Tight month-to-month budget.'}
+];
+const STEPS = ['Data to strategy','First contact','Understand the balance','Find a plan','Make a payment','A person takes over'];
+
+let A, state;
+
+// Smallest monthly payment the creditor allows: 24 month cap, $25 minimum.
+function floorMonthly(a){ return Math.max(25, Math.ceil(a.balance/24/5)*5); }
+function affordable(a){ return Math.max(15, Math.floor(a.surplus*0.35/5)*5); }
+
+function strategy(a){
+  // propensity: recent debt, reply history and fewer broken plans score higher
+  let p = 0.85 - a.dpd/220 + (a.reply-0.4)*0.4 - a.broken*0.18;
+  p = Math.min(0.95, Math.max(0.05, p));
+  const tone = a.dpd < 30 ? 'friendly reminder' : a.dpd < 90 ? 'direct and practical' : 'calm, supportive, no pressure';
+  const ch = {sms:'SMS with payment link', email:'Email with payment link', call:'Call, then SMS follow-up'}[a.channel];
+  const human = a.broken >= 2 || (a.balance > 4000 && a.dpd > 90);
+  const start = Math.min(a.balance, Math.max(affordable(a), floorMonthly(a)));
+  const fullDiscount = a.dpd > 60 ? 0.15 : 0.05;
+  return {p, tone, ch, human, start, fullDiscount, fullPrice: Math.round(a.balance*(1-fullDiscount))};
+}
+
+function mkPlan(total, monthly, label){
+  const n = Math.ceil(total/monthly);
+  return {total, monthly, n, last: total - monthly*(n-1), label};
+}
+
+function log(t, warn){
+  const d = document.createElement('div'); if(warn) d.className = 'w';
+  d.textContent = '> ' + t; $('log').appendChild(d); $('log').scrollTop = 1e9;
+}
+function say(who, text){
+  const d = document.createElement('div'); d.className = 'm ' + who; d.textContent = text;
+  $('chat').appendChild(d); $('chat').scrollTop = 1e9;
+}
+function setStep(i, finished){
+  [...$('steps').children].forEach((li,k)=>{ li.className = k<i ? 'done' : k===i ? (finished?'done':'now') : ''; });
+}
+
+function renderList(){
+  $('list').innerHTML = '';
+  ACCOUNTS.forEach(a=>{
+    const b = document.createElement('button'); b.className = 'who' + (A&&A.id===a.id?' on':'');
+    b.innerHTML = '<b>' + a.name + '</b><small>' + money(a.balance) + ' &middot; ' + a.dpd + ' days late</small>';
+    b.onclick = () => select(a); $('list').appendChild(b);
+  });
+}
+
+function renderProfile(){
+  const s = state.s;
+  $('profile').innerHTML =
+    '<dl class="kv">' +
+    '<dt>Creditor</dt><dd>' + A.creditor + '</dd>' +
+    '<dt>Balance</dt><dd>' + money(A.balance) + ' &middot; ' + A.dpd + ' days past due</dd>' +
+    '<dt>Est. monthly surplus</dt><dd>' + money(A.surplus) + '</dd>' +
+    '<dt>Reply rate</dt><dd>' + Math.round(A.reply*100) + '%</dd>' +
+    '<dt>Broken plans</dt><dd>' + A.broken + '</dd>' +
+    '<dt>Note</dt><dd>' + A.note + '</dd></dl>';
+  $('strategy').innerHTML =
+    '<div style="font:12px system-ui,sans-serif;color:var(--mute)">Likelihood to resolve: ' + Math.round(s.p*100) + '%</div>' +
+    '<div class="bar"><i style="width:' + (s.p*100) + '%"></i></div>' +
+    '<span class="pill g">' + s.ch + '</span><span class="pill">tone: ' + s.tone + '</span>' +
+    '<span class="pill">open at ' + money(s.start) + '/mo</span>' +
+    '<span class="pill">floor ' + money(floorMonthly(A)) + '/mo</span>' +
+    '<span class="pill">lump sum ' + money(s.fullPrice) + '</span>' +
+    (s.human ? '<span class="pill h">human shadowing from the start</span>' : '');
+}
+
+function renderPlan(){
+  const p = state.plan;
+  if(!p){ $('plan').innerHTML = '<span style="color:var(--mute)">No plan yet.</span>'; return; }
+  const n = Math.min(p.n, 36);
+  let bars = '';
+  for(let i=0;i<n;i++){
+    const last = i === n-1;
+    bars += '<i class="' + (last?'last':'') + '" style="height:' + (last ? Math.max(12, p.last/p.monthly*100) : 100) + '%"></i>';
+  }
+  $('plan').innerHTML =
+    '<dl class="kv">' +
+    '<dt>Type</dt><dd>' + p.label + '</dd>' +
+    '<dt>Total</dt><dd>' + money(p.total) + '</dd>' +
+    '<dt>Payment</dt><dd>' + money(p.monthly) + ' / mo</dd>' +
+    '<dt>Length</dt><dd>' + p.n + ' payment' + (p.n>1?'s':'') + '</dd>' +
+    '<dt>Final payment</dt><dd>' + money(p.last) + '</dd>' +
+    '<dt>Status</dt><dd><b>' + state.status + '</b></dd></dl>' +
+    '<div class="sched" title="payment schedule">' + bars + '</div>';
+}
+
+function setReplies(list){
+  $('replies').innerHTML = '';
+  list.forEach(([label, fn])=>{
+    const b = document.createElement('button'); b.className = 'r'; b.textContent = label;
+    b.onclick = () => { if(state.closed) return; say('them', label); fn(); };
+    $('replies').appendChild(b);
+  });
+}
+
+function closeCase(status, step){
+  state.closed = true; state.status = status;
+  setStep(step, true); renderPlan();
+  $('replies').innerHTML = ''; $('offerBtn').disabled = true; $('slide').disabled = true;
+}
+
+function handoff(reason, msg){
+  say('sys', 'Handed to a person: ' + reason);
+  if(msg) say('us', msg);
+  log('HANDOFF -> ' + reason, true);
+  closeCase('With a human specialist', 5);
+}
+
+function start(){
+  const s = state.s;
+  setStep(0); log('profile built for ' + A.name + ': propensity ' + Math.round(s.p*100) + '%, channel ' + s.ch);
+  const token = state;
+  setTimeout(()=>{
+    if(token !== state) return; // account switched meanwhile
+    setStep(1);
+    say('us', (A.dpd<30 ? 'Hi ' : 'Hello ') + A.name.split(' ')[0] + ', this is a message from ' + A.creditor + ' about an open balance. We would like to help you sort it out in a way that fits your month. Can we talk about it?');
+    log('first contact sent via ' + s.ch + ', tone "' + s.tone + '"');
+    if(s.human) log('case flagged: human specialist is shadowing', true);
+    setReplies([
+      ['What is this about?', askBalance],
+      ['I never owned this', dispute],
+      ['I lost my job', hardship],
+      ['Stop contacting me', stopContact]
+    ]);
+  }, 350);
+}
+
+function askBalance(){
+  setStep(2);
+  say('us', 'The open balance is ' + money(A.balance) + ' from ' + A.creditor + ', ' + A.dpd + ' days past due. You can pay it in full today for ' + money(state.s.fullPrice) + ', or we can split it up. What works?');
+  log('balance disclosed ' + money(A.balance) + '; lump sum offered ' + money(state.s.fullPrice) + ' (-' + Math.round(state.s.fullDiscount*100) + '%)');
+  setReplies([
+    ['Pay in full now', payFull],
+    ['Show me a plan', proposePlan],
+    ['I never owned this', dispute],
+    ['I lost my job', hardship],
+    ['Stop contacting me', stopContact]
+  ]);
+}
+
+function proposePlan(){
+  setStep(3);
+  const p = mkPlan(A.balance, state.s.start, 'Installments');
+  state.plan = p; state.status = 'Proposed';
+  say('us', 'Based on what we know, ' + money(p.monthly) + ' a month for ' + p.n + ' months clears it. If another amount works better, use the slider and tell me.');
+  log('plan proposed: ' + money(p.monthly) + ' x ' + p.n);
+  renderPlan();
+  setReplies([
+    ['That works', acceptPlan],
+    ['Pay in full now', payFull],
+    ['I lost my job', hardship],
+    ['I never owned this', dispute]
+  ]);
+}
+
+function acceptPlan(){
+  setStep(4);
+  say('us', 'Great. First payment of ' + money(state.plan.monthly) + ' is due in 3 days. The payment link is on its way, and you will get a reminder the day before each one.');
+  log('plan accepted, schedule created, reminders armed');
+  if(A.broken >= 1) log('history: ' + A.broken + ' broken plan(s), adding a day-before nudge and a 5 day grace window');
+  closeCase('Active', 4);
+}
+
+function payFull(){
+  setStep(4);
+  state.plan = mkPlan(state.s.fullPrice, state.s.fullPrice, 'Lump sum');
+  say('us', 'Thank you. ' + money(state.s.fullPrice) + ' settles the account completely. Payment link sent.');
+  log('lump sum chosen at ' + money(state.s.fullPrice) + ', account closes on payment');
+  closeCase('Paid in full', 4);
+}
+
+function dispute(){
+  say('us', 'Understood. We are pausing collection on this account while the claim is reviewed. A person will contact you with the invoice and records.');
+  log('dispute raised: collection paused, validation records queued', true);
+  handoff('dispute needs a human review of the underlying invoice');
+}
+
+function hardship(){
+  say('us', 'I am sorry to hear that. Nothing is due for 60 days. A person on our team will call you to find what is realistic.');
+  state.plan = null;
+  log('hardship signal: 60 day hold set, payment links disabled', true);
+  handoff('hardship requires a conversation, not an offer');
+}
+
+function stopContact(){
+  say('us', 'Understood. We will not contact you again by this channel. Written confirmation is on its way.');
+  log('stop-contact request honored: all outreach cancelled, suppression list updated', true);
+  closeCase('Stopped at debtor request', 1);
+}
+
+function counter(amount){
+  setStep(3);
+  const fl = floorMonthly(A);
+  state.attempts++;
+  if(amount >= fl){
+    const p = mkPlan(A.balance, amount, 'Installments (debtor offer)');
+    state.plan = p; state.status = 'Accepted';
+    say('us', money(amount) + ' a month works. That is ' + p.n + ' payment' + (p.n>1?'s':'') + ', final one ' + money(p.last) + '. Sending the link.');
+    log('offer ' + money(amount) + ' >= floor ' + money(fl) + ': accepted');
+    acceptPlan();
+  } else if(amount >= 25 && state.attempts < 2){
+    // stretch to the 24 month cap at the offered amount; remainder written down if no payment is missed
+    const covered = amount*24, left = Math.max(0, A.balance - covered);
+    const p = mkPlan(covered, amount, 'Stretched, conditional write-down');
+    state.plan = p; state.status = 'Counter-offered';
+    say('us', money(amount) + ' is below what I can approve over a normal term. Here is what I can do: ' + money(amount) + ' for 24 months, and the creditor forgives the remaining ' + money(left) + ' if no payment is missed.');
+    log('offer ' + money(amount) + ' < floor ' + money(fl) + ': term set to 24, remainder ' + money(left) + ' written down on condition', true);
+    renderPlan();
+    setReplies([['Accept that', acceptPlan], ['I lost my job', hardship], ['Stop contacting me', stopContact]]);
+  } else {
+    log('offer ' + money(amount) + ' too low: escalate', true);
+    handoff('offer outside automated limits', 'Let us find something that works. A person will reach out to you today.');
+  }
+}
+
+function select(a){
+  A = a; renderList();
+  state = {s: strategy(a), plan: null, status: '-', closed: false, attempts: 0};
+  $('chat').innerHTML = ''; $('replies').innerHTML = ''; $('log').innerHTML = '';
+  $('offerBtn').disabled = false; $('slide').disabled = false;
+  $('slide').value = Math.min(800, Math.max(10, affordable(a))); $('slideVal').textContent = money($('slide').value);
+  renderProfile(); renderPlan(); start();
+}
+
+$('slide').oninput = () => { $('slideVal').textContent = money($('slide').value); };
+$('offerBtn').onclick = () => {
+  if(state.closed) return;
+  const amt = +$('slide').value;
+  say('them', 'I can do ' + money(amt) + ' a month.');
+  counter(amt);
+};
+$('reset').onclick = () => select(A);
+
+$('steps').innerHTML = STEPS.map(s => '<li>' + s + '</li>').join('');
+select(ACCOUNTS[0]);
+</script>
+</body>
+</html>

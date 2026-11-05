@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Routing Bench - a toy model router</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--line:#272c36;--tx:#e6e8ec;--mut:#8b93a3;--acc:#7dd3a8;--acc2:#f0b36b;--bad:#e5766b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+h1 span{color:var(--acc)}
+.sub{color:var(--mut);max-width:720px}
+main{max-width:1100px;margin:0 auto;padding:12px 24px 40px;display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:0 0 12px;font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+.ctl{flex:1;min-width:220px}
+.ctl label{display:flex;justify-content:space-between;color:var(--mut);margin-bottom:4px}
+.ctl label b{color:var(--tx);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--acc)}
+button{background:var(--acc);color:#0b1a12;border:0;border-radius:7px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px}
+button.ghost{background:transparent;color:var(--tx);border:1px solid var(--line)}
+button:disabled{opacity:.45;cursor:default}
+button:hover:not(:disabled){filter:brightness(1.1)}
+select{background:#0f1115;color:var(--tx);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--mut);font-weight:500;font-size:12px}
+td.cell{text-align:center;font-weight:600;border-radius:5px;cursor:pointer;transition:outline .1s}
+td.cell:hover{outline:1px solid var(--tx)}
+td.cell.pick{outline:2px solid var(--acc)}
+td.cell.empty{color:var(--mut);font-weight:400}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;background:#222833;color:var(--mut);margin-left:6px}
+.tag.priv{background:#2b2417;color:var(--acc2)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.kpi{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px}
+.kpi small{color:var(--mut);display:block}
+.kpi big{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.good{color:var(--acc)}.warn{color:var(--acc2)}.bad{color:var(--bad)}
+canvas{width:100%;height:170px;display:block;background:#12151b;border-radius:8px;border:1px solid var(--line)}
+.cases{max-height:210px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.cases div{display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none}
+.note{color:var(--mut);font-size:12px;margin-top:8px}
+footer{max-width:1100px;margin:0 auto;padding:8px 24px 36px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Routing <span>Bench</span></h1>
+  <p class="sub">A toy router. Five workloads, five models, 40 synthetic eval cases each. Run the evals, set a quality floor, and the router picks the cheapest model that clears it per workload. Then "tune" a small private model on one workload and watch the routing table change. All data and models here are made up.</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>1 - Controls</h2>
+    <div class="row">
+      <div class="ctl"><label>Quality floor (pass rate) <b id="floorV">85%</b></label><input id="floor" type="range" min="50" max="99" value="85"></div>
+      <div class="ctl"><label>Monthly volume per workload <b id="volV">500k calls</b></label><input id="vol" type="range" min="10" max="2000" step="10" value="500"></div>
+      <div class="ctl"><label>Confidence</label>
+        <select id="conf"><option value="raw">Use raw pass rate</option><option value="lcb" selected>Use 90% lower bound (safer)</option></select></div>
+      <div><button id="run">Run evals</button> <button class="ghost" id="reset">Reset</button></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>2 - Eval matrix <span class="note" style="text-transform:none;letter-spacing:0">(click a cell to inspect its cases; green outline = routed choice)</span></h2>
+    <table id="matrix"></table>
+    <div class="note" id="evalStatus">Evals not run yet. Press "Run evals".</div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>3 - Routing result</h2>
+      <div class="kpis">
+        <div class="kpi"><small>Routed cost / month</small><big id="kRoute">-</big></div>
+        <div class="kpi"><small>Always-best-model cost</small><big id="kBase">-</big></div>
+        <div class="kpi"><small>Savings</small><big id="kSave" class="good">-</big></div>
+      </div>
+      <table id="routes" style="margin-top:12px"></table>
+      <div class="note" id="routeNote"></div>
+    </section>
+    <section class="panel">
+      <h2>Case inspector</h2>
+      <div id="inspHead" class="note">Click a cell in the eval matrix.</div>
+      <div class="cases" id="cases"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>4 - Build a private model</h2>
+    <div class="row">
+      <div class="ctl"><label>Workload to tune on</label><select id="tuneW"></select></div>
+      <div class="ctl"><label>Training steps <b id="stepV">60</b></label><input id="steps" type="range" min="20" max="200" value="60"></div>
+      <div><button id="tune">Tune private model</button></div>
+    </div>
+    <canvas id="curve" width="1000" height="170" style="margin-top:12px"></canvas>
+    <div class="note" id="tuneNote">A small model is trained against this workload's own eval cases (reward = pass). It gets better on that workload, and only that one. Then re-run evals and see if the router adopts it.</div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Riften (YC S26). Not affiliated with Riften. Synthetic data only; no backend, no network requests.</footer>
+
+<script>
+(function(){
+"use strict";
+// ---------- deterministic RNG ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){return (r()+r()+r()+r()-2)/0.58}
+
+// ---------- synthetic world ----------
+var N=40;
+var WORKLOADS=[
+ {id:"sql",name:"Text to SQL",ktok:1.8,ex:["monthly revenue by region","users who churned after promo","top 5 SKUs by margin","join orders to refunds","cohort retention week 4","dedupe contacts by phone"]},
+ {id:"inv",name:"Invoice extraction",ktok:2.4,ex:["vendor name and total","line items with tax","due date from footer","currency from header","PO number in scan noise","multi-page totals"]},
+ {id:"tri",name:"Support triage",ktok:0.9,ex:["refund request, angry","login loop on mobile","billing double charge","feature question","outage report","spam vs real"]},
+ {id:"fix",name:"Backend bug fix",ktok:6.5,ex:["off-by-one in pager","race in job queue","null deref in webhook","wrong tz in cron","N+1 in list view","leaky file handle"]},
+ {id:"sum",name:"Meeting summary",ktok:3.2,ex:["standup, 6 people","incident review","sales call notes","design critique","all-hands Q&A","1:1 follow-ups"]}
+];
+// price = USD per 1M tokens (blended), lat = median seconds
+var BASE_MODELS=[
+ {id:"alder",name:"Alder-L",price:15,lat:4.1,skill:{sql:.93,inv:.92,tri:.95,fix:.88,sum:.94}},
+ {id:"birch",name:"Birch-M",price:4,lat:2.2,skill:{sql:.84,inv:.88,tri:.92,fix:.70,sum:.90}},
+ {id:"cedar",name:"Cedar-S",price:.9,lat:1.0,skill:{sql:.66,inv:.80,tri:.89,fix:.46,sum:.82}},
+ {id:"dune",name:"Dune-XS",price:.2,lat:.5,skill:{sql:.45,inv:.62,tri:.84,fix:.30,sum:.66}}
+];
+var cases={};   // cases[w][i]={t,d}
+WORKLOADS.forEach(function(w,wi){
+  var r=mulberry32(1000+wi*77); cases[w.id]=[];
+  for(var i=0;i<N;i++){
+    var d=(r()+r())/2*0.85+0.1; // difficulty .1-.95, bell-ish
+    cases[w.id].push({t:w.ex[i%w.ex.length]+" #"+(i+1),d:d});
+  }
+});
+
+var models=BASE_MODELS.slice();
+var results={};     // results[m][w]={pass:[bool],rate}
+var picked={};      // picked[w]=modelId
+var ran=false, tuning=false;
+
+function evalOne(m,w){
+  var r=mulberry32(hash(m.id+w.id)), out=[];
+  cases[w.id].forEach(function(c){
+    // pass when skill beats difficulty, with per-case noise
+    out.push(m.skill[w.id]-c.d*0.62+gauss(r)*0.09>0.33);
+  });
+  return out;
+}
+function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function lcb(p,n){ // Wilson lower bound, z=1.28 (90% one-sided)
+  var z=1.28,d=1+z*z/n;
+  return (p+z*z/(2*n)-z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n)))/d;
+}
+function score(rate){return $("conf").value==="lcb"?lcb(rate,N):rate}
+function costPerCall(m,w){return m.price*w.ktok/1000}  // USD
+function $(id){return document.getElementById(id)}
+function money(x){return x>=1000?"$"+(x/1000).toFixed(1)+"k":"$"+x.toFixed(x<10?2:0)}
+
+// ---------- rendering ----------
+function renderMatrix(){
+  var h="<tr><th>Workload</th>"+models.map(function(m){
+    return "<th>"+m.name+(m.priv?'<span class="tag priv">private</span>':"")+'<span class="tag">$'+m.price+"/M</span></th>"}).join("")+"</tr>";
+  WORKLOADS.forEach(function(w){
+    h+="<tr><td>"+w.name+"</td>";
+    models.forEach(function(m){
+      var x=results[m.id]&&results[m.id][w.id];
+      if(!x){h+='<td class="cell empty">-</td>';return}
+      var p=Math.round(x.rate*100), hue=Math.max(0,Math.min(130,(p-40)*2.2));
+      var sel=picked[w.id]===m.id?" pick":"";
+      h+='<td class="cell'+sel+'" data-m="'+m.id+'" data-w="'+w.id+'" style="background:hsl('+hue+',45%,22%)">'+p+"%</td>";
+    });
+    h+="</tr>";
+  });
+  $("matrix").innerHTML=h;
+}
+function route(){
+  var floor=$("floor").value/100, vol=$("vol").value*1000, rows="", tot=0, base=0, ok=true;
+  picked={};
+  WORKLOADS.forEach(function(w){
+    var best=null, top=null;
+    models.forEach(function(m){
+      var x=results[m.id][w.id], s=score(x.rate);
+      if(!top||s>top.s)top={m:m,s:s};
+      if(s>=floor&&(!best||costPerCall(m,w)<costPerCall(best.m,w)))best={m:m,s:s};
+    });
+    var met=!!best; if(!best){best=top;ok=false}
+    picked[w.id]=best.m.id;
+    var cost=costPerCall(best.m,w)*vol;
+    // baseline: the single most accurate model for the whole stack = highest mean rate
+    tot+=cost;
+    rows+="<tr><td>"+w.name+"</td><td>"+best.m.name+(best.m.priv?'<span class="tag priv">private</span>':"")+"</td><td>"+Math.round(results[best.m.id][w.id].rate*100)+'%</td><td class="'+(met?"":"bad")+'">'+(met?money(cost):"floor missed")+"</td></tr>";
+  });
+  var bm=models.slice().sort(function(a,b){return mean(b)-mean(a)})[0];
+  WORKLOADS.forEach(function(w){base+=costPerCall(bm,w)*vol});
+  $("routes").innerHTML="<tr><th>Workload</th><th>Routed to</th><th>Pass</th><th>Cost/mo</th></tr>"+rows;
+  $("kRoute").textContent=money(tot);
+  $("kBase").textContent=money(base);
+  var sv=base>0?Math.round((1-tot/base)*100):0;
+  $("kSave").textContent=sv+"%"; $("kSave").className=sv>=0?"good":"warn";
+  $("routeNote").textContent="Baseline = send everything to "+bm.name+" (best mean pass rate). "+(ok?"Every workload clears the floor.":"Red rows: no model clears the floor; showing the best available.");
+  renderMatrix();
+}
+function mean(m){var s=0;WORKLOADS.forEach(function(w){s+=results[m.id][w.id].rate});return s/WORKLOADS.length}
+
+function inspect(mid,wid){
+  var m=models.filter(function(x){return x.id===mid})[0], w=WORKLOADS.filter(function(x){return x.id===wid})[0];
+  var x=results[mid][wid], f=0;
+  $("inspHead").innerHTML="<b>"+m.name+"</b> on <b>"+w.name+"</b>: "+x.pass.filter(Boolean).length+"/"+N+" passed, 90% lower bound "+Math.round(lcb(x.rate,N)*100)+"%";
+  $("cases").innerHTML=cases[wid].map(function(c,i){
+    var ok=x.pass[i];
+    return '<div><span class="dot" style="background:'+(ok?"var(--acc)":"var(--bad)")+'"></span><span style="flex:1">'+c.t+'</span><span style="color:var(--mut)">hardness '+c.d.toFixed(2)+"</span></div>";
+  }).join("");
+}
+
+// ---------- run evals (animated) ----------
+function runEvals(){
+  if(tuning)return;
+  $("run").disabled=true; ran=false; results={}; picked={};
+  var jobs=[]; models.forEach(function(m){WORKLOADS.forEach(function(w){jobs.push([m,w])})});
+  var k=0; $("evalStatus").textContent="Running 0/"+jobs.length+" eval suites...";
+  var t=setInterval(function(){
+    for(var j=0;j<3&&k<jobs.length;j++,k++){
+      var m=jobs[k][0], w=jobs[k][1], p=evalOne(m,w);
+      (results[m.id]=results[m.id]||{})[w.id]={pass:p,rate:p.filter(Boolean).length/N};
+    }
+    $("evalStatus").textContent="Running "+k+"/"+jobs.length+" eval suites...";
+    if(k>=jobs.length){
+      clearInterval(t); ran=true; $("run").disabled=false;
+      $("evalStatus").textContent=jobs.length+" suites x "+N+" cases = "+(jobs.length*N)+" graded calls. Move the sliders: routing updates live.";
+      route();
+    } else partial();
+  },50);
+}
+function partial(){ // show cells as they arrive
+  var h="<tr><th>Workload</th>"+models.map(function(m){return "<th>"+m.name+"</th>"}).join("")+"</tr>";
+  WORKLOADS.forEach(function(w){
+    h+="<tr><td>"+w.name+"</td>"+models.map(function(m){
+      var x=results[m.id]&&results[m.id][w.id];
+      return x?'<td class="cell">'+Math.round(x.rate*100)+"%</td>":'<td class="cell empty">...</td>';
+    }).join("")+"</tr>";
+  });
+  $("matrix").innerHTML=h;
+}
+
+// ---------- private model "training" ----------
+function tune(){
+  if(tuning)return;
+  var wid=$("tuneW").value, steps=+$("steps").value;
+  if(models.some(function(m){return m.priv&&m.target===wid})){$("tuneNote").textContent="A private model for this workload already exists. Reset to start over.";return}
+  tuning=true; $("tune").disabled=true; $("run").disabled=true;
+  var r=mulberry32(hash("tune"+wid)), curve=[], reward=0.30, step=0;
+  var strongest=Math.max.apply(null,BASE_MODELS.map(function(m){return m.skill[wid]}));
+  var ceiling=Math.min(.96,strongest+.03), cs=document.getElementById("curve");
+  var t=setInterval(function(){
+    step++;
+    reward+= (ceiling-reward)*(3.2/steps)*(0.7+r()*0.6);   // saturating improvement
+    curve.push(Math.min(ceiling,reward)+ (r()-.5)*0.03);
+    drawCurve(cs,curve,steps,ceiling);
+    $("tuneNote").textContent="step "+step+"/"+steps+"  mean reward "+curve[curve.length-1].toFixed(2);
+    if(step>=steps){
+      clearInterval(t); tuning=false; $("tune").disabled=false; $("run").disabled=false;
+      var sk={}; WORKLOADS.forEach(function(w){sk[w.id]=w.id===wid?ceiling:Math.max(.2,BASE_MODELS[3].skill[w.id]-.12)});
+      models.push({id:"priv-"+wid,name:"Private-S",price:.35,lat:.6,skill:sk,priv:true,target:wid});
+      $("tuneNote").textContent="Done. Private-S reaches ~"+Math.round(ceiling*100)+"% skill on "+WORKLOADS.filter(function(w){return w.id===wid})[0].name+" at $0.35/M, and is poor elsewhere. Press \"Run evals\" to re-grade and re-route.";
+      results={}; picked={}; ran=false; renderMatrix();
+      $("evalStatus").textContent="Model list changed. Re-run evals.";
+    }
+  },30);
+}
+function drawCurve(cv,c,steps,ceil){
+  var g=cv.getContext("2d"), W=cv.width, H=cv.height; g.clearRect(0,0,W,H);
+  g.strokeStyle="#272c36"; g.fillStyle="#8b93a3"; g.font="11px sans-serif";
+  for(var i=0;i<=4;i++){var y=H-20-i*(H-34)/4; g.beginPath();g.moveTo(34,y);g.lineTo(W-8,y);g.stroke(); g.fillText((i*25)+"%",2,y+4)}
+  var yy=function(v){return H-20-v*(H-34)}, xx=function(i){return 34+i*(W-44)/(steps-1)};
+  g.setLineDash([4,4]);g.strokeStyle="#f0b36b";g.beginPath();g.moveTo(34,yy(ceil));g.lineTo(W-8,yy(ceil));g.stroke();g.setLineDash([]);
+  g.fillStyle="#f0b36b";g.fillText("best general model",W-120,yy(ceil)-4);
+  g.strokeStyle="#7dd3a8";g.lineWidth=2;g.beginPath();
+  c.forEach(function(v,i){i?g.lineTo(xx(i),yy(v)):g.moveTo(xx(i),yy(v))});g.stroke();g.lineWidth=1;
+  g.fillStyle="#8b93a3";g.fillText("training step ->",W/2-30,H-4);
+}
+
+// ---------- wiring ----------
+WORKLOADS.forEach(function(w){var o=document.createElement("option");o.value=w.id;o.textContent=w.name;$("tuneW").appendChild(o)});
+function sync(){
+  $("floorV").textContent=$("floor").value+"%";
+  $("volV").textContent=$("vol").value+"k calls";
+  $("stepV").textContent=$("steps").value;
+  if(ran)route();
+}
+["floor","vol","conf","steps"].forEach(function(id){$(id).addEventListener("input",sync)});
+$("run").addEventListener("click",runEvals);
+$("tune").addEventListener("click",tune);
+$("reset").addEventListener("click",function(){
+  if(tuning)return;
+  models=BASE_MODELS.slice(); results={}; picked={}; ran=false;
+  $("evalStatus").textContent="Evals not run yet. Press \"Run evals\".";
+  $("routes").innerHTML=""; $("kRoute").textContent=$("kBase").textContent=$("kSave").textContent="-";
+  $("routeNote").textContent=""; $("cases").innerHTML=""; $("inspHead").textContent="Click a cell in the eval matrix.";
+  $("tuneNote").textContent="A small model is trained against this workload's own eval cases (reward = pass). It gets better on that workload, and only that one. Then re-run evals and see if the router adopts it.";
+  var cv=$("curve"); cv.getContext("2d").clearRect(0,0,cv.width,cv.height);
+  renderMatrix();
+});
+$("matrix").addEventListener("click",function(e){
+  var td=e.target.closest("td.cell"); if(td&&td.dataset.m)inspect(td.dataset.m,td.dataset.w);
+});
+// initial empty matrix
+(function(){
+  var h="<tr><th>Workload</th>"+models.map(function(m){return "<th>"+m.name+'<span class="tag">$'+m.price+"/M</span></th>"}).join("")+"</tr>";
+  WORKLOADS.forEach(function(w){h+="<tr><td>"+w.name+"</td>"+models.map(function(){return '<td class="cell empty">-</td>'}).join("")+"</tr>"});
+  $("matrix").innerHTML=h;
+})();
+runEvals();
+})();
+</script>
+</body>
+</html>
