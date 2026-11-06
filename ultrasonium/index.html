@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heat-aware deposition controller - toy demo</title>
+<style>
+:root{--bg:#14161a;--panel:#1d2026;--line:#2d323b;--ink:#e6e8ec;--dim:#8a919e;--ok:#5fd0b8;--bad:#ff5d6c;--flash:#f2b84b;--hot:#ff7a45}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 24px 8px;max-width:1100px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:.2px}
+header p{margin:0;color:var(--dim);max-width:760px}
+main{max-width:1100px;margin:0 auto;padding:12px 24px 24px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stage{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cv h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:600}
+canvas{width:100%;aspect-ratio:1;image-rendering:pixelated;background:#0d0f12;border-radius:6px;display:block}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.stat{background:#171a1f;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
+.bar{height:6px;background:#0d0f12;border-radius:3px;margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--ok)}
+label{display:block;margin:12px 0 4px;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
+select,input[type=range]{width:100%}
+select{background:#171a1f;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;border:0;background:#171a1f;color:var(--dim);padding:8px;cursor:pointer;font:inherit}
+.seg button.on{background:var(--ok);color:#06231d;font-weight:600}
+.row{display:flex;gap:8px;margin-top:14px}
+.btn{flex:1;border:1px solid var(--line);background:#262b33;color:var(--ink);padding:9px;border-radius:6px;cursor:pointer;font:inherit}
+.btn.main{background:var(--hot);border-color:var(--hot);color:#2a0f04;font-weight:700}
+.btn:hover{filter:brightness(1.12)}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:600}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--dim)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.note{font-size:12px;color:var(--dim);margin-top:10px}
+footer{max-width:1100px;margin:0 auto;padding:6px 24px 28px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+footer p{margin:14px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Heat-aware deposition controller</h1>
+  <p>A toy model of one idea: building a part from solid feedstock is a control problem. Heat accumulates, thin features cook, and a fixed recipe drifts. Pick a part, then compare a fixed recipe against a controller that reads the heat field and corrects power cell by cell.</p>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <div class="stage">
+        <div class="cv"><h3 id="tA">Result</h3><canvas id="cv" width="64" height="64"></canvas></div>
+        <div class="cv"><h3>Target and heat field</h3><canvas id="cvT" width="64" height="64"></canvas></div>
+      </div>
+      <div class="bar"><i id="prog"></i></div>
+      <div class="stats">
+        <div class="stat"><b id="sFid">-</b><span>Fidelity</span></div>
+        <div class="stat"><b id="sVoid">0</b><span>Voids</span></div>
+        <div class="stat"><b id="sFlash">0</b><span>Flash</span></div>
+        <div class="stat"><b id="sPeak">0</b><span>Peak heat</span></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--ok)"></i>on target</span>
+        <span><i style="background:var(--bad)"></i>void (under-melted)</span>
+        <span><i style="background:var(--flash)"></i>flash (over-melted spill)</span>
+        <span><i style="background:#3a2118"></i>hot zone</span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <strong>Run log</strong> <span class="note">(same seed per row, so rows are comparable)</span>
+      <table><thead><tr><th>#</th><th>Part</th><th>Mode</th><th>Noise</th><th>Fidelity</th><th>Voids</th><th>Flash</th></tr></thead><tbody id="log"></tbody></table>
+    </div>
+  </section>
+  <aside class="card">
+    <label style="margin-top:0">Part cross-section</label>
+    <select id="part">
+      <option value="lattice">Lattice with thin ribs</option>
+      <option value="channels">Cooling channels</option>
+      <option value="bracket">Solid bracket with holes</option>
+      <option value="spiral">Spiral manifold</option>
+    </select>
+    <label>Controller</label>
+    <div class="seg" id="mode"><button data-m="open">Fixed recipe</button><button data-m="loop" class="on">Closed loop</button></div>
+    <label>Process disturbance <span id="vN">0.35</span></label>
+    <input type="range" id="noise" min="0" max="1" step="0.05" value="0.35">
+    <label>Feedback gain <span id="vG">0.60</span></label>
+    <input type="range" id="gain" min="0" max="1.2" step="0.05" value="0.6">
+    <label>Geometry feedforward</label>
+    <div class="seg" id="ff"><button data-f="0">Off</button><button data-f="1" class="on">On</button></div>
+    <label>Seed <span id="vS">7</span></label>
+    <input type="range" id="seed" min="1" max="99" step="1" value="7">
+    <div class="row"><button class="btn main" id="run">Run</button><button class="btn" id="reset">Reset</button></div>
+    <div class="row"><button class="btn" id="cmp">Compare both</button></div>
+    <p class="note">Each cell of the part is filled in raster order. The melt a cell receives is power times a heat-dependent gain, plus drift and noise. Too little leaves a void. Too much spills into neighboring empty cells. The controller estimates heat from a noisy sensor and trims power. Everything here is synthetic.</p>
+  </aside>
+</main>
+<footer>
+  <p>Independent demo built by Aarush Kandukoori, inspired by Ultrasonium (YC S26). Not affiliated with Ultrasonium.</p>
+</footer>
+<script>
+(function(){
+"use strict";
+const N=64, $=id=>document.getElementById(id);
+const cv=$("cv").getContext("2d"), cvT=$("cvT").getContext("2d");
+let mode="loop", ff=1, target=null, order=[], state=null, raf=0, runId=0;
+
+// seeded RNG so runs are repeatable and comparable
+function rng(seed){let s=seed*2654435761>>>0;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};}
+function gauss(r){let u=0,v=0;while(!u)u=r();v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+// ---------- target geometries ----------
+function makePart(name){
+  const t=new Uint8Array(N*N);
+  const set=(x,y)=>{if(x>=0&&y>=0&&x<N&&y<N)t[y*N+x]=1;};
+  const rect=(x0,y0,x1,y1)=>{for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)set(x,y);};
+  if(name==="lattice"){
+    rect(4,4,59,6);rect(4,57,59,59);rect(4,4,6,59);rect(57,4,59,59);
+    for(let i=-60;i<60;i+=14)for(let k=0;k<64;k++){set(k,k+i);set(k+1,k+i);set(k,63-k+i+0);}
+  }else if(name==="channels"){
+    rect(4,4,59,59);
+    for(let c=0;c<5;c++){const y=12+c*10;for(let x=10;x<54;x++){for(let dy=0;dy<4;dy++)if(!(c%2&&x>50))t[(y+dy)*N+x]=0;}}
+    for(let c=0;c<4;c++){const x=(c%2)?10:50;for(let y=12+c*10;y<26+c*10;y++)for(let dx=0;dx<4;dx++)t[y*N+x+dx]=0;}
+  }else if(name==="bracket"){
+    rect(6,10,57,53);
+    const hole=(cx,cy,r)=>{for(let y=-r;y<=r;y++)for(let x=-r;x<=r;x++)if(x*x+y*y<=r*r)t[(cy+y)*N+cx+x]=0;};
+    hole(16,22,5);hole(48,22,5);hole(16,41,5);hole(48,41,5);hole(32,32,8);
+  }else{
+    const cx=31.5,cy=31.5;
+    for(let a=0;a<30;a+=.01){const r=3+a*1.55;for(let w=0;w<2.4;w+=.6){const rr=r+w;set(Math.round(cx+rr*Math.cos(a)),Math.round(cy+rr*Math.sin(a)));}}
+  }
+  return t;
+}
+function rasterOrder(t){ // boustrophedon over target cells only
+  const o=[];
+  for(let y=0;y<N;y++){const row=[];for(let x=0;x<N;x++)if(t[y*N+x])row.push(y*N+x);if(y%2)row.reverse();o.push(...row);}
+  return o;
+}
+function neighbors(t,i){ // count of target cells in 5x5 window: low = thin feature, heat cannot escape
+  const x=i%N,y=(i/N)|0;let c=0;
+  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const xx=x+dx,yy=y+dy;if(xx>=0&&yy>=0&&xx<N&&yy<N)c+=t[yy*N+xx];}
+  return c; // 1..25
+}
+
+// ---------- simulation ----------
+function newState(){
+  const seed=+$("seed").value, r=rng(seed);
+  return {r,step:0,cells:new Uint8Array(N*N),heat:new Float32Array(N*N),
+    tmp:new Float32Array(N*N),pPrev:1,eInt:0,void:0,flash:0,good:0,peak:0,
+    phase:r()*6.28,noise:+$("noise").value,gain:+$("gain").value,mode,ff,done:false};
+}
+function stepCell(S){
+  const i=order[S.step++], x=i%N, y=(i/N)|0;
+  // slow drift (feedstock lot variation) plus random disturbance
+  const drift=0.18*S.noise*Math.sin(S.step/260+S.phase);
+  const rand=0.22*S.noise*gauss(S.r);
+  // true local heat includes the thin-feature effect: little neighbor mass => heat stays
+  const nb=neighbors(target,i);
+  const trapped=1+ (1-nb/25)*0.9;
+  const heatHere=S.heat[i]*trapped;
+  let p=1;
+  if(S.mode==="loop"){
+    const sensed=S.heat[i]+0.05*gauss(S.r);         // surface pyrometer: cannot see heat trapped in thin ribs
+    if(S.ff) p*=1/(1+0.4*(trapped-1));              // feedforward from geometry fills that blind spot
+    p*=1/(1+0.55*Math.max(0,sensed));               // reactive heat compensation
+    S.eInt+= (S.lastErr||0);                         // integral of recent melt error
+    p-=S.gain*0.35*(S.lastErr||0)+S.gain*0.02*S.eInt;
+    S.eInt*=0.97;
+    p=Math.min(1.6,Math.max(0.2,p));
+  }
+  const melt=p*(1+0.55*heatHere)+drift+rand;
+  S.lastErr=melt-1;
+  S.heat[i]+=0.16*p;
+  if(S.heat[i]>S.peak)S.peak=S.heat[i];
+  if(melt<0.72){S.cells[i]=2;S.void++;}
+  else{
+    S.cells[i]=1;S.good++;
+    if(melt>1.28){ // spill into empty non-target neighbors
+      const spill=Math.min(4,Math.round((melt-1.28)*9)+1);
+      const d=[[1,0],[-1,0],[0,1],[0,-1]];
+      for(let k=0;k<spill;k++){const q=d[(S.r()*4)|0],xx=x+q[0],yy=y+q[1];
+        if(xx>=0&&yy>=0&&xx<N&&yy<N&&!target[yy*N+xx]&&S.cells[yy*N+xx]===0){S.cells[yy*N+xx]=3;S.flash++;}}
+    }
+  }
+  if(S.step>=order.length)S.done=true;
+}
+function diffuse(S,times){ // heat conduction and cooling, once per animation tick
+  for(let n=0;n<times;n++){
+    const h=S.heat,t=S.tmp;
+    for(let y=1;y<N-1;y++)for(let x=1;x<N-1;x++){const i=y*N+x;
+      t[i]=(h[i]*4+h[i-1]+h[i+1]+h[i-N]+h[i+N])/8*0.985;}
+    h.set(t);
+  }
+}
+
+// ---------- drawing ----------
+function drawResult(S){
+  const img=cv.createImageData(N,N), d=img.data;
+  for(let i=0;i<N*N;i++){
+    let c=[13,15,18];
+    const v=S.cells[i];
+    if(v===1)c=[95,208,184];
+    else if(v===2)c=[255,93,108];
+    else if(v===3)c=[242,184,75];
+    else if(target[i])c=[38,42,50];
+    d[i*4]=c[0];d[i*4+1]=c[1];d[i*4+2]=c[2];d[i*4+3]=255;
+  }
+  cv.putImageData(img,0,0);
+  const hx=order[Math.min(S.step,order.length-1)];
+  if(!S.done){cv.fillStyle="#fff";cv.fillRect(hx%N-1,((hx/N)|0)-1,3,3);}
+}
+function drawTarget(S){
+  const img=cvT.createImageData(N,N), d=img.data;
+  for(let i=0;i<N*N;i++){
+    const h=S?Math.min(1,S.heat[i]*0.9):0;
+    let r=13,g=15,b=18;
+    if(target[i]){r=48;g=54;b=64;}
+    r=Math.min(255,r+h*230);g=Math.min(255,g+h*70*(target[i]?1:.5));b=Math.min(255,b+h*20);
+    d[i*4]=r;d[i*4+1]=g;d[i*4+2]=b;d[i*4+3]=255;
+  }
+  cvT.putImageData(img,0,0);
+}
+function stats(S){
+  const n=order.length, fid=S.step?S.good/(S.step)*(1-Math.min(1,S.flash/n)):0;
+  S.fid=Math.max(0,fid);
+  $("sFid").textContent=S.step?(S.fid*100).toFixed(1)+"%":"-";
+  $("sVoid").textContent=S.void;$("sFlash").textContent=S.flash;
+  $("sPeak").textContent=S.peak.toFixed(2);
+  $("prog").style.width=(S.step/n*100)+"%";
+  $("tA").textContent=(S.mode==="loop"?"Closed loop":"Fixed recipe")+(S.done?" - finished":"");
+}
+
+// ---------- control flow ----------
+function prepare(){
+  cancelAnimationFrame(raf);runId++;
+  target=makePart($("part").value);order=rasterOrder(target);
+  state=newState();drawResult(state);drawTarget(state);stats(state);
+  $("run").textContent="Run";
+}
+function addLog(S){
+  const tr=document.createElement("tr"), part=$("part").selectedOptions[0].textContent;
+  tr.innerHTML="<td>"+(++addLog.n)+"</td><td>"+part+"</td><td>"+(S.mode==="loop"?"Closed loop"+(S.ff?" + FF":""):"Fixed")+"</td><td>"+S.noise.toFixed(2)+"</td><td>"+(S.fid*100).toFixed(1)+"%</td><td>"+S.void+"</td><td>"+S.flash+"</td>";
+  $("log").prepend(tr);
+}
+addLog.n=0;
+function run(){
+  if(state.done)prepare();
+  cancelAnimationFrame(raf);const my=++runId;
+  $("run").textContent="Running...";
+  (function tick(){
+    if(my!==runId)return;
+    for(let k=0;k<28&&!state.done;k++)stepCell(state);
+    diffuse(state,1);drawResult(state);drawTarget(state);stats(state);
+    if(state.done){$("run").textContent="Run again";addLog(state);return;}
+    raf=requestAnimationFrame(tick);
+  })();
+}
+function instant(m){ // run silently to the end with a given mode
+  const keep=mode;mode=m;target=makePart($("part").value);order=rasterOrder(target);
+  const S=newState();mode=keep;
+  while(!S.done){for(let k=0;k<28&&!S.done;k++)stepCell(S);diffuse(S,1);}
+  stats(S);return S;
+}
+function compare(){
+  cancelAnimationFrame(raf);runId++;
+  const a=instant("open"), b=instant("loop");
+  [a,b].forEach(S=>{stats(S);addLog(S);});
+  state=b;drawResult(b);drawTarget(b);stats(b);$("run").textContent="Run again";
+}
+
+// ---------- wiring ----------
+function seg(id,attr,fn){
+  $(id).addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+    [...$(id).children].forEach(c=>c.classList.toggle("on",c===b));fn(b.dataset[attr]);prepare();});
+}
+seg("mode","m",v=>mode=v);
+seg("ff","f",v=>ff=+v);
+$("part").addEventListener("change",prepare);
+[["noise","vN"],["gain","vG"],["seed","vS"]].forEach(([i,o])=>$(i).addEventListener("input",()=>{
+  $(o).textContent=(+$(i).value).toFixed(i==="seed"?0:2);prepare();}));
+$("run").addEventListener("click",run);
+$("reset").addEventListener("click",prepare);
+$("cmp").addEventListener("click",compare);
+prepare();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rebuild &amp; Compare - a toy verifiable-deploy demo</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d1b17;--mute:#6b665b;--line:#d8d2c3;--card:#fffdf8;--ok:#1f7a4d;--bad:#b3261e;--acc:#3b4cca;--warn:#a86a00;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 24px 8px;max-width:1180px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+header p{margin:0;color:var(--mute);max-width:820px}
+.how{max-width:1180px;margin:14px auto 0;padding:0 24px;display:flex;gap:10px;flex-wrap:wrap}
+.how span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--mute)}
+.how b{color:var(--ink)}
+main{max-width:1180px;margin:18px auto;padding:0 24px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+section h2{margin:0 0 2px;font-size:16px;display:flex;align-items:center;gap:8px}
+section h2 i{font-style:normal;background:var(--ink);color:var(--card);border-radius:50%;width:22px;height:22px;display:inline-grid;place-items:center;font-size:12px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 12px}
+.tabs{display:flex;gap:4px;margin-bottom:-1px}
+.tab{font:13px var(--mono);padding:6px 10px;border:1px solid var(--line);border-bottom:none;border-radius:6px 6px 0 0;background:#efe9da;cursor:pointer;color:var(--mute)}
+.tab.on{background:#fff;color:var(--ink)}
+textarea{width:100%;height:170px;font:12.5px/1.45 var(--mono);border:1px solid var(--line);border-radius:0 6px 6px 6px;padding:10px;resize:vertical;background:#fff;color:var(--ink)}
+button{font:600 13px system-ui;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:7px 13px;border-radius:7px;cursor:pointer}
+button:hover{opacity:.88}
+button.ghost{background:transparent;color:var(--ink)}
+button.danger{background:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+select{font:13px var(--mono);padding:6px;border:1px solid var(--line);border-radius:6px;background:#fff}
+label.chk{font-size:13px;color:var(--mute);display:flex;gap:6px;align-items:center}
+.mono{font-family:var(--mono);font-size:12px}
+.hash{font-family:var(--mono);font-size:12px;word-break:break-all}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mute);font-weight:600}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
+.pill.ok{background:#dff3e8;color:var(--ok)}.pill.bad{background:#fbe0de;color:var(--bad)}.pill.mid{background:#fdeccd;color:var(--warn)}
+.commits{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.commit{display:flex;gap:8px;font-size:12px;font-family:var(--mono);padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.commit span:last-child{color:var(--mute);margin-left:auto}
+.steps{list-style:none;padding:0;margin:10px 0 0}
+.steps li{display:flex;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.steps li .ic{width:20px;flex:none;font-weight:700}
+.steps li small{display:block;color:var(--mute);font-family:var(--mono);font-size:11.5px;word-break:break-all}
+.verdict{margin-top:12px;padding:12px;border-radius:8px;font-weight:600;font-size:14px}
+.verdict.ok{background:#dff3e8;color:var(--ok)}.verdict.bad{background:#fbe0de;color:var(--bad)}
+.state{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+.dot{width:10px;height:10px;border-radius:50%;background:#bbb}.dot.live{background:var(--ok);box-shadow:0 0 0 4px #dff3e8}.dot.evil{background:var(--bad);box-shadow:0 0 0 4px #fbe0de}
+.full{grid-column:1/-1}
+.log{font:12px/1.5 var(--mono);background:#1d1b17;color:#d9d3c2;border-radius:8px;padding:10px;height:120px;overflow:auto;white-space:pre-wrap}
+.diffl{font:12px var(--mono)}
+.diffl .m{color:var(--bad)}
+footer{max-width:1180px;margin:24px auto 40px;padding:0 24px;color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+.note{font-size:12px;color:var(--mute);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Rebuild &amp; Compare</h1>
+  <p>A running enclave can prove it is running <em>some binary</em>. This toy shows the missing half: proving it is the binary that <em>this reviewed source</em> produces. Everything runs in your browser with synthetic data and a toy trust root.</p>
+</header>
+<div class="how">
+  <span><b>1</b> Edit and commit source</span>
+  <span><b>2</b> Build deterministically and deploy</span>
+  <span><b>3</b> Auditor rebuilds and checks the attestation</span>
+  <span><b>4</b> Play the malicious admin and watch it fail</span>
+</div>
+
+<main>
+  <section id="repo">
+    <h2><i>1</i> Source repository</h2>
+    <p class="sub">Edit any file, then commit. Commits are the "reviewed source" an auditor can point at.</p>
+    <div class="tabs" id="tabs"></div>
+    <textarea id="editor" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="commitBtn">Commit changes</button>
+      <button class="ghost" id="resetBtn">Discard edits</button>
+      <span class="mono" id="dirty"></span>
+    </div>
+    <div class="commits" id="commits"></div>
+  </section>
+
+  <section id="build">
+    <h2><i>2</i> Build &amp; deploy</h2>
+    <p class="sub">The builder hashes every input into layers, then hashes the layers into one image measurement.</p>
+    <div class="row">
+      <label class="mono">commit <select id="buildSel"></select></label>
+      <label class="chk"><input type="checkbox" id="nonrepro"> unpinned build (embeds build time)</label>
+    </div>
+    <div class="row">
+      <button id="deployBtn">Build &amp; deploy to enclave</button>
+      <button class="ghost" id="dryBtn">Build only (dry run)</button>
+    </div>
+    <div id="layers"></div>
+    <div class="note">Tip: build the same commit twice with the checkbox off and the measurement never changes. Turn it on and it changes every time, so nobody could ever reproduce it.</div>
+  </section>
+
+  <section id="encl">
+    <h2><i>3</i> Enclave host <span class="pill mid" style="margin-left:auto">operator view</span></h2>
+    <p class="sub">The operator controls the machine but not the hardware's signing key.</p>
+    <div class="state"><span class="dot" id="dot"></span><b id="stText">nothing deployed</b></div>
+    <div class="mono">running measurement</div>
+    <div class="hash" id="runHash">-</div>
+    <div class="row">
+      <button class="danger" id="tamperBtn" disabled>Swap a layer as admin</button>
+      <button class="ghost" id="restoreBtn" disabled>Redeploy clean</button>
+      <label class="chk"><input type="checkbox" id="replay"> replay a recorded attestation</label>
+    </div>
+    <div class="note">Swapping a layer changes what actually executes, so the hardware measures a different value. Replaying an old document tries to hide that.</div>
+  </section>
+
+  <section id="aud">
+    <h2><i>4</i> Auditor</h2>
+    <p class="sub">Trusts only the vendor root and the git commit. Never trusts the host.</p>
+    <div class="row">
+      <label class="mono">reviewed commit <select id="audSel"></select></label>
+      <button id="verifyBtn">Verify production</button>
+    </div>
+    <ol class="steps" id="steps"></ol>
+    <div id="verdict"></div>
+  </section>
+
+  <section class="full">
+    <h2>Event log</h2>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Caution (YC S26). Not affiliated with Caution.
+  <br>Toy crypto only: a hand-rolled SHA-256 and a keyed-hash "signature" stand in for real hardware attestation. All files, hashes and commits here are synthetic.
+</footer>
+
+<script>
+// ---------- SHA-256 (sync, so the whole demo is one file with zero dependencies) ----------
+const PR=[];for(let n=2;PR.length<64;n++){if(PR.every(p=>n%p))PR.push(n)}
+const frac=x=>Math.floor((x-Math.floor(x))*4294967296)>>>0;
+const K=PR.map(p=>frac(Math.cbrt(p))),H0=PR.slice(0,8).map(p=>frac(Math.sqrt(p)));
+const ror=(x,n)=>(x>>>n)|(x<<(32-n));
+function sha256(str){
+  const b=new TextEncoder().encode(str),l=b.length,n=((l+9+63)>>6)<<6,m=new Uint8Array(n);
+  m.set(b);m[l]=0x80;const dv=new DataView(m.buffer);
+  dv.setUint32(n-8,Math.floor(l*8/4294967296));dv.setUint32(n-4,(l*8)>>>0);
+  let h=H0.slice();const w=new Uint32Array(64);
+  for(let o=0;o<n;o+=64){
+    for(let i=0;i<16;i++)w[i]=dv.getUint32(o+i*4);
+    for(let i=16;i<64;i++){
+      const s0=ror(w[i-15],7)^ror(w[i-15],18)^(w[i-15]>>>3),s1=ror(w[i-2],17)^ror(w[i-2],19)^(w[i-2]>>>10);
+      w[i]=(w[i-16]+s0+w[i-7]+s1)|0;
+    }
+    let [a,b2,c,d,e,f,g,hh]=h;
+    for(let i=0;i<64;i++){
+      const t1=(hh+(ror(e,6)^ror(e,11)^ror(e,25))+((e&f)^(~e&g))+K[i]+w[i])|0;
+      const t2=((ror(a,2)^ror(a,13)^ror(a,22))+((a&b2)^(a&c)^(b2&c)))|0;
+      hh=g;g=f;f=e;e=(d+t1)|0;d=c;c=b2;b2=a;a=(t1+t2)|0;
+    }
+    h=h.map((x,i)=>(x+[a,b2,c,d,e,f,g,hh][i])|0);
+  }
+  return h.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');
+}
+const short=s=>s?s.slice(0,12)+'…'+s.slice(-6):'-';
+
+// ---------- Toy world state ----------
+const VENDOR_ROOT='toy-hardware-root-key';            // only the "chip" can use this; the operator cannot
+const sign=(msg)=>sha256(VENDOR_ROOT+'|'+msg);        // stand-in for the hardware signature
+const TOOLCHAIN='toolchain: compiler 1.91.0 pinned, base image digest pinned';
+const SEED={
+  'main.rs':`// approval service (synthetic)
+fn main() {
+    let policy = load("policy.toml");
+    serve(|req| {
+        if req.amount > policy.max_amount {
+            return deny("needs second approver");
+        }
+        sign_with_sealed_key(req)
+    });
+}
+`,
+  'policy.toml':`max_amount = 50000
+approvers  = 2
+log_level  = "info"
+allow_debug_shell = false
+`,
+  'Cargo.lock':`serde 1.0.210 sha=9f3a1c
+tokio 1.40.0  sha=a7710b
+ring  0.17.8  sha=44be02
+`
+};
+let commits=[],working={},cur='main.rs',enclave=null,recorded=null,counter=0;
+
+const $=id=>document.getElementById(id);
+function log(msg){const L=$('log');L.textContent+=msg+'\n';L.scrollTop=L.scrollHeight}
+
+// ---------- Deterministic builder ----------
+function build(files,opts={}){
+  const layers=Object.keys(files).sort().map(p=>({name:'src:'+p,hash:sha256(p+'\0'+files[p])}));
+  layers.push({name:'toolchain',hash:sha256(TOOLCHAIN)});
+  if(opts.unpinned)layers.push({name:'build-time',hash:sha256('t='+performance.now()+Math.random())});
+  const image=sha256(layers.map(l=>l.name+':'+l.hash).join('\n'));
+  return{layers,image};
+}
+const commitById=id=>commits.find(c=>c.id===id);
+
+// ---------- Repo UI ----------
+function addCommit(files,msg){
+  const id='c'+(++counter)+sha256(JSON.stringify(files)).slice(0,5);
+  commits.push({id,files:{...files},msg});
+  log(`git commit ${id}  "${msg}"`);refreshSelects();renderCommits();
+}
+function renderTabs(){
+  $('tabs').innerHTML='';
+  Object.keys(working).forEach(f=>{
+    const t=document.createElement('div');t.className='tab'+(f===cur?' on':'');t.textContent=f;
+    t.onclick=()=>{working[cur]=$('editor').value;cur=f;$('editor').value=working[f];renderTabs()};
+    $('tabs').appendChild(t);
+  });
+}
+function renderCommits(){
+  $('commits').innerHTML=commits.slice().reverse().map(c=>
+    `<div class="commit"><span>${c.id}</span><span>${c.msg}</span><span>${short(build(c.files).image).slice(0,10)}</span></div>`).join('');
+}
+function refreshSelects(){
+  for(const id of['buildSel','audSel']){
+    const s=$(id),prev=s.value;
+    s.innerHTML=commits.slice().reverse().map(c=>`<option value="${c.id}">${c.id} - ${c.msg}</option>`).join('');
+    if(prev&&commitById(prev)&&id==='audSel')s.value=prev;
+  }
+}
+function isDirty(){working[cur]=$('editor').value;const last=commits[commits.length-1].files;return Object.keys(working).some(k=>working[k]!==last[k])}
+function updDirty(){$('dirty').textContent=isDirty()?'uncommitted edits':'clean'}
+$('editor').oninput=updDirty;
+$('commitBtn').onclick=()=>{
+  if(!isDirty()){log('nothing to commit');return}
+  addCommit(working,'edit '+Object.keys(working).filter(k=>working[k]!==commits[commits.length-1].files[k]).join(', '));
+  updDirty();
+};
+$('resetBtn').onclick=()=>{working={...commits[commits.length-1].files};$('editor').value=working[cur];updDirty()};
+
+// ---------- Build / deploy UI ----------
+function showLayers(b,title,against){
+  $('layers').innerHTML=`<div class="mono" style="margin-top:8px">${title}</div>
+  <table><tr><th>layer</th><th>hash</th></tr>${b.layers.map(l=>{
+    const o=against&&against.layers.find(x=>x.name===l.name);
+    const bad=against&&(!o||o.hash!==l.hash);
+    return`<tr><td>${l.name}</td><td class="hash" ${bad?'style="color:var(--bad)"':''}>${short(l.hash)}</td></tr>`}).join('')}
+  <tr><td><b>image</b></td><td class="hash"><b>${short(b.image)}</b></td></tr></table>`;
+}
+$('dryBtn').onclick=()=>{
+  const c=commitById($('buildSel').value),b=build(c.files,{unpinned:$('nonrepro').checked});
+  showLayers(b,'dry run of '+c.id);log(`build ${c.id} -> ${short(b.image)}${$('nonrepro').checked?' (unpinned: time embedded)':''}`);
+};
+function deploy(commitId,unpinned){
+  const c=commitById(commitId),b=build(c.files,{unpinned});
+  enclave={commit:c.id,manifest:b,tampered:false};
+  recorded=attest('recorded-session-nonce');            // operator snapshots a good document for later replay
+  showLayers(b,'deployed '+c.id);
+  log(`deploy ${c.id}: enclave booted, measurement ${short(b.image)}${unpinned?' (unpinned build!)':''}`);
+  renderEnclave();
+}
+$('deployBtn').onclick=()=>deploy($('buildSel').value,$('nonrepro').checked);
+
+// ---------- Enclave ----------
+function attest(nonce){
+  if(!enclave)return null;
+  const pcr0=enclave.manifest.image;                       // measured from what is ACTUALLY running
+  return{pcr0,nonce,ts:Date.now(),sig:sign(pcr0+'|'+nonce)};
+}
+function renderEnclave(){
+  const e=enclave;
+  $('dot').className='dot'+(e?(e.tampered?' evil':' live'):'');
+  $('stText').textContent=e?(e.tampered?'running (admin swapped a layer)':'running '+e.commit):'nothing deployed';
+  $('runHash').textContent=e?e.manifest.image:'-';
+  $('tamperBtn').disabled=!e||e.tampered;$('restoreBtn').disabled=!e||!e.tampered;
+}
+$('tamperBtn').onclick=()=>{
+  const m=enclave.manifest,i=m.layers.findIndex(l=>l.name.startsWith('src:main'));
+  m.layers[i]={name:m.layers[i].name,hash:sha256('exfiltrate(sealed_key) // injected by admin')};
+  m.image=sha256(m.layers.map(l=>l.name+':'+l.hash).join('\n'));
+  enclave.tampered=true;renderEnclave();
+  log(`!! admin hot-swapped ${m.layers[i].name}; the enclave now measures ${short(m.image)}`);
+};
+$('restoreBtn').onclick=()=>deploy(enclave.commit,false);
+
+// ---------- Auditor ----------
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+$('verifyBtn').onclick=async()=>{
+  const btn=$('verifyBtn');btn.disabled=true;$('verdict').innerHTML='';$('steps').innerHTML='';
+  const add=(ok,t,d)=>{const li=document.createElement('li');
+    li.innerHTML=`<span class="ic" style="color:${ok?'var(--ok)':'var(--bad)'}">${ok?'✓':'✗'}</span><div>${t}<small>${d||''}</small></div>`;
+    $('steps').appendChild(li)};
+  let pass=true,c=commitById($('audSel').value);
+  const fail=()=>{pass=false};
+  if(!enclave){add(false,'Request attestation','no enclave is running');fail();finish();return}
+  const nonce=sha256(String(Math.random())).slice(0,16);
+  await sleep(250);add(true,'Auditor picks a fresh random nonce','nonce = '+nonce);
+  const doc=$('replay').checked&&recorded?recorded:attest(nonce);
+  await sleep(300);add(true,'Enclave returns attestation document',`pcr0 = ${short(doc.pcr0)}`);
+  await sleep(300);
+  const sigOk=sign(doc.pcr0+'|'+doc.nonce)===doc.sig;
+  add(sigOk,'Signature chains to the vendor root',sigOk?'signature valid':'signature invalid');if(!sigOk)fail();
+  await sleep(300);
+  const fresh=doc.nonce===nonce;
+  add(fresh,'Nonce matches this request (not a replay)',fresh?'fresh':`document carries nonce "${doc.nonce}", expected "${nonce}"`);if(!fresh)fail();
+  await sleep(300);
+  const rb=build(c.files);
+  add(true,`Rebuild ${c.id} from source with pinned toolchain`,`expected measurement = ${short(rb.image)}`);
+  await sleep(300);
+  const match=rb.image===doc.pcr0;
+  add(match,'Attested measurement equals rebuilt measurement',match?'identical, production runs exactly this source':`${short(doc.pcr0)}  !=  ${short(rb.image)}`);
+  if(!match){
+    fail();
+    const em=enclave.manifest;
+    const bad=rb.layers.filter(l=>{const o=em.layers.find(x=>x.name===l.name);return!o||o.hash!==l.hash}).map(l=>l.name);
+    em.layers.filter(l=>!rb.layers.find(x=>x.name===l.name)).forEach(l=>bad.push(l.name+' (extra)'));
+    showLayers(em,'host-reported layers (untrusted, shown only to explain the mismatch)',rb);
+    add(false,'Diagnosis (host-reported manifest, advisory only)',bad.length?'differs in: '+bad.join(', '):'layers agree but image differs');
+  }
+  finish();
+  function finish(){
+    $('verdict').innerHTML=pass
+      ?`<div class="verdict ok">VERIFIED - production matches the reviewed commit ${c?c.id:''}</div>`
+      :`<div class="verdict bad">REJECTED - do not trust this deployment</div>`;
+    log(`audit ${c?c.id:'-'}: ${pass?'VERIFIED':'REJECTED'}`);
+    btn.disabled=false;
+  }
+};
+
+// ---------- Boot ----------
+working={...SEED};
+addCommit(SEED,'initial reviewed release');
+$('editor').value=working[cur];renderTabs();updDirty();
+deploy(commits[0].id,false);
+log('Try: click Verify (passes). Then swap a layer as admin and verify again. Or edit policy.toml, commit, and audit that commit against the old deployment.');
+</script>
+</body>
+</html>

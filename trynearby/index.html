@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Block Party - toy neighborhood creator matcher</title>
+<style>
+:root{--bg:#14161c;--panel:#1c1f27;--line:#2c313d;--ink:#e9e6df;--mute:#8b909c;--hot:#ff8a3d;--ok:#6fd3a0;--cool:#7aa7ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+h1{margin:0;font-size:20px;letter-spacing:.3px}h1 span{color:var(--hot)}
+header p{margin:0;color:var(--mute);max-width:640px}
+main{display:grid;grid-template-columns:260px 1fr 340px;gap:14px;padding:14px 24px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute)}
+.rest{display:block;width:100%;text-align:left;background:none;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:9px 10px;margin-bottom:6px;cursor:pointer;font:inherit}
+.rest:hover{border-color:var(--mute)}.rest.on{border-color:var(--hot);background:#2a2018}
+.rest small{display:block;color:var(--mute)}
+.seg{display:flex;gap:6px;margin:6px 0 12px}
+.seg button{flex:1;padding:6px;border-radius:8px;border:1px solid var(--line);background:none;color:var(--ink);cursor:pointer}
+.seg button.on{background:var(--hot);color:#1a1006;border-color:var(--hot);font-weight:600}
+label.w{display:block;font-size:12px;color:var(--mute);margin-top:8px}
+label.w b{float:right;color:var(--ink);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--hot)}
+.btn{background:var(--hot);color:#1a1006;border:0;border-radius:9px;padding:9px 12px;font:inherit;font-weight:600;cursor:pointer;width:100%;margin-top:8px}
+.btn.alt{background:none;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.btn:hover{filter:brightness(1.1)}
+svg{width:100%;height:auto;display:block;background:#101319;border-radius:10px}
+.cal{display:grid;grid-template-columns:44px repeat(7,1fr);gap:4px;margin-top:6px}
+.cal div{min-height:42px;border-radius:6px;font-size:11px;padding:3px 4px}
+.hd{color:var(--mute);min-height:auto!important;text-align:center}
+.wk{color:var(--mute);display:flex;align-items:center}
+.cell{background:#171a21;border:1px dashed transparent;overflow:hidden}
+.cell.target{border-color:var(--mute);cursor:pointer}
+.cell.sel{border-color:var(--hot);background:#2a2018}
+.cell.done{background:#16301f;border:1px solid #2c5a3d}
+.cell.done b{color:var(--ok);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell:not(.target):not(.done){opacity:.45}
+.cand{
+  border:1px solid var(--line);
+  border-radius:9px;
+  padding:8px 10px;
+  margin-bottom:7px;
+}
+.cand.top{border-color:var(--ok)}
+.row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+}
+.score{font-weight:700;font-size:16px}
+.bar{
+  display:flex;
+  height:6px;
+  border-radius:3px;
+  overflow:hidden;
+  margin:6px 0 4px;
+  background:#10131a;
+}
+.bar i{display:block;height:100%}
+.tags{color:var(--mute);font-size:11px}
+.cand button{
+  background:none;
+  border:1px solid var(--ok);
+  color:var(--ok);
+  border-radius:7px;
+  padding:3px 9px;
+  cursor:pointer;
+  font:inherit;
+  font-size:12px;
+}
+.cand button:hover{background:var(--ok);color:#06150d}
+.legend{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:11px;
+  color:var(--mute);
+  margin-bottom:8px;
+}
+.legend i{
+  display:inline-block;
+  width:9px;
+  height:9px;
+  border-radius:2px;
+  margin-right:4px;
+}
+#log{
+  font:12px/1.5 ui-monospace,Menlo,monospace;
+  color:var(--mute);
+  max-height:130px;
+  overflow:auto;
+  margin-top:8px;
+}
+#log b{color:var(--ink);font-weight:500}
+.stats{
+  display:flex;
+  gap:18px;
+  margin:8px 0 2px;
+  flex-wrap:wrap;
+}
+.stats div{font-size:11px;color:var(--mute)}
+.stats strong{display:block;font-size:20px;color:var(--ink)}
+.btn:focus-visible,.rest:focus-visible,.cand button:focus-visible{
+  outline:2px solid var(--cool);
+  outline-offset:2px;
+}
+.cell.target:hover{border-color:var(--hot)}
+@media(max-width:600px){
+  main{padding:10px}
+  header{padding:14px 10px}
+  .cal div{font-size:9px;min-height:36px}
+}
+footer{padding:18px 24px 28px;color:var(--mute);font-size:12px;border-top:1px solid var(--line);margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Block <span>Party</span> - toy local creator matcher</h1>
+  <p>Pick a restaurant and a plan, then fill its month with nearby creators. The matcher scores distance, niche fit, engagement, reliability and rotation, and respects each creator's free days and weekly load. All data is synthetic.</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>1. Restaurant</h2>
+    <div id="rests"></div>
+    <h2 style="margin-top:14px">2. Monthly plan</h2>
+    <div class="seg" id="plan"></div>
+    <h2>3. Matcher weights</h2>
+    <div id="weights"></div>
+    <button class="btn" id="autoOne">Auto-book this month</button>
+    <button class="btn alt" id="autoAll">Auto-book all restaurants</button>
+    <button class="btn alt" id="reset">Reset</button>
+  </section>
+
+  <section class="panel">
+    <h2>Neighborhood map (orange ring = 45-block radius)</h2>
+    <svg id="map" viewBox="0 0 100 70" aria-label="map"></svg>
+    <div class="stats" id="stats"></div>
+    <h2 style="margin-top:12px">Month calendar - click a dashed day for ranked creators</h2>
+    <div class="cal" id="cal"></div>
+    <div id="log"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Ranked creators: <span id="slotLbl" style="color:var(--ink)"></span></h2>
+    <div class="legend"><span><i style="background:var(--cool)"></i>proximity</span><span><i style="background:var(--hot)"></i>niche</span><span><i style="background:var(--ok)"></i>engagement</span><span><i style="background:#c58bff"></i>reliability</span><span><i style="background:#e6d36a"></i>rotation</span></div>
+    <div id="cands"></div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by TryNearby (YC S26). Not affiliated with TryNearby.</footer>
+
+<script>
+// ---------- seeded synthetic data ----------
+let seed = 7;
+const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const CUISINES = ['tacos','ramen','bakery','bbq','vegan'];
+const RESTS = [
+  {id:0,name:'Casa Ladrillo',cuisine:'tacos',x:24,y:20},
+  {id:1,name:'Noodle Annex',cuisine:'ramen',x:70,y:18},
+  {id:2,name:'Flour & Fig',cuisine:'bakery',x:46,y:36},
+  {id:3,name:'Smokehouse 9',cuisine:'bbq',x:20,y:54},
+  {id:4,name:'Green Spoon',cuisine:'vegan',x:76,y:52}
+];
+const HANDLES = ['@mira.eats','@bitesbyjo','@dailydumpling','@sunnyplates','@forkandfilm','@hungry.hector','@tinytable','@oven.notes','@saucebossnia','@platewitch','@curbsidecrunch','@lena.lunches','@twobites.tv','@grub.grid','@kaleandkai','@seatforone','@brunchbandit','@noshnomad','@zesty.zed','@crumbclub','@pita.pilot','@salt.and.sam','@yumyard','@snackstack','@feastfeed','@dishdiaries','@lunchlore','@tastetrail'];
+const CREATORS = HANDLES.map((h,i)=>{
+  const n = 1 + Math.floor(rnd()*2);
+  const niches = [];
+  while(niches.length<n){ const c=CUISINES[Math.floor(rnd()*5)]; if(!niches.includes(c)) niches.push(c); }
+  const free = [];
+  for(let d=0;d<7;d++) if(rnd()<0.5) free.push(d);
+  if(!free.length) free.push(5);
+  return {id:i,handle:h,x:4+rnd()*92,y:4+rnd()*62,niches,free,
+    eng:+(2+rnd()*7).toFixed(1), followers:Math.round(1200+rnd()*38000),
+    rel:+(0.6+rnd()*0.4).toFixed(2)};
+});
+const PLANS = {4:[5], 8:[2,5], 12:[1,3,5]};
+const WEEKS = 4;
+
+// ---------- state ----------
+let S;
+function fresh(){ S = {rest:0, plan:8, slot:null, book:[], w:{prox:35,niche:25,eng:15,rel:10,rot:15}}; }
+fresh();
+
+// ---------- matcher ----------
+const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function weights(){
+  const t = Object.values(S.w).reduce((a,b)=>a+b,0) || 1;
+  const o = {}; for(const k in S.w) o[k] = S.w[k]/t; return o;
+}
+const visitsAt = (rid,cid)=>S.book.filter(b=>b.rid===rid&&b.cid===cid).length;
+const weekLoad = (cid,week)=>S.book.filter(b=>b.cid===cid&&b.week===week).length;
+const busy = (cid,week,day)=>S.book.some(b=>b.cid===cid&&b.week===week&&b.day===day);
+// hard constraints: creator is free that weekday, not already booked that day, max 2 visits/week
+const eligible = (c,week,day)=>c.free.includes(day) && !busy(c.id,week,day) && weekLoad(c.id,week)<2;
+function score(r,c){
+  const w = weights();
+  const p = Math.max(0,1-dist(r,c)/45);
+  const n = c.niches.includes(r.cuisine)?1:0.25;
+  const e = Math.min(1,c.eng/9);
+  const q = (c.rel-0.6)/0.4;
+  const t = 1-Math.min(1,visitsAt(r.id,c.id)*0.5);  // rotation: repeat visits to the same place score lower
+  const parts = {prox:p*w.prox,niche:n*w.niche,eng:e*w.eng,rel:q*w.rel,rot:t*w.rot};
+  return {total:Object.values(parts).reduce((a,b)=>a+b,0)*100,parts};
+}
+const rank = (r,week,day)=>CREATORS.filter(c=>eligible(c,week,day))
+  .map(c=>({c,s:score(r,c)})).sort((a,b)=>b.s.total-a.s.total);
+function targets(){
+  const out=[];
+  for(let w=0;w<WEEKS;w++) for(const d of PLANS[S.plan]) out.push({week:w,day:d});
+  return out;
+}
+const bookedAt = (rid,week,day)=>S.book.find(b=>b.rid===rid&&b.week===week&&b.day===day);
+function book(rid,cid,week,day,s){
+  S.book.push({rid,cid,week,day,score:s});
+  const r=RESTS[rid], c=CREATORS[cid];
+  log(`<b>${c.handle}</b> booked at <b>${r.name}</b>, wk${week+1} ${DAYS[day]} (score ${s.toFixed(0)}, ${dist(r,c).toFixed(0)} blocks)`);
+}
+function autoFill(rid){
+  let n=0;
+  for(const t of targets()){
+    if(bookedAt(rid,t.week,t.day)) continue;
+    const top = rank(RESTS[rid],t.week,t.day)[0];
+    if(top){ book(rid,top.c.id,t.week,t.day,top.s.total); n++; }
+    else log(`no eligible creator for ${RESTS[rid].name}, wk${t.week+1} ${DAYS[t.day]}`);
+  }
+  return n;
+}
+function log(h){
+  const d=document.createElement('div'); d.innerHTML=h;
+  document.getElementById('log').prepend(d);
+}
+
+// ---------- render ----------
+const $ = id=>document.getElementById(id);
+function renderSide(){
+  $('rests').innerHTML = RESTS.map(r=>`<button class="rest ${r.id===S.rest?'on':''}" data-id="${r.id}">${r.name}<small>${r.cuisine} - ${S.book.filter(b=>b.rid===r.id).length}/${targets().length} visits booked</small></button>`).join('');
+  $('rests').querySelectorAll('button').forEach(b=>b.onclick=()=>{S.rest=+b.dataset.id;S.slot=null;render();});
+  $('plan').innerHTML = [4,8,12].map(p=>`<button class="${p===S.plan?'on':''}" data-p="${p}">${p}/mo</button>`).join('');
+  $('plan').querySelectorAll('button').forEach(b=>b.onclick=()=>{S.plan=+b.dataset.p;S.slot=null;render();});
+}
+const WLAB = {prox:'Proximity',niche:'Niche fit',eng:'Engagement',rel:'Reliability',rot:'Rotation'};
+function renderWeights(){
+  $('weights').innerHTML = Object.keys(S.w).map(k=>`<label class="w">${WLAB[k]}<b>${S.w[k]}</b><input type="range" min="0" max="60" value="${S.w[k]}" data-k="${k}"></label>`).join('');
+  $('weights').querySelectorAll('input').forEach(i=>i.oninput=()=>{
+    S.w[i.dataset.k]=+i.value;
+    i.parentNode.querySelector('b').textContent=i.value;
+    renderCands(); renderStats();
+  });
+}
+function renderMap(top){
+  const r=RESTS[S.rest]; let h='';
+  for(let g=0;g<=100;g+=10) h+=`<line x1="${g}" y1="0" x2="${g}" y2="70" stroke="#1a1e27" stroke-width=".3"/>`;
+  for(let g=0;g<=70;g+=10) h+=`<line x1="0" y1="${g}" x2="100" y2="${g}" stroke="#1a1e27" stroke-width=".3"/>`;
+  h+=`<circle cx="${r.x}" cy="${r.y}" r="45" fill="#ff8a3d" opacity=".05" stroke="#ff8a3d" stroke-width=".25" stroke-dasharray="1.5 1.5"/>`;
+  S.book.filter(b=>b.rid===r.id).forEach(b=>{
+    const c=CREATORS[b.cid];
+    h+=`<line x1="${r.x}" y1="${r.y}" x2="${c.x}" y2="${c.y}" stroke="#6fd3a0" stroke-width=".35" opacity=".7"/>`;
+  });
+  CREATORS.forEach(c=>{
+    const isB=S.book.some(b=>b.rid===r.id&&b.cid===c.id), isT=top.includes(c.id);
+    const fill=isB?'#6fd3a0':isT?'#ff8a3d':'#5b6275';
+    h+=`<circle cx="${c.x}" cy="${c.y}" r="${isB||isT?1.7:1.1}" fill="${fill}"><title>${c.handle} - ${c.niches.join('/')} - ${c.followers.toLocaleString()} followers</title></circle>`;
+  });
+  RESTS.forEach(q=>{
+    h+=`<rect x="${q.x-2}" y="${q.y-2}" width="4" height="4" rx=".8" fill="${q.id===S.rest?'#ff8a3d':'#e9e6df'}" data-r="${q.id}" style="cursor:pointer"/><text x="${q.x+3}" y="${q.y+1}" font-size="2.6" fill="#e9e6df">${q.name}</text>`;
+  });
+  $('map').innerHTML=h;
+  $('map').querySelectorAll('rect').forEach(el=>el.onclick=()=>{S.rest=+el.dataset.r;S.slot=null;render();});
+}
+function renderCal(){
+  const r=RESTS[S.rest], T=targets();
+  let h='<div></div>'+DAYS.map(d=>`<div class="hd">${d}</div>`).join('');
+  for(let w=0;w<WEEKS;w++){
+    h+=`<div class="wk">Wk ${w+1}</div>`;
+    for(let d=0;d<7;d++){
+      const b=bookedAt(r.id,w,d), isT=T.some(t=>t.week===w&&t.day===d);
+      const sel=S.slot&&S.slot.week===w&&S.slot.day===d;
+      if(b) h+=`<div class="cell done"><b>${CREATORS[b.cid].handle}</b>${b.score.toFixed(0)} pts</div>`;
+      else h+=`<div class="cell ${isT?'target':''} ${sel?'sel':''}" data-w="${w}" data-d="${d}">${isT?'open':''}</div>`;
+    }
+  }
+  $('cal').innerHTML=h;
+  $('cal').querySelectorAll('.cell.target').forEach(el=>el.onclick=()=>{S.slot={week:+el.dataset.w,day:+el.dataset.d};render();});
+}
+function renderCands(){
+  const r=RESTS[S.rest];
+  if(!S.slot) S.slot = targets().find(t=>!bookedAt(r.id,t.week,t.day)) || null;
+  if(!S.slot){
+    $('slotLbl').textContent=r.name+' - month full';
+    $('cands').innerHTML='<p class="tags">Every visit this month is booked. Change the plan or reset.</p>';
+    renderMap([]); return;
+  }
+  const {week,day}=S.slot;
+  $('slotLbl').textContent=`${r.name}, wk${week+1} ${DAYS[day]}`;
+  const list=rank(r,week,day);
+  const col={prox:'var(--cool)',niche:'var(--hot)',eng:'var(--ok)',rel:'#c58bff',rot:'#e6d36a'};
+  $('cands').innerHTML = list.length ? list.slice(0,6).map((x,i)=>`
+    <div class="cand ${i===0?'top':''}">
+      <div class="row"><span><b>${x.c.handle}</b> <span class="tags">${x.c.followers.toLocaleString()} followers</span></span><span class="score">${x.s.total.toFixed(0)}</span></div>
+      <div class="bar">${Object.keys(x.s.parts).map(k=>`<i style="width:${x.s.parts[k]*100}%;background:${col[k]}"></i>`).join('')}</div>
+      <div class="row"><span class="tags">${x.c.niches.join(', ')} - ${dist(r,x.c).toFixed(0)} blocks - ${x.c.eng}% eng - ${weekLoad(x.c.id,week)}/2 this wk</span><button data-c="${x.c.id}" data-s="${x.s.total}">Book</button></div>
+    </div>`).join('') : `<p class="tags">No creator is free on a ${DAYS[day]} with spare weekly capacity. Try another day or reset.</p>`;
+  $('cands').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    book(r.id,+b.dataset.c,week,day,+b.dataset.s); S.slot=null; render();
+  });
+  renderMap(list.slice(0,5).map(x=>x.c.id));
+}
+function renderStats(){
+  const mine=S.book.filter(b=>b.rid===S.rest);
+  const avg=mine.length?mine.reduce((a,b)=>a+b.score,0)/mine.length:0;
+  const uniq=new Set(mine.map(b=>b.cid)).size;
+  const reach=mine.reduce((a,b)=>a+CREATORS[b.cid].followers,0);
+  $('stats').innerHTML=`<div><strong>${mine.length}/${targets().length}</strong>visits booked</div><div><strong>${avg.toFixed(0)}</strong>avg match score</div><div><strong>${uniq}</strong>distinct creators</div><div><strong>${(reach/1000).toFixed(0)}k</strong>combined followers</div>`;
+}
+function render(){ renderSide(); renderCal(); renderCands(); renderStats(); }
+
+$('autoOne').onclick=()=>{const n=autoFill(S.rest);log(`auto-book ${RESTS[S.rest].name}: ${n} new bookings`);S.slot=null;render();};
+$('autoAll').onclick=()=>{let n=0;RESTS.forEach(r=>n+=autoFill(r.id));log(`auto-book network: ${n} bookings, creators shared across restaurants`);S.slot=null;render();};
+$('reset').onclick=()=>{const w=S.w;fresh();S.w=w;$('log').innerHTML='';render();};
+renderWeights(); render();
+log('ready - drag a weight and watch the ranking reorder');
+</script>
+</body>
+</html>
