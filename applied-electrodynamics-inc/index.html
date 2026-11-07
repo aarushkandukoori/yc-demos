@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Three-band wall scanner - toy demo</title>
+<style>
+  :root { --bg:#0e1116; --panel:#161b22; --line:#2a313b; --txt:#d8dee6; --dim:#8b95a3; --acc:#e8b04a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:22px 24px 6px; max-width:1100px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; letter-spacing:.2px; }
+  header p { margin:0; color:var(--dim); max-width:760px; }
+  main { max-width:1100px; margin:0 auto; padding:14px 24px 10px; display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:18px; }
+  @media (max-width:860px){ main { grid-template-columns:1fr; } }
+  .stage { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  canvas { width:100%; height:auto; display:block; border-radius:6px; cursor:crosshair; touch-action:none; background:#222; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; align-items:center; }
+  button { background:#232a34; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:7px 12px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:var(--acc); color:#1b1405; border-color:var(--acc); font-weight:600; }
+  aside { display:flex; flex-direction:column; gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:1.2px; color:var(--dim); margin:0 0 8px; font-weight:600; }
+  label { display:flex; align-items:center; gap:8px; margin:5px 0; }
+  .sw { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .row { display:flex; justify-content:space-between; color:var(--dim); font-size:13px; }
+  .meter { height:9px; background:#0b0e12; border-radius:5px; overflow:hidden; margin:3px 0 8px; }
+  .meter i { display:block; height:100%; width:0; transition:width .08s; }
+  #guess { font-size:17px; font-weight:600; min-height:24px; }
+  ul.found { list-style:none; padding:0; margin:0; }
+  ul.found li { padding:4px 0; border-bottom:1px dashed var(--line); color:var(--dim); display:flex; justify-content:space-between; }
+  ul.found li:last-child { border:0; }
+  ul.found li.on { color:var(--txt); }
+  ul.found li.on b { color:var(--acc); }
+  .note { color:var(--dim); font-size:13px; }
+  footer { max-width:1100px; margin:0 auto; padding:14px 24px 28px; color:var(--dim); font-size:13px; border-top:1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Three-band wall scanner <span style="color:var(--dim);font-weight:400">(toy model)</span></h1>
+  <p>Drag across the drywall to sweep a simulated sensor. Each band penetrates and resolves differently, and each material answers each band differently. Combine them to work out what is hiding behind the surface.</p>
+</header>
+
+<main>
+  <section class="stage">
+    <canvas id="cv" width="720" height="480"></canvas>
+    <div class="bar">
+      <button class="primary" id="sweep">Auto-sweep wall</button>
+      <button id="reset">Reset wall</button>
+      <button id="peek">Hold to peek at truth</button>
+      <span class="note" id="status">Drag to scan.</span>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Bands (false color)</h2>
+      <label><input type="checkbox" id="b0" checked><span class="sw" style="background:#e5484d"></span> Low, deep and blurry</label>
+      <label><input type="checkbox" id="b1" checked><span class="sw" style="background:#3ccf6e"></span> Mid, balanced</label>
+      <label><input type="checkbox" id="b2" checked><span class="sw" style="background:#4d8dff"></span> High, sharp but shallow</label>
+      <div class="row" style="margin-top:10px"><span>Depth slice</span><span id="dv">5.0 cm</span></div>
+      <input type="range" id="depth" min="0" max="12" step="0.5" value="5">
+      <div class="row"><span>Gain</span><span id="gv">1.0x</span></div>
+      <input type="range" id="gain" min="0.4" max="3" step="0.1" value="1.2">
+    </div>
+
+    <div class="card">
+      <h2>Probe under cursor</h2>
+      <div class="row"><span>Low</span><span id="v0">-</span></div><div class="meter"><i id="m0" style="background:#e5484d"></i></div>
+      <div class="row"><span>Mid</span><span id="v1">-</span></div><div class="meter"><i id="m1" style="background:#3ccf6e"></i></div>
+      <div class="row"><span>High</span><span id="v2">-</span></div><div class="meter"><i id="m2" style="background:#4d8dff"></i></div>
+      <div id="guess">Hover a scanned area</div>
+      <div class="note" id="conf"></div>
+    </div>
+
+    <div class="card">
+      <h2>Hidden in this wall</h2>
+      <ul class="found" id="found"></ul>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  Independent demo built by Aarush Kandukoori, inspired by Applied Electrodynamics, Inc. (YC S26). Not affiliated with Applied Electrodynamics, Inc.. All geometry, materials and signal physics here are invented and heavily simplified; nothing on this page is real sensor data.
+</footer>
+
+<script>
+(function(){
+  const W = 120, H = 80, CELL = 6;            // grid cells, canvas px per cell
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const off = document.createElement('canvas'); off.width = W; off.height = H;
+  const octx = off.getContext('2d');
+  const img = octx.createImageData(W, H);
+
+  // ---- physics-ish constants per band: [low, mid, high] ----
+  const ALPHA = [0.04, 0.11, 0.26];   // attenuation per cm of depth
+  const DEPTH_RES = [5.0, 3.4, 2.2];  // sigma of depth selectivity (cm)
+  const BLUR = [3, 2, 1];             // box-blur radius in cells (lateral resolution)
+
+  // material response to each band (invented)
+  const MAT = {
+    wood:   { name:'Wood stud',        sig:[0.55,0.30,0.12] },
+    copper: { name:'Copper pipe',      sig:[0.90,1.00,1.00] },
+    pvc:    { name:'Water-filled PVC', sig:[0.30,0.75,0.45] },
+    cable:  { name:'Electrical cable', sig:[0.30,0.45,0.90] },
+    box:    { name:'Metal junction box', sig:[1.00,0.85,0.70] }
+  };
+
+  // hidden objects: segment (x0,y0)-(x1,y1) in cells, half-width in cells, depth cm
+  const OBJ = [];
+  function seg(group, mat, x0,y0,x1,y1, hw, depth){ OBJ.push({group,mat,x0,y0,x1,y1,hw,depth}); }
+  [12,39,66,93].forEach(x => seg('studs','wood', x,0,x,H, 1.4, 6.5));
+  seg('copper','copper', 0,30,W,30, 1.1, 5.0);
+  seg('copper','copper', 52,30,52,H, 1.1, 5.0);
+  seg('drain','pvc', 80,0,80,H, 1.8, 4.0);
+  seg('cable','cable', 14,55,100,55, 0.7, 3.0);
+  seg('cable','cable', 104,55,104,10, 0.7, 3.0);
+  seg('box','box', 102,52,106,58, 2.2, 2.5);
+  const GROUPS = { studs:'Wooden studs', copper:'Copper supply line', drain:'PVC drain', cable:'Electrical cable run', box:'Junction box' };
+
+  function dist(px,py,o){
+    const dx=o.x1-o.x0, dy=o.y1-o.y0, l2=dx*dx+dy*dy||1;
+    let t=((px-o.x0)*dx+(py-o.y0)*dy)/l2; t=Math.max(0,Math.min(1,t));
+    return Math.hypot(px-(o.x0+t*dx), py-(o.y0+t*dy));
+  }
+  function boxBlur(src, r){
+    if(!r) return src;
+    const tmp=new Float32Array(W*H), out=new Float32Array(W*H), n=2*r+1;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){ let s=0; for(let k=-r;k<=r;k++){ s+=src[y*W+Math.min(W-1,Math.max(0,x+k))]; } tmp[y*W+x]=s/n; }
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){ let s=0; for(let k=-r;k<=r;k++){ s+=tmp[Math.min(H-1,Math.max(0,y+k))*W+x]; } out[y*W+x]=s/n; }
+    return out;
+  }
+  // coverage mask per object, blurred per band (the sensor's point-spread function)
+  OBJ.forEach(o=>{
+    const m=new Float32Array(W*H);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const d=dist(x+0.5,y+0.5,o); m[y*W+x]=d<=o.hw?1:Math.max(0,1-(d-o.hw)/0.8); }
+    o.mask=m; o.blur=[0,1,2].map(b=>boxBlur(m,BLUR[b]));
+  });
+
+  // seeded noise so the wall is the same every load
+  let seed=7; const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+  const noise=[0,1,2].map(()=>{ const a=new Float32Array(W*H); for(let i=0;i<a.length;i++) a[i]=rnd(); return a; });
+  const paper=new Float32Array(W*H); for(let i=0;i<paper.length;i++) paper[i]=rnd();
+
+  const scanned=new Uint8Array(W*H);
+  const bandOn=[true,true,true];
+  let slice=5, gain=1.2, peek=false, hover=-1;
+
+  // clean (noise-free) per-band signal at cell i for current depth slice
+  function bandSignal(b,i,withNoise){
+    let s=0;
+    for(const o of OBJ){
+      const v=o.blur[b][i]; if(v<0.002) continue;
+      const dz=o.depth-slice;
+      const w=0.2+0.8*Math.exp(-dz*dz/(2*DEPTH_RES[b]*DEPTH_RES[b]));
+      s+=MAT[o.mat].sig[b]*Math.exp(-ALPHA[b]*o.depth)*w*v;
+    }
+    // speckle noise grows with band frequency (weaker returns, more noise)
+    if(withNoise) s+=(noise[b][i]-0.5)*(0.10+0.07*b);
+    return Math.max(0,s);
+  }
+
+  function render(){
+    const d=img.data;
+    for(let i=0;i<W*H;i++){
+      const p=i*4;
+      if(peek){
+        let best=null,bv=0.3;
+        for(const o of OBJ){ if(o.mask[i]>bv){bv=o.mask[i];best=o;} }
+        if(best){ const c={wood:[190,140,80],copper:[220,120,70],pvc:[90,170,220],cable:[240,220,90],box:[200,200,210]}[best.mat]; d[p]=c[0];d[p+1]=c[1];d[p+2]=c[2]; }
+        else { d[p]=40;d[p+1]=44;d[p+2]=52; }
+        d[p+3]=255; continue;
+      }
+      if(!scanned[i]){
+        const n=(paper[i]-0.5)*14;
+        d[p]=212+n; d[p+1]=208+n; d[p+2]=198+n; d[p+3]=255; continue;
+      }
+      const rgb=[0,0,0];
+      for(let b=0;b<3;b++){ if(bandOn[b]) rgb[b]=Math.min(1,bandSignal(b,i,true)*gain*1.6); }
+      d[p]=14+rgb[0]*240; d[p+1]=17+rgb[1]*238; d[p+2]=22+rgb[2]*233; d[p+3]=255;
+    }
+    octx.putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(off,0,0,W*CELL,H*CELL);
+    // scale ticks
+    ctx.fillStyle='rgba(255,255,255,.55)'; ctx.font='11px ui-monospace,monospace';
+    ctx.fillText('1.8 m wide x 1.2 m tall (synthetic)',8,H*CELL-8);
+  }
+
+  // ---- scanning ----
+  function paint(cx,cy,r){
+    for(let y=Math.max(0,cy-r);y<=Math.min(H-1,cy+r);y++)
+      for(let x=Math.max(0,cx-r);x<=Math.min(W-1,cx+r);x++)
+        if((x-cx)**2+(y-cy)**2<=r*r) scanned[y*W+x]=1;
+  }
+  function cellAt(e){
+    const r=cv.getBoundingClientRect();
+    return [Math.floor((e.clientX-r.left)/r.width*W), Math.floor((e.clientY-r.top)/r.height*H)];
+  }
+  let down=false, last=null;
+  cv.addEventListener('pointerdown',e=>{ down=true; cv.setPointerCapture(e.pointerId); const [x,y]=cellAt(e); last=[x,y]; paint(x,y,7); update(); });
+  cv.addEventListener('pointerup',()=>{ down=false; last=null; });
+  cv.addEventListener('pointermove',e=>{
+    const [x,y]=cellAt(e);
+    hover=(x>=0&&x<W&&y>=0&&y<H)?y*W+x:-1;
+    if(down&&last){ // interpolate so fast drags leave no gaps
+      const n=Math.max(1,Math.ceil(Math.hypot(x-last[0],y-last[1])/2));
+      for(let k=1;k<=n;k++) paint(Math.round(last[0]+(x-last[0])*k/n),Math.round(last[1]+(y-last[1])*k/n),7);
+      last=[x,y];
+    }
+    update();
+  });
+  cv.addEventListener('pointerleave',()=>{ hover=-1; update(); });
+
+  // ---- probe + classifier ----
+  const cos=(a,b)=>{ let d=0,na=0,nb=0; for(let i=0;i<3;i++){d+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];} return d/(Math.sqrt(na*nb)||1); };
+  function probe(){
+    const ids=['0','1','2'];
+    if(hover<0||!scanned[hover]){
+      ids.forEach(k=>{ document.getElementById('v'+k).textContent='-'; document.getElementById('m'+k).style.width='0'; });
+      document.getElementById('guess').textContent= hover<0?'Hover a scanned area':'Not scanned yet';
+      document.getElementById('conf').textContent=''; return;
+    }
+    const s=[0,1,2].map(b=>bandSignal(b,hover,true));
+    s.forEach((v,b)=>{ document.getElementById('v'+b).textContent=v.toFixed(2); document.getElementById('m'+b).style.width=Math.min(100,v*gain*160)+'%'; });
+    const mx=Math.max(...s);
+    if(mx<0.12){ document.getElementById('guess').textContent='Just drywall and air'; document.getElementById('conf').textContent='No return above the noise floor.'; return; }
+    // undo expected depth attenuation at the current slice before comparing shapes
+    const norm=s.map((v,b)=>v/Math.exp(-ALPHA[b]*slice));
+    let best=null,bs=-1,second=-1;
+    for(const k in MAT){ const c=cos(norm,MAT[k].sig); if(c>bs){second=bs;bs=c;best=k;} else if(c>second) second=c; }
+    document.getElementById('guess').textContent=MAT[best].name;
+    document.getElementById('conf').textContent='Spectral match '+(bs*100).toFixed(0)+'%'+(mx<0.25?' (weak return, move the depth slice)':'');
+  }
+
+  // ---- found list ----
+  const foundEl=document.getElementById('found');
+  const foundState={};
+  function updateFound(){
+    let html='',n=0,tot=Object.keys(GROUPS).length;
+    for(const g in GROUPS){
+      let cells=0,seen=0;
+      for(const o of OBJ){ if(o.group!==g) continue; for(let i=0;i<W*H;i++) if(o.mask[i]>0.9){cells++; if(scanned[i]) seen++;} }
+      const ok=seen/cells>0.5; if(ok) n++;
+      html+='<li class="'+(ok?'on':'')+'"><span>'+(ok?GROUPS[g]:'???')+'</span><b>'+(ok?'found':Math.round(seen/cells*100)+'%')+'</b></li>';
+    }
+    foundEl.innerHTML=html;
+    document.getElementById('status').textContent= n===tot?'Everything mapped. Try moving the depth slice.':n+' of '+tot+' found. Drag to scan.';
+  }
+
+  function update(){ render(); probe(); updateFound(); }
+
+  // ---- controls ----
+  [0,1,2].forEach(b=>document.getElementById('b'+b).addEventListener('change',e=>{ bandOn[b]=e.target.checked; update(); }));
+  document.getElementById('depth').addEventListener('input',e=>{ slice=+e.target.value; document.getElementById('dv').textContent=slice.toFixed(1)+' cm'; update(); });
+  document.getElementById('gain').addEventListener('input',e=>{ gain=+e.target.value; document.getElementById('gv').textContent=gain.toFixed(1)+'x'; update(); });
+  document.getElementById('reset').addEventListener('click',()=>{ scanned.fill(0); update(); });
+  const pk=document.getElementById('peek');
+  ['pointerdown'].forEach(ev=>pk.addEventListener(ev,()=>{ peek=true; update(); }));
+  ['pointerup','pointerleave'].forEach(ev=>pk.addEventListener(ev,()=>{ if(peek){ peek=false; update(); } }));
+
+  let sweeping=false;
+  document.getElementById('sweep').addEventListener('click',()=>{
+    if(sweeping) return; sweeping=true;
+    let row=6, dir=1, x=0;
+    (function step(){
+      for(let k=0;k<4;k++){ paint(x,row,7); x+=dir*2; if(x>=W||x<0){ dir*=-1; x=Math.max(0,Math.min(W-1,x)); row+=10; } }
+      update();
+      if(row<H+6) requestAnimationFrame(step); else sweeping=false;
+    })();
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>

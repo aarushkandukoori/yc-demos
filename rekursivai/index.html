@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compounding Lab - a toy of self-improving discovery</title>
+<style>
+:root{--bg:#14120f;--panel:#1d1a16;--line:#332e27;--ink:#efe8da;--dim:#968c7a;--a:#e8b04a;--b:#7aa6a1;--bad:#c4694f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{padding:28px 24px 8px;max-width:1100px;margin:auto}
+h1{font:600 26px/1.2 Georgia,serif;margin:0 0 6px;letter-spacing:.2px}
+h1 em{color:var(--a);font-style:normal}
+.sub{color:var(--dim);max-width:760px;margin:0}
+main{max-width:1100px;margin:auto;padding:12px 24px 24px;display:grid;gap:16px;grid-template-columns:1fr 1fr}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.panel h2{margin:0 0 10px;font:600 12px/1 ui-monospace,monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim)}
+.wide{grid-column:1/-1}
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+button{background:var(--a);color:#1a1405;border:0;border-radius:6px;padding:8px 14px;font:600 13px ui-monospace,monospace;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:disabled{opacity:.45;cursor:default}
+label{color:var(--dim);font-size:13px;display:flex;gap:8px;align-items:center}
+input[type=range]{accent-color:var(--a)}
+input[type=number]{width:70px;background:#0f0d0b;color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:4px 6px;font:inherit}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:20px}
+.stat span{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+.A{color:var(--a)}.B{color:var(--b)}
+canvas{width:100%;height:230px;display:block}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--dim);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.lib{display:flex;flex-wrap:wrap;gap:6px;min-height:40px}
+.chip{border:1px solid var(--a);color:var(--a);border-radius:20px;padding:2px 10px;font-size:12px;animation:pop .35s}
+.chip small{color:var(--dim)}
+.chip.new{background:var(--a);color:#1a1405}
+@keyframes pop{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
+.feed{height:230px;overflow:auto;font-size:12.5px}
+.feed div{padding:4px 0;border-bottom:1px dashed var(--line)}
+.feed .ok{color:var(--b)}.feed .no{color:var(--bad)}.feed .dis{color:var(--a)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:var(--dim);font-weight:400;border-bottom:1px solid var(--line);padding:4px 6px}
+td{padding:5px 6px;border-bottom:1px solid #26221d}
+tr.row{cursor:pointer}tr.row:hover{background:#25211b}
+.prog{color:var(--ink)}
+.detail{margin-top:10px;font-size:13px;color:var(--dim);min-height:60px;white-space:pre-wrap}
+footer{max-width:1100px;margin:auto;padding:8px 24px 36px;color:var(--dim);font-size:12.5px;border-top:1px solid var(--line)}
+@media(max-width:800px){main{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Compounding <em>Lab</em></h1>
+  <p class="sub">Two fleets of tiny search agents solve the same stream of program-synthesis puzzles. Fleet A promotes sub-routines from every solution into a shared library. Fleet B keeps nothing. Run rounds and watch the cost per task diverge.</p>
+</header>
+
+<main>
+  <section class="panel wide">
+    <h2>Experiment</h2>
+    <div class="controls">
+      <button id="run">Run 12 rounds</button>
+      <button id="step" class="ghost">Step 1 round</button>
+      <button id="reset" class="ghost">Reset</button>
+      <label>agents / round <input id="agents" type="range" min="2" max="10" value="6"><span id="agentsV">6</span></label>
+      <label>library cap <input id="cap" type="range" min="4" max="30" value="16"><span id="capV">16</span></label>
+      <label>seed <input id="seed" type="number" value="7"></label>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="sRound">0</b><span>round</span></div>
+      <div class="stat"><b class="A" id="sA">-</b><span>fleet A solved / cost</span></div>
+      <div class="stat"><b class="B" id="sB">-</b><span>fleet B solved / cost</span></div>
+      <div class="stat"><b id="sSpeed">-</b><span>speedup (B cost / A cost)</span></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Search cost per solved task (lower is better)</h2>
+    <canvas id="chart" width="520" height="230"></canvas>
+    <div class="legend"><span><i style="background:var(--a)"></i>A - shares discoveries</span><span><i style="background:var(--b)"></i>B - no memory</span></div>
+  </section>
+
+  <section class="panel">
+    <h2>Discovery feed</h2>
+    <div class="feed" id="feed"></div>
+  </section>
+
+  <section class="panel wide">
+    <h2>Fleet A shared library <span id="libN" style="color:var(--a)"></span></h2>
+    <div class="lib" id="lib"><span style="color:var(--dim)">empty - run a round</span></div>
+    <p style="color:var(--dim);font-size:12px;margin:10px 0 0">Each macro is a verified sub-routine, callable as one step. More macros mean shorter programs but a wider branching factor, so the library is capped and low-use macros are evicted.</p>
+  </section>
+
+  <section class="panel wide">
+    <h2>Task log (click a row)</h2>
+    <table><thead><tr><th>#</th><th>task (3 examples, first shown)</th><th>A cost</th><th>B cost</th><th>A program</th></tr></thead><tbody id="tbody"></tbody></table>
+    <div class="detail" id="detail">Click a task to inspect examples and the programs each fleet found.</div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by rekursiv.ai (YC S26). Not affiliated with rekursiv.ai. All tasks and numbers here are synthetic and generated in your browser.</footer>
+
+<script>
+"use strict";
+// ---------- tiny DSL over integer lists ----------
+const PRIMS = {
+  inc:a=>a.map(x=>x+1), dec:a=>a.map(x=>x-1), dbl:a=>a.map(x=>x*2), neg:a=>a.map(x=>-x),
+  sq:a=>a.map(x=>x*x), half:a=>a.map(x=>Math.floor(x/2)), rev:a=>a.slice().reverse(),
+  sort:a=>a.slice().sort((x,y)=>x-y), tail:a=>a.slice(1),
+  cums:a=>{let s=0;return a.map(x=>s+=x)}, dedupe:a=>a.filter((x,i)=>a.indexOf(x)===i)
+};
+const PNAMES = Object.keys(PRIMS);
+// hidden building blocks that tasks are made from (agents don't know these)
+const MOTIFS = [["sort","rev","inc"],["dbl","cums"],["neg","tail","dec"],["sq","half"],["rev","cums","neg"]];
+const BUDGET = 25000, MAXDEPTH = 6;
+
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function run(prog,arr){for(const p of prog){arr=PRIMS[p](arr);if(arr.some(x=>Math.abs(x)>1e6))return null}return arr}
+
+function makeTask(r,round,id){
+  const nm = round<2?1:2;                     // curriculum: early tasks are single-motif
+  let prog=[];for(let i=0;i<nm;i++)prog=prog.concat(MOTIFS[Math.floor(r()*MOTIFS.length)]);
+  const ins=[];for(let k=0;k<3;k++)ins.push(Array.from({length:5},()=>Math.floor(r()*14)-4));
+  const outs=ins.map(a=>run(prog,a));
+  if(outs.some(o=>!o||!o.length)) return makeTask(r,round,id);
+  return {id,prog,ins,outs,key:JSON.stringify(outs)};
+}
+
+// ---------- search: BFS over distinct behaviours, ops = primitives + library macros ----------
+function solve(task,macros){
+  const ops=PNAMES.map(n=>({name:n,seq:[n]})).concat(macros.map(m=>({name:m.name,seq:m.seq})));
+  const seen=new Set([JSON.stringify(task.ins)]);
+  let frontier=[{st:task.ins,prog:[]}],cost=0;
+  for(let d=0;d<MAXDEPTH;d++){
+    const next=[];
+    for(const node of frontier){
+      for(const op of ops){
+        if(++cost>BUDGET)return{ok:false,cost:BUDGET};
+        let st=[];let bad=false;
+        for(const a of node.st){const o=run(op.seq,a);if(!o){bad=true;break}st.push(o)}
+        if(bad)continue;
+        const k=JSON.stringify(st);
+        if(k===task.key)return{ok:true,cost,prog:node.prog.concat(op.seq),steps:node.prog.length+1,names:node.prog.concat(op.seq)};
+        if(seen.has(k))continue;seen.add(k);
+        next.push({st,prog:node.prog.concat(op.seq)});
+      }
+    }
+    frontier=next;
+  }
+  return{ok:false,cost:cost};
+}
+
+// ---------- the compounding step: mine sub-routines from a verified solution ----------
+class Library{
+  constructor(cap){this.cap=cap;this.items=[];this.n=0}
+  mine(prog,round){
+    const added=[];
+    for(let len=2;len<=3;len++)for(let i=0;i+len<=prog.length;i++){
+      const seq=prog.slice(i,i+len),k=seq.join(">");
+      let m=this.items.find(x=>x.key===k);
+      if(m){m.score++;continue}
+      m={key:k,name:k,seq,score:1,born:round,isNew:true};
+      this.items.push(m);added.push(m);
+    }
+    while(this.items.length>this.cap){            // eviction rule: lowest score, then oldest
+      this.items.sort((a,b)=>a.score-b.score||a.born-b.born);
+      const ev=this.items.shift();const ai=added.indexOf(ev);if(ai>=0)added.splice(ai,1);
+    }
+    return added;
+  }
+  credit(names){}
+}
+
+// ---------- state ----------
+let S;
+function init(){
+  const seed=+document.getElementById("seed").value||1;
+  S={r:rng(seed),round:0,lib:new Library(+document.getElementById("cap").value),tasks:[],hist:[],busy:false,id:0};
+  document.getElementById("feed").innerHTML="";
+  document.getElementById("tbody").innerHTML="";
+  document.getElementById("detail").textContent="Click a task to inspect examples and the programs each fleet found.";
+  ["sA","sB","sSpeed"].forEach(i=>document.getElementById(i).textContent="-");
+  document.getElementById("sRound").textContent=0;
+  renderLib();drawChart();
+}
+const $=id=>document.getElementById(id);
+function log(cls,msg){const d=document.createElement("div");d.className=cls;d.textContent=msg;const f=$("feed");f.prepend(d)}
+const fmt=n=>n>=1000?(n/1000).toFixed(1)+"k":""+n;
+
+function oneRound(){
+  S.round++;S.lib.cap=+$("cap").value;
+  const n=+$("agents").value,snapshot=S.lib.items.map(m=>({name:m.name,seq:m.seq}));
+  const rows=[];
+  let aS=0,aC=0,bS=0,bC=0;
+  for(let i=0;i<n;i++){
+    const t=makeTask(S.r,S.round-1,++S.id);
+    const ra=solve(t,snapshot);       // fleet A: library as of start of round
+    const rb=solve(t,[]);             // fleet B: primitives only
+    rows.push({t,ra,rb});
+    if(ra.ok){aS++;aC+=ra.cost}else aC+=0;
+    if(rb.ok){bS++;bC+=rb.cost}
+    log(ra.ok?"ok":"no",`r${S.round} task ${t.id}: A ${ra.ok?"solved in "+fmt(ra.cost):"failed"} | B ${rb.ok?"solved in "+fmt(rb.cost):"failed"}`);
+  }
+  // after the round, every verified solution feeds the shared library (breakthroughs become tools)
+  const fresh=[];
+  rows.forEach(r=>{if(r.ra.ok)fresh.push(...S.lib.mine(r.ra.prog,S.round));if(r.ra.ok&&r.ra.names){S.lib.items.forEach(m=>{if(r.ra.prog.join(">").includes(m.key)&&snapshot.some(s=>s.name===m.name))m.score+=0.5})}});
+  fresh.slice(0,3).forEach(m=>log("dis",`discovery: macro [${m.name}] added to library`));
+  // record per-solved cost (failed tasks count as the full budget so failure is visible)
+  const meanA=rows.reduce((s,r)=>s+r.ra.cost,0)/n, meanB=rows.reduce((s,r)=>s+r.rb.cost,0)/n;
+  S.hist.push({a:meanA,b:meanB});
+  S.tasks.push(...rows);
+  rows.forEach(addRow);
+  $("sRound").textContent=S.round;
+  $("sA").textContent=`${aS}/${n} · ${fmt(Math.round(meanA))}`;
+  $("sB").textContent=`${bS}/${n} · ${fmt(Math.round(meanB))}`;
+  $("sSpeed").textContent=(meanB/Math.max(1,meanA)).toFixed(1)+"x";
+  renderLib();drawChart();
+}
+
+function addRow(r){
+  const tr=document.createElement("tr");tr.className="row";
+  const pa=r.ra.ok?r.ra.prog.join(" > "):"unsolved";
+  tr.innerHTML=`<td>${r.t.id}</td><td>${JSON.stringify(r.t.ins[0])} → ${JSON.stringify(r.t.outs[0])}</td><td class="A">${r.ra.ok?fmt(r.ra.cost):"fail"}</td><td class="B">${r.rb.ok?fmt(r.rb.cost):"fail"}</td><td class="prog">${pa}</td>`;
+  tr.onclick=()=>{
+    const ex=r.t.ins.map((a,i)=>`  ${JSON.stringify(a)} → ${JSON.stringify(r.t.outs[i])}`).join("\n");
+    $("detail").textContent=`Task ${r.t.id} examples:\n${ex}\nHidden generator: ${r.t.prog.join(" > ")}\nFleet A: ${r.ra.ok?r.ra.prog.join(" > ")+"  (cost "+r.ra.cost+")":"no program within budget "+BUDGET}\nFleet B: ${r.rb.ok?r.rb.prog.join(" > ")+"  (cost "+r.rb.cost+")":"no program within budget "+BUDGET}`;
+  };
+  $("tbody").prepend(tr);
+}
+
+function renderLib(){
+  const L=S.lib.items.slice().sort((a,b)=>b.score-a.score);
+  $("libN").textContent=`(${L.length}/${S.lib.cap})`;
+  $("lib").innerHTML=L.length?"":'<span style="color:var(--dim)">empty - run a round</span>';
+  L.forEach(m=>{const c=document.createElement("span");c.className="chip"+(m.born===S.round?" new":"");c.innerHTML=`${m.seq.join("&gt;")} <small>×${m.score}</small>`;$("lib").appendChild(c)});
+}
+
+function drawChart(){
+  const cv=$("chart"),ctx=cv.getContext("2d"),W=cv.width,H=cv.height,pad=34;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle="#332e27";ctx.fillStyle="#968c7a";ctx.font="11px monospace";ctx.lineWidth=1;
+  const mx=Math.max(BUDGET,1);
+  for(let i=0;i<=4;i++){const y=pad/2+(H-pad*1.4)*(1-i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-8,y);ctx.stroke();ctx.fillText(fmt(Math.round(mx*i/4)),2,y+4)}
+  const h=S.hist;if(!h.length){ctx.fillText("no rounds yet",W/2-40,H/2);return}
+  const N=Math.max(h.length,12),x=i=>pad+(W-pad-14)*(i/(N-1)),y=v=>pad/2+(H-pad*1.4)*(1-Math.min(v,mx)/mx);
+  [["a","#e8b04a"],["b","#7aa6a1"]].forEach(([k,c])=>{
+    ctx.strokeStyle=c;ctx.fillStyle=c;ctx.lineWidth=2;ctx.beginPath();
+    h.forEach((p,i)=>i?ctx.lineTo(x(i),y(p[k])):ctx.moveTo(x(i),y(p[k])));ctx.stroke();
+    h.forEach((p,i)=>{ctx.beginPath();ctx.arc(x(i),y(p[k]),3,0,7);ctx.fill()});
+  });
+  ctx.fillStyle="#968c7a";ctx.fillText("round →",W-60,H-6);
+}
+
+// ---------- wiring ----------
+$("agents").oninput=e=>$("agentsV").textContent=e.target.value;
+$("cap").oninput=e=>$("capV").textContent=e.target.value;
+$("seed").onchange=()=>init();
+$("reset").onclick=()=>init();
+$("step").onclick=()=>{if(!S.busy)oneRound()};
+$("run").onclick=()=>{
+  if(S.busy)return;S.busy=true;$("run").disabled=$("step").disabled=true;
+  let k=0;(function tick(){if(k++<12){oneRound();setTimeout(tick,60)}else{S.busy=false;$("run").disabled=$("step").disabled=false}})();
+};
+init();
+</script>
+</body>
+</html>
