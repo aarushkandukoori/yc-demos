@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dormant Deal Sweep - approval-gated revenue recovery toy</title>
+<style>
+:root{--bg:#f4efe6;--ink:#1d1b18;--mute:#6f685d;--line:#d9d0c0;--card:#fbf8f2;--acc:#c2410c;--ok:#2f6b4f;--bad:#9b2c2c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 32px 8px;max-width:1180px;margin:auto}
+h1{font:600 30px/1.1 Georgia,"Times New Roman",serif;margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--mute);max-width:720px;margin:0}
+main{max-width:1180px;margin:auto;padding:16px 32px 40px;display:grid;grid-template-columns:1.05fr 1fr;gap:20px}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:12px 16px}header{padding:20px 16px 4px}}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+h2{font:600 12px/1 ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--mute);margin:0 0 12px}
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px}
+.controls label{font-size:13px;color:var(--mute);display:flex;gap:8px;align-items:center}
+input[type=range]{accent-color:var(--acc)}
+button{font:inherit;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:7px 14px;border-radius:6px;cursor:pointer}
+button:hover{background:#000}
+button.ghost{background:transparent;color:var(--ink)}
+button.ghost:hover{background:#eee6d6}
+button.go{background:var(--acc);border-color:var(--acc)}
+button.ok{background:var(--ok);border-color:var(--ok)}
+button.no{background:transparent;color:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.4;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--mute);padding:4px 6px;border-bottom:1px solid var(--line)}
+td{padding:7px 6px;border-bottom:1px solid #e8e0d0}
+tr.hit td{background:#fbe9dc}
+tr.skip td{color:#a39a8a}
+.tag{font:11px ui-monospace,Menlo,monospace;padding:2px 6px;border-radius:4px;border:1px solid var(--line);background:#fff}
+.tag.lost{color:var(--bad);border-color:#e3b7b7}
+.tag.silent{color:#8a5a00;border-color:#e5cf9a}
+.tag.live{color:var(--ok);border-color:#a9cdb9}
+#log{font:12px/1.6 ui-monospace,Menlo,monospace;background:#1d1b18;color:#e8dfcc;border-radius:8px;padding:10px 12px;height:150px;overflow:auto;margin-top:12px}
+#log .w{color:#f2a974}#log .g{color:#8fd3ae}
+.card{border:1px solid var(--line);background:#fff;border-radius:8px;padding:12px;margin-bottom:12px}
+.card.done{opacity:.55}
+.card .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.card b{font-size:15px}
+.meter{height:6px;background:#eee6d6;border-radius:4px;margin:6px 0 8px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--acc)}
+.why{font-size:12px;color:var(--mute);margin:0 0 8px}
+textarea{width:100%;min-height:128px;font:13px/1.5 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:6px;padding:8px;background:#fdfcf9;resize:vertical}
+.row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.stats{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px}
+.stats div{font-size:12px;color:var(--mute)}
+.stats strong{display:block;font:600 22px Georgia,serif;color:var(--ink)}
+.empty{color:var(--mute);font-style:italic;padding:18px 4px}
+#outbox{font:12px/1.6 ui-monospace,Menlo,monospace;color:var(--ok);margin:0;padding-left:16px}
+footer{max-width:1180px;margin:auto;padding:16px 32px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+.full{grid-column:1/-1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dormant Deal Sweep</h1>
+  <p class="sub">A toy agent that scans a CRM for closed-lost and gone-quiet deals, scores which are worth reviving, and drafts the follow-up. Nothing sends until a human approves it. All data below is synthetic and the whole thing runs in your browser.</p>
+</header>
+<main>
+  <section>
+    <h2>1 - CRM snapshot and sweep rules</h2>
+    <div class="controls">
+      <label>Silent for at least <input id="days" type="range" min="14" max="180" value="90" step="1"> <b id="daysv">90</b> days</label>
+      <label><input id="inclLost" type="checkbox" checked> include closed-lost</label>
+      <label>Min score <input id="minScore" type="range" min="0" max="90" value="45"> <b id="minv">45</b></label>
+    </div>
+    <div class="row" style="margin:0 0 12px">
+      <button class="go" id="run">Run sweep</button>
+      <button class="ghost" id="reset">Reset</button>
+    </div>
+    <table>
+      <thead><tr><th>Account</th><th>Status</th><th>Silent</th><th>Value</th><th>Score</th></tr></thead>
+      <tbody id="deals"></tbody>
+    </table>
+    <div id="log" aria-live="polite"></div>
+  </section>
+
+  <section>
+    <h2>2 - Approval queue</h2>
+    <div class="stats">
+      <div><strong id="sQ">0</strong>drafts waiting</div>
+      <div><strong id="sA">0</strong>approved</div>
+      <div><strong id="sV">$0</strong>revived pipeline (approved)</div>
+    </div>
+    <div id="queue"><div class="empty">Run a sweep. Drafts appear here and stay here until you approve them.</div></div>
+  </section>
+
+  <section class="full">
+    <h2>3 - Outbox (simulated, nothing leaves this page)</h2>
+    <ul id="outbox"><li style="color:#6f685d;list-style:none;margin-left:-16px">empty</li></ul>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Nex (YC S26). Not affiliated with Nex.</footer>
+
+<script>
+// ---- synthetic CRM data (names and fake accounts only, no email addresses) ----
+const DEALS = [
+  {id:1, acct:"Harbor & Pine Logistics", who:"Dana Okafor", role:"VP Ops", status:"lost", reason:"budget freeze", value:48000, silent:132, opens:5, champion:true, notes:"Loved the routing demo. Lost to budget freeze in Q1.", trigger:"posted two ops hiring roles this month"},
+  {id:2, acct:"Lumen Dental Group", who:"Priya Raman", role:"Director of Growth", status:"silent", value:22000, silent:97, opens:3, champion:true, notes:"Asked for pricing, then went quiet after legal review.", trigger:"opened 3 new clinics"},
+  {id:3, acct:"Fieldnote Analytics", who:"Tomas Beck", role:"Head of Sales", status:"lost", reason:"chose competitor", value:31000, silent:210, opens:0, champion:false, notes:"Picked an incumbent tool on price.", trigger:"none found"},
+  {id:4, acct:"Quill Freight", who:"Marisol Vega", role:"RevOps Lead", status:"silent", value:67000, silent:104, opens:6, champion:true, notes:"Pilot ran two weeks, positive. Champion changed teams.", trigger:"announced Series B"},
+  {id:5, acct:"Northgate Robotics", who:"Evan Liu", role:"CRO", status:"live", value:90000, silent:9, opens:8, champion:true, notes:"Active, security review in progress.", trigger:"n/a"},
+  {id:6, acct:"Tidewater Labs", who:"Hannah Frost", role:"Sales Manager", status:"silent", value:14000, silent:61, opens:1, champion:false, notes:"One call, no follow-up booked.", trigger:"none found"},
+  {id:7, acct:"Brightloom Studio", who:"Jamal Reed", role:"Founder", status:"lost", reason:"bad timing", value:19000, silent:88, opens:4, champion:true, notes:"Said revisit after launch. Launch was last month.", trigger:"product launch shipped"},
+  {id:8, acct:"Cedar Row Insurance", who:"Alice Moreau", role:"VP Sales", status:"silent", value:54000, silent:143, opens:2, champion:false, notes:"Procurement stalled. Champion left company.", trigger:"new VP Sales started"},
+  {id:9, acct:"Ostrich Egg Media", who:"Ken Watanabe", role:"Ops Manager", status:"lost", reason:"no response", value:8000, silent:176, opens:0, champion:false, notes:"Never replied after demo.", trigger:"none found"},
+  {id:10,acct:"Marlow Biotech", who:"Sofia Duarte", role:"Head of BD", status:"silent", value:73000, silent:121, opens:7, champion:true, notes:"Asked about CRM dedupe. Strong fit, stalled on SOW.", trigger:"hiring a RevOps analyst"}
+];
+const state = {drafts:[], approved:0, value:0, outbox:[], running:false};
+const $ = id => document.getElementById(id);
+const money = n => "$" + n.toLocaleString("en-US");
+
+// ---- scoring: transparent heuristic, each factor is shown to the reviewer ----
+function score(d){
+  const f = [];
+  let s = 20;
+  if(d.champion){ s += 22; f.push("champion engaged +22"); }
+  const o = Math.min(d.opens, 6) * 3; if(o){ s += o; f.push(d.opens + " past opens +" + o); }
+  if(d.trigger !== "none found" && d.trigger !== "n/a"){ s += 25; f.push("fresh trigger: " + d.trigger + " +25"); }
+  const decay = Math.round(Math.max(0, d.silent - 90) * 0.15); if(decay){ s -= decay; f.push("age decay -" + decay); }
+  if(d.reason === "chose competitor"){ s -= 15; f.push("went to competitor -15"); }
+  if(d.value >= 50000){ s += 5; f.push("large deal +5"); }
+  return {s: Math.max(0, Math.min(99, s)), f};
+}
+
+// ---- draft writer: picks an angle from the signals instead of one fixed template ----
+function draft(d){
+  const first = d.who.split(" ")[0];
+  const hook = /hiring|opened|announced|launch|new VP/.test(d.trigger)
+    ? "Saw that " + d.acct + " " + d.trigger + ", which made me think of our last conversation."
+    : "It has been a while since we spoke about " + d.acct + ".";
+  const ctx = d.status === "lost" && d.reason === "budget freeze" ? "Last time budget was the blocker, so I would keep this small: one workflow, 30 days, no commitment."
+    : d.status === "lost" && d.reason === "bad timing" ? "You mentioned revisiting after launch, and that seems to have landed."
+    : d.champion ? "Your team seemed to get real value from what we showed, and I would hate for that to sit unfinished."
+    : "Happy to start from scratch if priorities changed.";
+  return "Hi " + first + ",\n\n" + hook + " " + ctx + "\n\nWould a 15 minute call next week be useful? If not, tell me and I will stop nudging.\n\n- Your account exec\n\n(context: " + d.notes + ")";
+}
+
+function log(msg, cls){
+  const el = $("log"); const div = document.createElement("div");
+  if(cls) div.className = cls; div.textContent = msg; el.appendChild(div); el.scrollTop = el.scrollHeight;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function renderDeals(hitIds, scores){
+  $("deals").innerHTML = DEALS.map(d => {
+    const hit = hitIds && hitIds.has(d.id);
+    const skip = hitIds && !hit;
+    const sc = scores && scores[d.id] !== undefined ? scores[d.id] : "";
+    return `<tr class="${hit?"hit":skip?"skip":""}"><td><b>${esc(d.acct)}</b><br><span style="color:#6f685d">${d.who}, ${d.role}</span></td>
+    <td><span class="tag ${d.status}">${d.status === "lost" ? "closed-lost" : d.status === "silent" ? "gone quiet" : "active"}</span></td>
+    <td>${d.silent}d</td><td>${money(d.value)}</td><td>${sc}</td></tr>`;
+  }).join("");
+}
+
+async function run(){
+  if(state.running) return; state.running = true; $("run").disabled = true;
+  $("log").innerHTML = ""; state.drafts = [];
+  const days = +$("days").value, minS = +$("minScore").value, lost = $("inclLost").checked;
+  log("sweep started: silent >= " + days + "d, closed-lost " + (lost ? "included" : "excluded") + ", min score " + minS);
+  const ids = new Set(), scores = {};
+  renderQueue();
+  for(const d of DEALS){
+    await sleep(220);
+    if(d.status === "live"){ log("skip " + d.acct + ": active deal, not dormant"); continue; }
+    if(d.status === "lost" && !lost){ log("skip " + d.acct + ": closed-lost excluded"); continue; }
+    if(d.silent < days){ log("skip " + d.acct + ": only " + d.silent + "d silent"); continue; }
+    const sc = score(d); scores[d.id] = sc.s;
+    if(sc.s < minS){ log("drop " + d.acct + ": score " + sc.s + " < " + minS, "w"); renderDeals(ids, scores); continue; }
+    ids.add(d.id); log("keep " + d.acct + ": score " + sc.s + " (" + sc.f.length + " signals)", "g");
+    state.drafts.push({deal:d, sc, text:draft(d), status:"pending"});
+    renderDeals(ids, scores); renderQueue();
+  }
+  renderDeals(ids, scores);
+  log("done: " + state.drafts.length + " drafts queued. 0 emails sent. awaiting human approval.", "g");
+  state.running = false; $("run").disabled = false; renderQueue();
+}
+
+function renderQueue(){
+  const q = $("queue");
+  if(!state.drafts.length){
+    q.innerHTML = state.running ? '<div class="empty">Scanning...</div>' : '<div class="empty">No drafts. Lower the thresholds and run again.</div>';
+    stats(); return;
+  }
+  // keep any textarea edits made before re-rendering
+  q.querySelectorAll("textarea").forEach(t => { const dr = state.drafts[+t.dataset.i]; if(dr && dr.status === "pending") dr.text = t.value; });
+  q.innerHTML = state.drafts.map((dr, i) => {
+    const d = dr.deal, done = dr.status !== "pending";
+    return `<div class="card ${done?"done":""}">
+      <div class="top"><b>${esc(d.acct)}</b><span class="tag">${money(d.value)}</span></div>
+      <div class="meter"><i style="width:${dr.sc.s}%"></i></div>
+      <p class="why">revival score ${dr.sc.s}/100 - ${esc(dr.sc.f.join("; "))}</p>
+      <textarea data-i="${i}" ${done?"disabled":""}>${esc(dr.text)}</textarea>
+      <div class="row">${done
+        ? `<span class="tag ${dr.status==="approved"?"live":"lost"}">${dr.status}</span>`
+        : `<button class="ok" data-a="approve" data-i="${i}">Approve and send</button>
+           <button class="no" data-a="reject" data-i="${i}">Reject</button>
+           <span style="color:#6f685d;font-size:12px">edit the text first if you like</span>`}</div></div>`;
+  }).join("");
+  stats();
+}
+
+function stats(){
+  $("sQ").textContent = state.drafts.filter(x => x.status === "pending").length;
+  $("sA").textContent = state.approved;
+  $("sV").textContent = money(state.value);
+}
+
+$("queue").addEventListener("click", e => {
+  const b = e.target.closest("button[data-a]"); if(!b) return;
+  const i = +b.dataset.i, dr = state.drafts[i];
+  dr.text = document.querySelector('textarea[data-i="' + i + '"]').value;
+  if(b.dataset.a === "approve"){
+    dr.status = "approved"; state.approved++; state.value += dr.deal.value;
+    state.outbox.push(dr);
+    log("APPROVED " + dr.deal.acct + " -> moved to outbox (simulated)", "g");
+  } else { dr.status = "rejected"; log("rejected " + dr.deal.acct + ": nothing sent", "w"); }
+  renderQueue(); renderOutbox();
+});
+
+function renderOutbox(){
+  $("outbox").innerHTML = state.outbox.length
+    ? state.outbox.map(dr => "<li>to " + esc(dr.deal.who) + " (" + esc(dr.deal.acct) + ") - " + esc(dr.text.split("\n")[2].slice(0, 70)) + "...</li>").join("")
+    : '<li style="color:#6f685d;list-style:none;margin-left:-16px">empty</li>';
+}
+
+$("days").oninput = e => $("daysv").textContent = e.target.value;
+$("minScore").oninput = e => $("minv").textContent = e.target.value;
+$("run").onclick = run;
+$("reset").onclick = () => {
+  if(state.running) return;
+  Object.assign(state, {drafts:[], approved:0, value:0, outbox:[]});
+  $("log").innerHTML = ""; $("queue").innerHTML = '<div class="empty">Run a sweep. Drafts appear here and stay here until you approve them.</div>';
+  renderDeals(); renderOutbox(); stats();
+};
+renderDeals(); stats();
+</script>
+</body>
+</html>

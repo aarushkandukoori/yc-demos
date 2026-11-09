@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Number - container pricing toy</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d2327;--mute:#6b7378;--line:#d9d4c7;--card:#fffdf8;--acc:#0f5c4d;--acc2:#c4572a;--warn:#b42318;--r:10px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+header{padding:28px 20px 8px;max-width:1100px;margin:0 auto}
+h1{font:600 28px/1.15 Georgia,"Times New Roman",serif;margin:0 0 6px;letter-spacing:-.3px}
+header p{margin:0;color:var(--mute);max-width:680px}
+main{max-width:1100px;margin:0 auto;padding:16px 20px 40px;display:grid;grid-template-columns:1.25fr 1fr;gap:18px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card h2{font:600 12px/1 ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:0 0 12px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle}
+th{font-weight:600;color:var(--mute);font-size:12px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+input[type=number]{width:78px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;text-align:right}
+button{font:inherit;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:7px;padding:6px 12px}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button.ghost:hover{border-color:var(--ink)}
+button.x{padding:2px 8px;background:transparent;color:var(--mute);border:none;font-size:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+select{padding:6px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit}
+.bar{height:12px;background:#ebe6d8;border-radius:6px;overflow:hidden;position:relative}
+.bar>i{display:block;height:100%;background:var(--acc);transition:width .25s}
+.bar>i.hot{background:var(--acc2)}
+.bl{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mute);margin:10px 0 4px}
+.box{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-top:10px}
+.box b{height:16px;border-radius:2px;background:#ebe6d8}
+.big{font:600 40px/1 Georgia,serif;letter-spacing:-1px;margin:4px 0 2px}
+.sub{color:var(--mute);font-size:13px}
+.ledger div{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dotted var(--line);font-size:13.5px}
+.ledger div span:last-child{font-variant-numeric:tabular-nums}
+.ledger .tot{border-bottom:none;border-top:2px solid var(--ink);font-weight:700;margin-top:4px;padding-top:8px}
+.tag{display:inline-block;font:11px ui-monospace,Menlo,monospace;padding:2px 6px;border-radius:4px;background:#e4efe9;color:var(--acc);margin-left:4px}
+.tag.w{background:#f7e3da;color:var(--acc2)}
+.lock{border:1.5px solid var(--acc);background:#eef5f1;border-radius:8px;padding:10px 12px}
+.float{border:1.5px dashed var(--acc2);background:#fbf0ea;border-radius:8px;padding:10px 12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.two b{font:600 20px Georgia,serif;display:block}
+.two small{color:var(--mute)}
+input[type=range]{width:100%}
+.chain{display:flex;align-items:flex-end;gap:6px;height:110px;margin-top:10px}
+.chain div{flex:1;background:#d8cfb8;border-radius:4px 4px 0 0;position:relative;transition:height .25s}
+.chain div.me{background:var(--acc)}
+.chain span{position:absolute;top:-17px;left:0;right:0;text-align:center;font-size:11px;white-space:nowrap}
+.chain em{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:10.5px;color:var(--mute);font-style:normal}
+.note{font-size:12.5px;color:var(--mute);margin-top:8px}
+.log{font:12px/1.5 ui-monospace,Menlo,monospace;background:#1d2327;color:#cfe3da;border-radius:8px;padding:10px;max-height:150px;overflow:auto;margin-top:10px}
+footer{max-width:1100px;margin:0 auto;padding:0 20px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+label.sw{display:flex;gap:6px;align-items:center;font-size:13.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>One Number</h1>
+  <p>A toy landed-cost engine. Paste a buying list, watch it pack a 40-foot box on weight and cube, stack duty line by line, and return a single delivered price that does not move after you sign. All data below is synthetic.</p>
+</header>
+
+<main>
+  <section>
+    <div class="card">
+      <h2>1 / Buying list</h2>
+      <table id="list">
+        <thead><tr><th>Item</th><th class="n">Units</th><th class="n">FOB/unit</th><th class="n">Duty</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="row">
+        <select id="add"></select>
+        <button class="ghost" id="addBtn">+ Add line</button>
+        <button class="ghost" id="sample1">Load: restaurant supply</button>
+        <button class="ghost" id="sample2">Load: home build</button>
+        <button class="ghost" id="rand">Randomize</button>
+      </div>
+      <p class="note">Duty = base rate + stacked add-ons (shown per line). Rates are invented for the toy, not legal advice.</p>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>2 / Container pack</h2>
+      <div class="bl"><span>Volume</span><span id="volTxt"></span></div>
+      <div class="bar"><i id="volBar"></i></div>
+      <div class="bl"><span>Weight</span><span id="kgTxt"></span></div>
+      <div class="bar"><i id="kgBar"></i></div>
+      <div class="box" id="box"></div>
+      <p class="note" id="packNote"></p>
+      <div class="row">
+        <label class="sw"><input type="checkbox" id="shared"> Shared container: fill the empty space with other buyers, pay only your cube share</label>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>3 / Your number</h2>
+      <div class="sub">Delivered to a Class-B dock, duties paid</div>
+      <div class="big" id="total">$0</div>
+      <div class="sub" id="perUnit"></div>
+      <div class="ledger" id="ledger" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>4 / Does it hold?</h2>
+      <p class="sub" style="margin-top:0">Drag the market. Freight, FX and tariffs move after the quote is issued.</p>
+      <div class="bl"><span>Freight shock</span><span id="fsv">0%</span></div>
+      <input type="range" id="fs" min="-20" max="80" value="0">
+      <div class="bl"><span>Extra tariff points</span><span id="tsv">+0 pts</span></div>
+      <input type="range" id="ts" min="0" max="30" value="0">
+      <div class="bl"><span>CNY move vs USD</span><span id="fxv">0%</span></div>
+      <input type="range" id="fx" min="-6" max="6" step="0.5" value="0">
+      <div class="two">
+        <div class="lock"><small>Locked at signature</small><b id="locked"></b><small>holds</small></div>
+        <div class="float"><small>Floating quote today</small><b id="floating"></b><small id="delta"></small></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>5 / Why the box matters</h2>
+      <div class="chain" id="chain"></div>
+      <p class="note" style="margin-top:26px">Three middlemen at ~20 points each, versus buying the whole container direct plus a flat service fee.</p>
+    </div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Donkey (YC S26). Not affiliated with Donkey.</footer>
+
+<script>
+// ---------- synthetic catalog ----------
+// cbm = cubic metres per unit, kg = weight per unit, fob = USD, base = base duty %, adds = stacked extras
+const CAT = {
+  tray:   {n:"Aluminum foil trays (case of 200)", cbm:.052, kg:11.0, fob:14.8, base:5.7,  adds:[["Anti-dumping",18.0]]},
+  bag:    {n:"Kraft paper bags (case of 500)",     cbm:.060, kg:9.5,  fob:11.2, base:0,    adds:[["Section-X surcharge",7.5]]},
+  charc:  {n:"Binchotan charcoal (10 kg box)",     cbm:.028, kg:10.4, fob:21.0, base:0,    adds:[["Origin surcharge",10]]},
+  clam:   {n:"Bagasse clamshells (case of 250)",   cbm:.090, kg:6.2,  fob:9.4,  base:0,    adds:[["Section-X surcharge",25]]},
+  cab:    {n:"Flat-pack cabinet (each)",           cbm:.210, kg:34.0, fob:96.0, base:3.4,  adds:[["Anti-dumping",25],["Section-X surcharge",25]]},
+  floor:  {n:"Click flooring (box of 12 sqft)",    cbm:.021, kg:14.5, fob:19.5, base:3.2,  adds:[["Section-X surcharge",25]]},
+  door:   {n:"Interior door slab (each)",          cbm:.110, kg:21.0, fob:48.0, base:4.3,  adds:[["Section-X surcharge",25]]},
+  tile:   {n:"Porcelain tile (carton)",            cbm:.019, kg:27.0, fob:16.8, base:8.5,  adds:[["Section-X surcharge",25]]},
+  vanity: {n:"Bath vanity (each)",                 cbm:.260, kg:42.0, fob:118.0,base:3.4,  adds:[["Section-X surcharge",25]]},
+  hw:     {n:"Hardware set (carton of 40)",        cbm:.014, kg:18.0, fob:31.0, base:3.9,  adds:[["Section-X surcharge",25]]}
+};
+const BOX = {cbm:67, kg:26500, ocean:7800, dray:1150, entry:145};  // 40ft usable limits + flat charges
+const FEE = 0.035;      // service fee on goods
+const SHARE_HANDLING = 0.08;
+let lines = [];
+let state = {shared:false};
+
+const $ = id => document.getElementById(id);
+const usd = x => "$" + Math.round(x).toLocaleString("en-US");
+const usd2 = x => "$" + x.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// ---------- list UI ----------
+function dutyPct(k){ return CAT[k].base + CAT[k].adds.reduce((s,a)=>s+a[1],0); }
+function renderList(){
+  const tb = $("list").tBodies[0]; tb.innerHTML = "";
+  lines.forEach((l,i)=>{
+    const c = CAT[l.k], tr = document.createElement("tr");
+    tr.innerHTML = `<td>${c.n}</td>
+      <td class="n"><input type="number" min="0" step="10" value="${l.q}" data-i="${i}"></td>
+      <td class="n">${usd2(c.fob)}</td>
+      <td class="n">${dutyPct(l.k).toFixed(1)}%${c.adds.length?'<span class="tag w">'+c.adds.length+' add-on</span>':''}</td>
+      <td><button class="x" data-del="${i}" title="remove">&times;</button></td>`;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll("input").forEach(el=>el.oninput=e=>{lines[+el.dataset.i].q=Math.max(0,+el.value||0);calc();});
+  tb.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{lines.splice(+b.dataset.del,1);renderList();calc();});
+  const used = new Set(lines.map(l=>l.k));
+  $("add").innerHTML = Object.keys(CAT).filter(k=>!used.has(k)).map(k=>`<option value="${k}">${CAT[k].n}</option>`).join("");
+  $("addBtn").disabled = !$("add").value;
+}
+
+// ---------- the engine ----------
+function engine(opts){
+  // opts: freightMult, tariffAdd (pts), fx (% CNY strengthening raises USD cost)
+  const rows = lines.filter(l=>l.q>0).map(l=>{
+    const c = CAT[l.k];
+    const fob = l.q*c.fob*(1+opts.fx/100);
+    const duty = dutyPct(l.k) + opts.tariffAdd;
+    return {k:l.k, q:l.q, name:c.n, cbm:l.q*c.cbm, kg:l.q*c.kg, fob, dutyPct:duty, duty:fob*duty/100};
+  });
+  const cbm = rows.reduce((s,r)=>s+r.cbm,0), kg = rows.reduce((s,r)=>s+r.kg,0);
+  const goods = rows.reduce((s,r)=>s+r.fob,0), duty = rows.reduce((s,r)=>s+r.duty,0);
+  const fillV = cbm/BOX.cbm, fillW = kg/BOX.kg;
+  const fill = Math.max(fillV,fillW);
+  const boxes = Math.max(1,Math.ceil(fill-1e-9));
+  const binding = fillW>fillV ? "weight" : "cube";
+  const perBox = (BOX.ocean*opts.freightMult + BOX.dray);
+  let freight, entry = BOX.entry*boxes, note = "";
+  if(state.shared && boxes===1 && fill<1){
+    // pay only your share of the box plus handling for consolidation
+    freight = perBox*fill*(1+SHARE_HANDLING);
+    note = `Shared: you carry ${(fill*100).toFixed(0)}% of the box, other buyers fill the rest.`;
+  } else {
+    freight = perBox*boxes;
+  }
+  const fee = goods*FEE;
+  const total = goods+duty+freight+entry+fee;
+  return {rows,cbm,kg,goods,duty,freight,entry,fee,total,fillV,fillW,fill,boxes,binding,note};
+}
+
+const base = {freightMult:1,tariffAdd:0,fx:0};
+function calc(){
+  const r = engine(base);
+  const live = engine({freightMult:1+ +$("fs").value/100, tariffAdd:+$("ts").value, fx:+$("fx").value});
+  $("fsv").textContent = $("fs").value+"%";
+  $("tsv").textContent = "+"+$("ts").value+" pts";
+  $("fxv").textContent = ($("fx").value>0?"+":"")+$("fx").value+"%";
+
+  // pack
+  const pv = Math.min(100,r.fillV*100/Math.max(r.boxes,1)), pw = Math.min(100,r.fillW*100/Math.max(r.boxes,1));
+  $("volTxt").textContent = `${r.cbm.toFixed(1)} of ${(BOX.cbm*r.boxes).toFixed(0)} m3`;
+  $("kgTxt").textContent = `${Math.round(r.kg).toLocaleString()} of ${(BOX.kg*r.boxes).toLocaleString()} kg`;
+  $("volBar").style.width = (r.cbm/(BOX.cbm*r.boxes)*100)+"%";
+  $("kgBar").style.width = (r.kg/(BOX.kg*r.boxes)*100)+"%";
+  $("volBar").className = r.binding==="cube"?"hot":"";
+  $("kgBar").className = r.binding==="weight"?"hot":"";
+  const cells = Math.round(Math.min(1,r.fill/r.boxes)*30);
+  const bx = $("box"); bx.innerHTML="";
+  for(let i=0;i<30;i++){const b=document.createElement("b"); if(i<cells&&r.goods>0) b.style.background=["#0f5c4d","#2c7a68","#4f9582"][i%3]; bx.appendChild(b);}
+  const empty = r.goods>0 ? Math.max(0,(BOX.cbm*r.boxes-r.cbm)) : 0;
+  $("packNote").textContent = r.goods===0 ? "Add some units to pack a box." :
+    `${r.boxes} x 40ft. Binding limit: ${r.binding}. ` + (r.boxes>1 ? "Overflow opens a second container." :
+    empty>0.5 ? `${empty.toFixed(1)} m3 empty. ` + (state.shared?"":"Tick shared container to sell that space.") : "Full box.") + " " + r.note;
+
+  // ledger
+  const L = [["Goods at factory (FOB)",r.goods],["Duty, all lines stacked",r.duty],["Ocean freight + drayage",r.freight],["Customs entry",r.entry],["Service fee ("+(FEE*100).toFixed(1)+"%)",r.fee]];
+  $("ledger").innerHTML = L.map(x=>`<div><span>${x[0]}</span><span>${usd2(x[1])}</span></div>`).join("")+
+    `<div class="tot"><span>Delivered price</span><span>${usd2(r.total)}</span></div>`;
+  $("total").textContent = usd(r.total);
+  const units = r.rows.reduce((s,x)=>s+x.q,0);
+  $("perUnit").textContent = units? `${usd2(r.total/units)} landed per unit, ${(r.total/Math.max(r.goods,1)).toFixed(2)}x factory price` : "";
+
+  // lock vs float
+  $("locked").textContent = usd(r.total);
+  $("floating").textContent = usd(live.total);
+  const d = live.total-r.total;
+  $("delta").textContent = Math.abs(d)<1? "same as locked" : (d>0?"+":"-")+usd(Math.abs(d))+" if you had waited";
+  $("floating").style.color = d>1?"#b42318":d<-1?"#0f5c4d":"";
+
+  // middlemen chain
+  const mm = r.goods*Math.pow(1.20,3) + r.duty*1.0 + r.freight*1.0 + r.entry;
+  const vals = [["Factory",r.goods],["+Trader",r.goods*1.2],["+Importer",r.goods*1.44],["+Distrib.",r.goods*1.728],["Direct",r.goods+r.fee]];
+  const mx = Math.max(...vals.map(v=>v[1]),1);
+  $("chain").innerHTML = vals.map((v,i)=>`<div class="${i===4?'me':''}" style="height:${Math.max(4,v[1]/mx*100)}%"><span>${usd(v[1])}</span><em>${v[0]}</em></div>`).join("");
+
+  // log
+  logPack(r);
+}
+
+function logPack(r){
+  const out = [];
+  out.push("$ pack --container 40ft --limits " + BOX.cbm + "m3/" + BOX.kg + "kg");
+  r.rows.forEach(x=>out.push(`  ${x.name.slice(0,30).padEnd(30)} ${x.cbm.toFixed(2).padStart(6)} m3  ${Math.round(x.kg).toString().padStart(6)} kg  duty ${x.dutyPct.toFixed(1)}%`));
+  if(r.rows.length){
+    out.push(`> cube ${(r.fillV*100).toFixed(0)}%  weight ${(r.fillW*100).toFixed(0)}%  => ${r.boxes} box(es), ${r.binding}-bound`);
+    out.push(`> price held from signature: ${usd2(r.total)}`);
+  } else out.push("> empty list");
+  $("log").textContent = out.join("\n");
+}
+
+// ---------- samples ----------
+const SETS = {
+  s1:[["tray",900],["bag",700],["clam",600],["charc",400]],
+  s2:[["cab",120],["floor",600],["door",90],["tile",420],["vanity",40],["hw",150]]
+};
+function load(set){ lines = SETS[set].map(([k,q])=>({k,q})); renderList(); calc(); }
+
+$("sample1").onclick = ()=>load("s1");
+$("sample2").onclick = ()=>load("s2");
+$("rand").onclick = ()=>{
+  const ks = Object.keys(CAT).sort(()=>Math.random()-.5).slice(0,3+Math.floor(Math.random()*3));
+  lines = ks.map(k=>({k,q:Math.round((50+Math.random()*700)/10)*10})); renderList(); calc();
+};
+$("addBtn").onclick = ()=>{ const k=$("add").value; if(k){lines.push({k,q:100}); renderList(); calc();} };
+$("shared").onchange = e=>{ state.shared = e.target.checked; calc(); };
+["fs","ts","fx"].forEach(id=>$(id).oninput = calc);
+
+load("s1");
+</script>
+</body>
+</html>
