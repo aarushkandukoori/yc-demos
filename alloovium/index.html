@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cite-or-Silence: a toy source-grounded project assistant</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d2320;--mute:#6b736e;--line:#d9d4c7;--card:#fffdf8;--acc:#1f6f5c;--warn:#b4531a;--bad:#a12d2d;--ok:#2d7a3e;--hl:#ffe9a6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 10px;max-width:1200px;margin:0 auto}
+h1{margin:0;font:700 24px/1.2 ui-serif,Georgia,serif;letter-spacing:-.01em}
+header p{margin:6px 0 0;color:var(--mute);max-width:760px}
+.tabs{display:flex;gap:4px;max-width:1200px;margin:10px auto 0;padding:0 28px;border-bottom:1px solid var(--line)}
+.tab{border:0;background:none;padding:10px 16px;font:600 14px inherit;font-family:inherit;color:var(--mute);cursor:pointer;border-bottom:3px solid transparent}
+.tab.on{color:var(--ink);border-color:var(--acc)}
+.tab .n{background:var(--warn);color:#fff;border-radius:9px;padding:0 7px;font-size:12px;margin-left:6px}
+main{max-width:1200px;margin:0 auto;padding:18px 28px 30px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:20px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+.doc{margin-bottom:16px}
+.doc h3{margin:0 0 4px;font-size:14px}
+.doc .meta{font-size:12px;color:var(--mute);margin-bottom:6px}
+.s{padding:1px 3px;border-radius:3px;transition:background .3s}
+.s.flash{background:var(--hl);outline:2px solid #e2b93b}
+.s.lit{background:#e2f1ec}
+.s.bad{background:#f6dcdc}
+.s.good{background:#dcefdc}
+.docs{max-height:640px;overflow:auto;padding-right:6px}
+.ask{display:flex;gap:8px}
+input[type=text]{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff}
+button.b{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:600 14px inherit;font-family:inherit;cursor:pointer}
+button.b:hover{filter:brightness(1.1)}
+button.b.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
+button.b.red{background:var(--bad)}
+button.b:disabled{opacity:.4;cursor:not-allowed}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 10px;font-size:13px;cursor:pointer}
+.chip:hover{border-color:var(--acc)}
+.ans{margin-top:12px;border-left:4px solid var(--acc);padding:6px 12px;background:#f1f7f4;border-radius:0 8px 8px 0}
+.ans.none{border-color:var(--bad);background:#faeeee}
+.cite{display:inline-block;background:var(--acc);color:#fff;border-radius:4px;padding:0 6px;font:600 12px ui-monospace,Menlo,monospace;cursor:pointer;margin-left:4px}
+.q{font-style:italic;color:#37403b}
+.trace{font:12px ui-monospace,Menlo,monospace;color:var(--mute);margin-top:8px}
+.rule{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#fff}
+.rule .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.badge{font:700 11px ui-monospace,Menlo,monospace;padding:2px 8px;border-radius:10px;color:#fff;white-space:nowrap}
+.badge.pass{background:var(--ok)}.badge.fail{background:var(--bad)}.badge.miss{background:var(--warn)}
+.rule p{margin:6px 0 0;font-size:13.5px}
+.rule .acts{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.draft{border:1px dashed var(--warn);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#fff8f1}
+.draft pre{white-space:pre-wrap;font:13px/1.45 ui-monospace,Menlo,monospace;margin:6px 0;background:none}
+.draft .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.draft input{width:90px;flex:none}
+.stamp{border:1px solid var(--ok);border-radius:8px;padding:8px 12px;margin-bottom:8px;background:#f2faf3;font-size:13px}
+.stamp.rej{border-color:var(--bad);background:#fbf1f1}
+.hint{color:var(--mute);font-size:13px}
+.err{color:var(--bad);font-size:12.5px}
+footer{max-width:1200px;margin:0 auto;padding:6px 28px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cite-or-Silence</h1>
+  <p>A toy source-grounded assistant for a construction project. Every answer quotes the exact sentence it came from, paperwork is checked clause by clause against a company rulebook, and nothing drafted goes out until a named person signs it. All data below is made up.</p>
+</header>
+<div class="tabs">
+  <button class="tab on" data-t="ask">1. Ask the project</button>
+  <button class="tab" data-t="check">2. Check the paperwork</button>
+  <button class="tab" data-t="sign">3. Sign-off queue<span class="n hide" id="qn">0</span></button>
+</div>
+
+<main>
+  <section class="card">
+    <h2>Project documents (synthetic)</h2>
+    <div class="docs" id="docs"></div>
+  </section>
+
+  <section>
+    <div class="card" id="p-ask">
+      <h2>Ask anything about the project</h2>
+      <div class="ask"><input type="text" id="q" placeholder="e.g. how many days to pay invoices?" autocomplete="off"><button class="b" id="go">Ask</button></div>
+      <div class="chips" id="chips"></div>
+      <div id="out"><p class="hint">Click a citation to jump to the sentence. Try a question the documents cannot answer, such as "what is the colour of the crane?". It should refuse rather than guess.</p></div>
+    </div>
+
+    <div class="card hide" id="p-check">
+      <h2>Subcontract SC-114 vs. Rulebook v3</h2>
+      <p class="hint" style="margin-top:0">Each rule is tested against every clause. Green clauses satisfy a rule, red clauses break it, and a rule with no matching clause is flagged as missing.</p>
+      <button class="b" id="run">Run clause-by-clause check</button>
+      <div id="res" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card hide" id="p-sign">
+      <h2>Pending human sign-off</h2>
+      <div id="queue"><p class="hint">Nothing drafted yet. Run a check and draft a query from a failed rule.</p></div>
+      <h2 style="margin-top:18px">Signed ledger</h2>
+      <div id="ledger"><p class="hint">Empty. Nothing leaves this page without a name next to it.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Alloovium (YC S26). Not affiliated with Alloovium.</footer>
+
+<script>
+"use strict";
+/* ---------- synthetic data ---------- */
+const DOCS = [
+  {id:"sc", title:"Subcontract SC-114, structural steel", meta:"Harbor Row, Block C (fictional) - signed draft",
+   sents:[
+    "1.1 The Subcontractor shall erect structural steel in accordance with Specification 05 12 00.",
+    "2.1 Payment shall be made within 60 days of invoice approval.",
+    "3.1 Welding on site requires a hot work permit issued by the Principal Contractor for each shift.",
+    "3.2 The Subcontractor shall supply a lifting plan for every crane lift above 5 tonnes.",
+    "4.1 Public liability insurance of $5M per occurrence shall be held throughout the works.",
+    "5.1 Work at height shall be performed using harness and lanyard.",
+    "6.1 Defects shall be notified in writing within 14 days of discovery."]},
+  {id:"sp", title:"Specification 05 12 00, structural steel", meta:"Rev C - fictional",
+   sents:[
+    "2.3 All bolts shall be grade 8.8 galvanised unless noted otherwise on the drawings.",
+    "3.4 Column splices shall be inspected by the engineer before grouting.",
+    "3.7 Steel delivered with mill certificates older than 12 months shall be rejected.",
+    "4.2 Shop primer shall be applied to a dry film thickness of 75 microns."]},
+  {id:"dy", title:"Site diary, week 41", meta:"Conversation log - fictional",
+   sents:[
+    "Mon: Crane arrived on site and was assembled by the rigging crew.",
+    "Tue: Level 3 columns were delivered, and the mill certificates are dated 14 months ago.",
+    "Wed: Engineer inspected the splice at gridline C4 and approved it for grouting.",
+    "Thu: Rain delayed welding on the east frame until the afternoon."]}
+];
+const RULES = [
+  {id:"R1", text:"Payment terms shall not exceed 45 days.", find:/payment|invoice/i,
+   judge:t=>{const n=+(t.match(/(\d+) days/)||[])[1]; return n<=45?[true,`${n} days is within 45.`]:[false,`Clause allows ${n} days, rulebook caps at 45.`]}},
+  {id:"R2", text:"Hot work needs a permit for each shift.", find:/weld|hot work/i,
+   judge:t=>/permit/i.test(t)&&/each shift|every shift/i.test(t)?[true,"Permit per shift is required."]:[false,"No per-shift permit."]},
+  {id:"R3", text:"A lifting plan is needed for every lift above 2 tonnes.", find:/lift/i,
+   judge:t=>{const n=+(t.match(/above (\d+) tonne/)||[])[1]; return n<=2?[true,"Threshold is strict enough."]:[false,`Plan only required above ${n} tonnes, rulebook says 2.`]}},
+  {id:"R4", text:"Public liability cover of at least $5M.", find:/insurance|liability/i,
+   judge:t=>{const n=+(t.match(/\$(\d+)M/)||[])[1]; return n>=5?[true,`$${n}M meets the minimum.`]:[false,`$${n}M is below $5M.`]}},
+  {id:"R5", text:"Work at height needs a written rescue plan.", find:/height/i,
+   judge:t=>/rescue plan/i.test(t)?[true,"Rescue plan is named."]:[false,"Harness is mentioned but no rescue plan."]}
+];
+const SAMPLE_Q = ["How many days to pay invoices?","Who inspects column splices?","Are the mill certificates acceptable?","What is the colour of the crane?"];
+const STOP = new Set("a an the of to is are was were be for on in at by do does did how what who when which with and or it this that any all as from i we you me my".split(" "));
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const stem = w => w.replace(/(ing|ed|es|s)$/,"");
+const toks = s => (s.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(w => !STOP.has(w)).map(stem);
+const SENT = [];
+DOCS.forEach(d => d.sents.forEach((t,i) => SENT.push({id:`${d.id}:${i}`, doc:d, text:t, toks:new Set(toks(t))})));
+const cid = id => { const [d,i] = id.split(":"); return `${d.toUpperCase()}-${+i+1}`; };
+
+/* ---------- document pane ---------- */
+function renderDocs(){
+  const box = $("#docs"); box.innerHTML = "";
+  DOCS.forEach(d => {
+    const w = el("div","doc",`<h3>${esc(d.title)}</h3><div class="meta">${esc(d.meta)}</div>`);
+    const p = el("div");
+    d.sents.forEach((t,i) => { const s = el("span","s",esc(t)+" "); s.id = `s-${d.id}-${i}`; p.appendChild(s); });
+    w.appendChild(p); box.appendChild(w);
+  });
+}
+function jump(id){
+  const [d,i] = id.split(":"); const s = $(`#s-${d}-${i}`); if (!s) return;
+  s.scrollIntoView({behavior:"smooth", block:"center"});
+  s.classList.add("flash"); setTimeout(() => s.classList.remove("flash"), 1800);
+}
+function clearMarks(){ document.querySelectorAll(".s").forEach(s => s.classList.remove("lit","bad","good")); }
+
+/* ---------- mechanic 1: retrieve, quote, or refuse ---------- */
+function retrieve(q){
+  const qt = toks(q); if (!qt.length) return [];
+  const df = {}; qt.forEach(w => df[w] = SENT.filter(s => s.toks.has(w)).length);
+  return SENT.map(s => {
+    let score = 0, hits = [];
+    qt.forEach(w => { if (s.toks.has(w)) { score += 1/(1+Math.log(1+df[w])); hits.push(w); } });
+    return {s, score, hits};
+  }).filter(r => r.hits.length >= Math.min(2, qt.length) && r.score > 0).sort((a,b) => b.score-a.score).slice(0,2);
+}
+function ask(q){
+  q = q.trim(); if (!q) return;
+  clearMarks();
+  const out = $("#out"); out.innerHTML = "";
+  const r = retrieve(q);
+  if (!r.length){
+    out.appendChild(el("div","ans none",`<b>No supporting sentence found. Declining to answer.</b><br><span class="hint">An answer with no source would be a guess, so this assistant stays silent.</span>`));
+    out.appendChild(el("div","trace",`query tokens: [${toks(q).join(", ")}]  matches: 0`));
+    return;
+  }
+  const a = el("div","ans");
+  r.forEach(x => {
+    const p = el("p","",`<span class="q">&ldquo;${esc(x.s.text)}&rdquo;</span>`);
+    const c = el("span","cite",cid(x.s.id)); c.title = x.s.doc.title; c.onclick = () => jump(x.s.id);
+    p.appendChild(c); a.appendChild(p);
+    $(`#s-${x.s.id.replace(":","-")}`).classList.add("lit");
+  });
+  out.appendChild(a);
+  out.appendChild(el("div","trace",`query tokens: [${toks(q).join(", ")}]<br>` +
+    r.map(x => `${cid(x.s.id)} score=${x.score.toFixed(2)} matched=[${x.hits.join(", ")}]`).join("<br>")));
+  jump(r[0].s.id);
+}
+function initAsk(){
+  $("#go").onclick = () => ask($("#q").value);
+  $("#q").onkeydown = e => { if (e.key === "Enter") ask($("#q").value); };
+  SAMPLE_Q.forEach(t => { const c = el("button","chip",esc(t)); c.onclick = () => { $("#q").value = t; ask(t); }; $("#chips").appendChild(c); });
+}
+
+/* ---------- mechanic 2: clause-by-clause check ---------- */
+const SC = SENT.filter(s => s.doc.id === "sc");
+let findings = [];
+function runCheck(){
+  clearMarks(); findings = [];
+  const res = $("#res"); res.innerHTML = "";
+  RULES.forEach(rule => {
+    const clauses = SC.filter(s => rule.find.test(s.text));
+    const verdicts = clauses.map(c => ({c, v:rule.judge(c.text)}));
+    const failed = verdicts.filter(x => !x.v[0]);
+    const status = !clauses.length ? "miss" : failed.length ? "fail" : "pass";
+    const why = !clauses.length ? "No clause addresses this rule." : verdicts.map(x => x.v[1]).join(" ");
+    verdicts.forEach(x => $(`#s-${x.c.id.replace(":","-")}`).classList.add(x.v[0] ? "good" : "bad"));
+    const f = {rule, status, why, clauses:verdicts.map(x => x.c)}; findings.push(f);
+    const b = status === "pass" ? "PASS" : status === "fail" ? "BREACH" : "MISSING";
+    const box = el("div","rule",`<div class="top"><b>${rule.id}. ${esc(rule.text)}</b><span class="badge ${status}">${b}</span></div><p>${esc(why)}</p>`);
+    const acts = el("div","acts");
+    f.clauses.forEach(c => { const k = el("span","cite",cid(c.id)); k.onclick = () => jump(c.id); acts.appendChild(k); });
+    if (status !== "pass"){
+      const d = el("button","b alt","Draft query to subcontractor"); d.onclick = () => { draft(f); d.disabled = true; d.textContent = "Drafted, see sign-off tab"; };
+      acts.appendChild(d);
+    }
+    box.appendChild(acts); res.appendChild(box);
+  });
+  const bad = findings.filter(f => f.status !== "pass").length;
+  res.prepend(el("p","",`<b>${bad} of ${RULES.length} rules need attention.</b>`));
+}
+
+/* ---------- mechanic 3: human sign-off gate ---------- */
+let drafts = [], ledger = [], seq = 1;
+function draft(f){
+  const cites = f.clauses.map(c => cid(c.id)).join(", ") || "none";
+  const body = `Re: SC-114, rule ${f.rule.id}\n\nOur rulebook requires: ${f.rule.text}\nFinding: ${f.why}\nSource clauses: ${cites}\n\nPlease confirm how this will be resolved before the next payment cycle.`;
+  drafts.push({id:seq++, body, rule:f.rule.id}); renderSign();
+}
+function renderSign(){
+  const n = $("#qn"); n.textContent = drafts.length; n.classList.toggle("hide", !drafts.length);
+  const q = $("#queue"); q.innerHTML = drafts.length ? "" : `<p class="hint">Queue is clear.</p>`;
+  drafts.forEach(d => {
+    const w = el("div","draft",`<b>Draft #${d.id}</b> <span class="hint">AI-drafted, not sent</span><pre>${esc(d.body)}</pre>`);
+    const row = el("div","row"), inp = el("input"), err = el("span","err");
+    inp.type = "text"; inp.placeholder = "Your initials"; inp.maxLength = 4;
+    const ok = el("button","b","Sign and send"), no = el("button","b alt red","Reject");
+    ok.onclick = () => {
+      if (!inp.value.trim()) { err.textContent = "A named human must sign first."; inp.focus(); return; }
+      finish(d, inp.value.trim().toUpperCase(), true);
+    };
+    no.onclick = () => finish(d, inp.value.trim().toUpperCase() || "ANON", false);
+    row.append(inp, ok, no, err); w.appendChild(row); q.appendChild(w);
+  });
+  const l = $("#ledger"); l.innerHTML = ledger.length ? "" : `<p class="hint">Empty. Nothing leaves this page without a name next to it.</p>`;
+  ledger.slice().reverse().forEach(x => l.appendChild(el("div","stamp"+(x.ok?"":" rej"),
+    `<b>Draft #${x.id} (${x.rule}) ${x.ok?"sent":"rejected"}</b> by ${esc(x.by)} at ${x.at}<br><span class="hint">Recorded: draft text, source clauses, signer, time.</span>`)));
+}
+function finish(d, by, ok){
+  drafts = drafts.filter(x => x !== d);
+  ledger.push({id:d.id, rule:d.rule, by, ok, at:new Date().toLocaleTimeString()}); renderSign();
+}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  ["ask","check","sign"].forEach(k => $("#p-"+k).classList.toggle("hide", k !== t.dataset.t));
+  clearMarks();
+});
+$("#run").onclick = runCheck;
+
+/* ---------- reset + keyboard shortcuts ---------- */
+function resetAll(){
+  drafts = []; ledger = []; seq = 1; findings = [];
+  $("#res").innerHTML = "";
+  $("#out").innerHTML = `<p class="hint">Reset. Ask a question to begin again.</p>`;
+  $("#q").value = "";
+  clearMarks();
+  renderSign();
+}
+const rb = el("button","b alt","Reset demo");
+rb.style.cssText = "position:fixed;right:16px;bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+rb.onclick = resetAll;
+document.body.appendChild(rb);
+document.addEventListener("keydown", e => {
+  if (e.key === "/" && document.activeElement.tagName !== "INPUT") {
+    e.preventDefault();
+    document.querySelector('.tab[data-t="ask"]').click();
+    $("#q").focus();
+  }
+});
+renderDocs(); initAsk(); renderSign();
+</script>
+</body>
+</html>
