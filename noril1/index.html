@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Waypoint Bench - teach a two-arm robot by demonstration</title>
+<style>
+:root{--bg:#0f1419;--panel:#171e26;--line:#2a3541;--txt:#dce4ec;--dim:#8394a6;--acc:#ffb454;--acc2:#4fd1c5;--bad:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{padding:18px 24px 6px}
+h1{margin:0;font-size:19px;letter-spacing:.3px}
+h1 span{color:var(--acc)}
+header p{margin:4px 0 0;color:var(--dim);max-width:900px}
+main{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:16px;padding:12px 24px 20px}
+@media(max-width:980px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h2{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1.4px;color:var(--dim);font-weight:600}
+canvas{width:100%;height:auto;display:block;border-radius:8px;background:#0b1015;touch-action:none;cursor:crosshair}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+button{background:#202a35;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 11px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc2)}
+button.pri{background:var(--acc);color:#1b1305;border-color:var(--acc);font-weight:700}
+button.on{background:var(--acc2);color:#04201d;border-color:var(--acc2)}
+button.sm{padding:2px 7px;font-size:12px}
+input[type=text]{background:#0d1217;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit;width:150px}
+label{color:var(--dim);display:flex;gap:6px;align-items:center}
+.seg{display:flex}
+.seg button{border-radius:0}
+.seg button:first-child{border-radius:6px 0 0 6px}
+.seg button:last-child{border-radius:0 6px 6px 0}
+#status{margin-top:10px;min-height:20px;color:var(--acc2)}
+#status.bad{color:var(--bad)}
+ol.kf,ul.sk{list-style:none;margin:0;padding:0;max-height:190px;overflow:auto}
+ol.kf li,ul.sk li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 6px;border-bottom:1px solid var(--line);font-size:12px}
+ol.kf li.cur{background:#26323f}
+.empty{color:var(--dim);font-size:12px;padding:6px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{text-align:left;padding:3px 4px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:500}
+.ok{color:var(--acc2)}.no{color:var(--bad)}
+.stats{display:flex;gap:18px;margin-bottom:8px}
+.stats b{display:block;font-size:20px;color:var(--acc)}
+.stats small{color:var(--dim)}
+.side{display:flex;flex-direction:column;gap:16px}
+kbd{background:#202a35;border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:11px}
+.hint{color:var(--dim);font-size:12px;margin-top:8px}
+footer{padding:4px 24px 26px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);margin:0 24px;padding-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Waypoint</span> Bench</h1>
+  <p>Teach a toy two-arm robot by showing it once. Drag the hands to demonstrate, record keyframes, replay them, then shuffle the blocks and see why a replay of raw coordinates breaks while object-relative keyframes keep working.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Workcell (front view)</h2>
+    <canvas id="cv" width="800" height="480"></canvas>
+    <div id="status">Drag in the workcell to move a hand. Goal: get all four blocks into the tray.</div>
+    <div class="row">
+      <span style="color:var(--dim)">Arm</span>
+      <div class="seg" id="armSel">
+        <button data-a="auto" class="on">Auto</button><button data-a="0">Left</button><button data-a="1">Right</button>
+      </div>
+      <button id="gripL">Left grip: open</button>
+      <button id="gripR">Right grip: open</button>
+      <button id="rec" class="pri">Record keyframe</button>
+    </div>
+    <div class="row">
+      <button id="play">Play timeline</button>
+      <button id="stop">Stop</button>
+      <button id="clear">Clear timeline</button>
+      <button id="shuffle">Shuffle blocks</button>
+      <button id="reset">Reset scene</button>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="adapt" checked> Object-relative keyframes</label>
+      <label>Speed <input type="range" id="speed" min="0.5" max="3" step="0.1" value="1.2"></label>
+    </div>
+    <div class="hint">Keys: <kbd>1</kbd> left grip, <kbd>2</kbd> right grip, <kbd>R</kbd> record, <kbd>Enter</kbd> play, <kbd>S</kbd> shuffle. Auto arm = the side of the cell you click on.</div>
+  </section>
+
+  <div class="side">
+    <section class="card">
+      <h2>Timeline</h2>
+      <ol class="kf" id="kfList"></ol>
+      <div class="row">
+        <input type="text" id="skName" placeholder="skill name" maxlength="24">
+        <button id="saveSk">Save as skill</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Skill library</h2>
+      <ul class="sk" id="skList"></ul>
+    </section>
+    <section class="card">
+      <h2>Episode log (synthetic)</h2>
+      <div class="stats">
+        <div><b id="nEp">0</b><small>episodes</small></div>
+        <div><b id="nOk">-</b><small>success</small></div>
+        <div><b id="nTray">0/4</b><small>in tray now</small></div>
+      </div>
+      <table><thead><tr><th>#</th><th>skill</th><th>mode</th><th>result</th></tr></thead><tbody id="log"></tbody></table>
+      <div class="hint">Each run is logged like a training episode: the more varied the scenes, the more useful the dataset.</div>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Nori (YC S26). Not affiliated with Nori.</footer>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const cv=$('#cv'),cx=cv.getContext('2d');
+const W=800,H=480,TABLE=400,BS=34,L1=125,L2=120;
+const TRAY={x0:330,x1:470,h:46};
+const HOME=[{x:300,y:300},{x:500,y:300}];
+const DEF=[{x:180},{x:260},{x:540},{x:620}];
+const NAMES=['A','B','C','D'];
+const COLS=['#ffb454','#ff8a65','#4fd1c5','#7aa2ff'];
+
+const arms=[0,1].map(i=>({i,sx:i?460:340,sy:230,s:i?-1:1,x:HOME[i].x,y:HOME[i].y,tx:HOME[i].x,ty:HOME[i].y,g:false,held:null}));
+let blocks=[];
+let timeline=[];
+let skills=[];
+let armMode='auto';
+let pb=null;          // playback state
+let settle=null;      // wait for blocks to land, then score
+let episodes=[];
+let lastPose=[{x:HOME[0].x,y:HOME[0].y},{x:HOME[1].x,y:HOME[1].y}];
+
+/* ---------- scene ---------- */
+function resetScene(){
+  blocks=DEF.map((d,i)=>({id:i,x:d.x,y:TABLE-BS/2,vy:0,held:null}));
+  arms.forEach((a,i)=>{a.x=a.tx=HOME[i].x;a.y=a.ty=HOME[i].y;a.g=false;a.held=null;});
+  lastPose=[{...HOME[0]},{...HOME[1]}];
+  updateGripBtns();updateStats();
+}
+function shuffleBlocks(){
+  stopPlayback();
+  arms.forEach(a=>{a.g=false;a.held=null;});
+  const spots=[[150,290],[150,290],[510,650],[510,650]];
+  const placed=[];
+  blocks.forEach(b=>{
+    let x,tries=0;
+    do{const [lo,hi]=spots[b.id];x=lo+Math.random()*(hi-lo);tries++;}
+    while(tries<50&&placed.some(p=>Math.abs(p-x)<BS+6));
+    placed.push(x);b.x=x;b.y=TABLE-BS/2;b.vy=0;b.held=null;
+  });
+  updateGripBtns();updateStats();
+  say('Blocks shuffled. Raw coordinates from an old demo no longer line up.');
+}
+function restY(b){
+  let y=TABLE-BS/2;
+  for(const o of blocks){
+    if(o===b||o.held!==null)continue;
+    if(Math.abs(o.x-b.x)<BS-2&&o.y>b.y)y=Math.min(y,o.y-BS);
+  }
+  return y;
+}
+function inTray(b){return b.held===null&&b.x>TRAY.x0+6&&b.x<TRAY.x1-6&&b.y>TABLE-BS*2.2&&b.vy===0;}
+
+/* ---------- kinematics ---------- */
+function clampReach(a,x,y){
+  let dx=x-a.sx,dy=y-a.sy;
+  y=Math.min(y,TABLE-4);dy=y-a.sy;
+  let d=Math.hypot(dx,dy);
+  const mx=L1+L2-2,mn=10;
+  if(d>mx){dx*=mx/d;dy*=mx/d;}
+  else if(d<mn&&d>0){dx*=mn/d;dy*=mn/d;}
+  return [a.sx+dx,a.sy+dy];
+}
+function elbow(a){
+  const dx=a.x-a.sx,dy=a.y-a.sy;
+  const d=Math.max(1,Math.min(Math.hypot(dx,dy),L1+L2-1));
+  const ang=Math.atan2(dy,dx);
+  const c=Math.max(-1,Math.min(1,(L1*L1+d*d-L2*L2)/(2*L1*d)));
+  const t=ang+a.s*Math.acos(c);
+  return [a.sx+L1*Math.cos(t),a.sy+L1*Math.sin(t)];
+}
+function setGrip(a,closed){
+  if(closed===a.g)return;
+  a.g=closed;
+  if(closed){
+    let best=null,bd=36;
+    for(const b of blocks){
+      if(b.held!==null)continue;
+      const d=Math.hypot(b.x-a.x,b.y-a.y);
+      if(d<bd){bd=d;best=b;}
+    }
+    if(best){best.held=a.i;a.held=best.id;best.vy=0;}
+  }else if(a.held!==null){
+    blocks[a.held].held=null;a.held=null;
+  }
+  updateGripBtns();
+}
+function updateGripBtns(){
+  $('#gripL').textContent='Left grip: '+(arms[0].g?'closed':'open');
+  $('#gripR').textContent='Right grip: '+(arms[1].g?'closed':'open');
+  $('#gripL').classList.toggle('on',arms[0].g);
+  $('#gripR').classList.toggle('on',arms[1].g);
+}
+
+/* ---------- recording ---------- */
+function specFor(a){
+  let ref=null,ox=0,oy=0;
+  if(a.held===null){
+    let bd=80;
+    for(const b of blocks){
+      if(b.held!==null)continue;
+      const d=Math.hypot(b.x-a.x,b.y-a.y);
+      if(d<bd){bd=d;ref=b.id;ox=a.x-b.x;oy=a.y-b.y;}
+    }
+  }
+  return {x:a.x,y:a.y,g:a.g?1:0,ref,ox,oy};
+}
+function recordKeyframe(){
+  if(pb){say('Stop playback before recording.',true);return;}
+  const L=specFor(arms[0]),R=specFor(arms[1]);
+  const dist=Math.max(Math.hypot(L.x-lastPose[0].x,L.y-lastPose[0].y),Math.hypot(R.x-lastPose[1].x,R.y-lastPose[1].y));
+  timeline.push({L,R,dur:Math.max(0.45,dist/280)});
+  lastPose=[{x:L.x,y:L.y},{x:R.x,y:R.y}];
+  renderTimeline();
+  const tied=[L,R].filter(s=>s.ref!==null).length;
+  say('Keyframe '+timeline.length+' recorded'+(tied?' ('+tied+' hand'+(tied>1?'s':'')+' tied to a block)':' (absolute coordinates)')+'.');
+}
+function renderTimeline(){
+  const ol=$('#kfList');
+  ol.innerHTML='';
+  if(!timeline.length){ol.innerHTML='<div class="empty">Empty. Move a hand, toggle a grip, press Record.</div>';return;}
+  timeline.forEach((k,i)=>{
+    const li=document.createElement('li');
+    li.dataset.i=i;
+    const f=s=>Math.round(s.x)+','+Math.round(s.y)+(s.g?' ●':' ○')+(s.ref!==null?' @'+NAMES[s.ref]:'');
+    li.innerHTML='<span>#'+(i+1)+' L('+f(k.L)+') R('+f(k.R)+')</span>';
+    const x=document.createElement('button');x.className='sm';x.textContent='x';
+    x.onclick=()=>{timeline.splice(i,1);renderTimeline();};
+    li.appendChild(x);ol.appendChild(li);
+  });
+}
+
+/* ---------- playback ---------- */
+function resolve(spec){
+  if($('#adapt').checked&&spec.ref!==null){const b=blocks[spec.ref];return [b.x+spec.ox,b.y+spec.oy];}
+  return [spec.x,spec.y];
+}
+function startPlayback(frames,label){
+  if(!frames.length){say('Timeline is empty. Record some keyframes first.',true);return;}
+  settle=null;
+  pb={frames:frames.map(f=>JSON.parse(JSON.stringify(f))),i:0,t:0,wait:0,
+      from:[{x:arms[0].x,y:arms[0].y},{x:arms[1].x,y:arms[1].y}],label,adapt:$('#adapt').checked};
+  say('Playing "'+label+'" ('+(pb.adapt?'object-relative':'raw coordinates')+')...');
+}
+function stopPlayback(){pb=null;settle=null;}
+function stepPlayback(dt){
+  if(!pb)return;
+  if(pb.wait>0){pb.wait-=dt;return;}
+  const f=pb.frames[pb.i];
+  const sp=parseFloat($('#speed').value);
+  pb.t+=dt*sp/f.dur;
+  const k=Math.min(1,pb.t),s=k*k*(3-2*k);
+  [f.L,f.R].forEach((spec,j)=>{
+    const [tx,ty]=resolve(spec),a=arms[j];
+    const [cx_,cy_]=clampReach(a,pb.from[j].x+(tx-pb.from[j].x)*s,pb.from[j].y+(ty-pb.from[j].y)*s);
+    a.x=a.tx=cx_;a.y=a.ty=cy_;
+  });
+  if(pb.t>=1){
+    const gripChanged=(!!f.L.g!==arms[0].g)||(!!f.R.g!==arms[1].g);
+    setGrip(arms[0],!!f.L.g);setGrip(arms[1],!!f.R.g);
+    pb.from=[{x:arms[0].x,y:arms[0].y},{x:arms[1].x,y:arms[1].y}];
+    pb.i++;pb.t=0;pb.wait=gripChanged?0.22/sp:0;
+    if(pb.i>=pb.frames.length){settle={t:1.0,label:pb.label,adapt:pb.adapt};pb=null;}
+  }
+}
+function finishEpisode(label,adapt){
+  const n=blocks.filter(inTray).length;
+  const ok=n===4;
+  episodes.push({n:episodes.length+1,label,adapt,got:n,ok});
+  renderLog();updateStats();
+  say(ok?'Success: all 4 blocks in the tray.':'Failed: '+n+'/4 blocks in the tray. '+(adapt?'Hand-offs or reach limits got in the way.':'The block positions changed, so raw coordinates missed.'),!ok);
+}
+function renderLog(){
+  const tb=$('#log');tb.innerHTML='';
+  episodes.slice(-6).reverse().forEach(e=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+e.n+'</td><td>'+esc(e.label)+'</td><td>'+(e.adapt?'relative':'raw')+'</td><td class="'+(e.ok?'ok':'no')+'">'+(e.ok?'ok':'miss')+' '+e.got+'/4</td>';
+    tb.appendChild(tr);
+  });
+}
+function updateStats(){
+  $('#nEp').textContent=episodes.length;
+  $('#nOk').textContent=episodes.length?Math.round(100*episodes.filter(e=>e.ok).length/episodes.length)+'%':'-';
+  $('#nTray').textContent=blocks.filter(inTray).length+'/4';
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- skills ---------- */
+function presetTidy(){
+  const f=[];
+  let a={x:HOME[0].x,y:HOME[0].y,g:0,ref:null,ox:0,oy:0},b={x:HOME[1].x,y:HOME[1].y,g:0,ref:null,ox:0,oy:0};
+  const mk=(l,r,dur)=>{a=Object.assign({},a,l);b=Object.assign({},b,r);f.push({L:{...a},R:{...b},dur});};
+  const above=(id)=>({x:DEF[id].x,y:TABLE-BS/2-70,ref:id,ox:0,oy:-70});
+  const at=(id)=>({x:DEF[id].x,y:TABLE-BS/2,ref:id,ox:0,oy:0});
+  const free={ref:null,ox:0,oy:0};
+  mk(above(0),above(2),1.0);
+  mk(at(0),at(2),0.6);
+  mk({g:1},{g:1},0.2);
+  mk({x:DEF[0].x+60,y:290,...free},{x:DEF[2].x-60,y:290,...free},0.7);
+  mk({x:372,y:300,...free},{x:428,y:300,...free},0.8);
+  mk({g:0},{g:0},0.2);
+  mk(above(1),above(3),1.0);
+  mk(at(1),at(3),0.6);
+  mk({g:1},{g:1},0.2);
+  mk({x:DEF[1].x+40,y:290,...free},{x:DEF[3].x-40,y:290,...free},0.7);
+  mk({x:350,y:300,...free},{x:450,y:300,...free},0.8);
+  mk({g:0},{g:0},0.2);
+  mk({x:HOME[0].x,y:HOME[0].y,...free},{x:HOME[1].x,y:HOME[1].y,...free},0.8);
+  return f;
+}
+function renderSkills(){
+  const ul=$('#skList');ul.innerHTML='';
+  skills.forEach((s,i)=>{
+    const li=document.createElement('li');
+    li.innerHTML='<span>'+esc(s.name)+' <span style="color:var(--dim)">'+s.frames.length+' kf'+(s.builtin?' | preset':'')+'</span></span>';
+    const box=document.createElement('span');
+    const run=document.createElement('button');run.className='sm';run.textContent='run';
+    run.onclick=()=>startPlayback(s.frames,s.name);
+    const ld=document.createElement('button');ld.className='sm';ld.textContent='load';
+    ld.onclick=()=>{timeline=JSON.parse(JSON.stringify(s.frames));renderTimeline();say('Loaded "'+s.name+'" into the timeline.');};
+    box.append(run,' ',ld);
+    if(!s.builtin){const d=document.createElement('button');d.className='sm';d.textContent='x';d.onclick=()=>{skills.splice(i,1);renderSkills();};box.append(' ',d);}
+    li.appendChild(box);ul.appendChild(li);
+  });
+}
+function saveSkill(){
+  if(!timeline.length){say('Record some keyframes first.',true);return;}
+  const nm=($('#skName').value.trim())||('skill '+(skills.length));
+  skills.push({name:nm,frames:JSON.parse(JSON.stringify(timeline))});
+  $('#skName').value='';renderSkills();
+  say('Saved "'+nm+'". Shuffle the blocks and run it in both modes to compare.');
+}
+
+/* ---------- input ---------- */
+function pt(e){
+  const r=cv.getBoundingClientRect();
+  return [(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height];
+}
+function aim(e){
+  if(pb)return;
+  const [x,y]=pt(e);
+  const a=armMode==='auto'?(x<400?arms[0]:arms[1]):arms[+armMode];
+  [a.tx,a.ty]=clampReach(a,x,y);
+}
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);aim(e);});
+cv.addEventListener('pointermove',e=>{if(e.buttons)aim(e);});
+$('#armSel').onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;
+  armMode=b.dataset.a;
+  [...$('#armSel').children].forEach(c=>c.classList.toggle('on',c===b));
+};
+function toggleGrip(i){if(pb)return;setGrip(arms[i],!arms[i].g);}
+$('#gripL').onclick=()=>toggleGrip(0);
+$('#gripR').onclick=()=>toggleGrip(1);
+$('#rec').onclick=recordKeyframe;
+$('#play').onclick=()=>startPlayback(timeline,'timeline');
+$('#stop').onclick=()=>{stopPlayback();say('Stopped.');};
+$('#clear').onclick=()=>{timeline=[];lastPose=[{x:arms[0].x,y:arms[0].y},{x:arms[1].x,y:arms[1].y}];renderTimeline();say('Timeline cleared.');};
+$('#shuffle').onclick=shuffleBlocks;
+$('#reset').onclick=()=>{stopPlayback();resetScene();say('Scene reset to the default layout.');};
+$('#saveSk').onclick=saveSkill;
+window.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'&&e.target.type==='text')return;
+  const k=e.key.toLowerCase();
+  if(k==='1')toggleGrip(0);
+  else if(k==='2')toggleGrip(1);
+  else if(k==='r')recordKeyframe();
+  else if(k==='enter')startPlayback(timeline,'timeline');
+  else if(k==='s')shuffleBlocks();
+});
+function say(t,bad){const s=$('#status');s.textContent=t;s.classList.toggle('bad',!!bad);}
+
+/* ---------- drawing ---------- */
+function rr(x,y,w,h,r){cx.beginPath();cx.moveTo(x+r,y);cx.arcTo(x+w,y,x+w,y+h,r);cx.arcTo(x+w,y+h,x,y+h,r);cx.arcTo(x,y+h,x,y,r);cx.arcTo(x,y,x+w,y,r);cx.closePath();}
+function draw(){
+  cx.clearRect(0,0,W,H);
+  cx.strokeStyle='#141c24';cx.lineWidth=1;
+  for(let x=0;x<=W;x+=40){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,TABLE);cx.stroke();}
+  for(let y=0;y<=TABLE;y+=40){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // robot body (behind tray)
+  cx.fillStyle='#26323f';rr(352,172,96,96,12);cx.fill();
+  cx.fillStyle='#1d2731';rr(384,262,32,170,6);cx.fill();
+  cx.fillStyle='#0b1015';rr(366,170,68,22,8);cx.fill();
+  cx.fillStyle=pb?'#ffb454':'#4fd1c5';cx.beginPath();cx.arc(386,181,4,0,7);cx.arc(414,181,4,0,7);cx.fill();
+  // table
+  cx.fillStyle='#1a232d';cx.fillRect(0,TABLE,W,H-TABLE);
+  cx.fillStyle='#2f3d4b';cx.fillRect(0,TABLE,W,3);
+  cx.fillStyle='#10161c';rr(340,440,120,26,8);cx.fill();
+  cx.fillStyle='#4a5b6c';cx.beginPath();cx.arc(366,468,9,0,7);cx.arc(434,468,9,0,7);cx.fill();
+  // tray
+  cx.strokeStyle='#7aa2ff';cx.lineWidth=4;cx.lineJoin='round';
+  cx.beginPath();cx.moveTo(TRAY.x0,TABLE-TRAY.h);cx.lineTo(TRAY.x0+6,TABLE+2);cx.lineTo(TRAY.x1-6,TABLE+2);cx.lineTo(TRAY.x1,TABLE-TRAY.h);cx.stroke();
+  cx.fillStyle='#7aa2ff';cx.font='11px monospace';cx.textAlign='center';cx.fillText('TRAY',400,TABLE+22);
+  // ghost waypoints
+  timeline.forEach((k,i)=>{
+    [k.L,k.R].forEach((sp,j)=>{
+      const [x,y]=resolve(sp);
+      cx.save();cx.translate(x,y);cx.rotate(Math.PI/4);
+      cx.strokeStyle=j?'rgba(79,209,197,.55)':'rgba(255,180,84,.55)';cx.lineWidth=1.5;
+      cx.strokeRect(-4,-4,8,8);cx.restore();
+      cx.fillStyle='rgba(220,228,236,.5)';cx.font='9px monospace';cx.fillText(i+1,x,y-9);
+      if(sp.ref!==null&&$('#adapt').checked){
+        const b=blocks[sp.ref];cx.strokeStyle='rgba(220,228,236,.15)';cx.setLineDash([3,3]);
+        cx.beginPath();cx.moveTo(b.x,b.y);cx.lineTo(x,y);cx.stroke();cx.setLineDash([]);
+      }
+    });
+  });
+  // blocks
+  blocks.forEach(b=>{
+    cx.fillStyle=COLS[b.id];rr(b.x-BS/2,b.y-BS/2,BS,BS,5);cx.fill();
+    cx.fillStyle='#10161c';cx.font='bold 14px monospace';cx.textAlign='center';cx.fillText(NAMES[b.id],b.x,b.y+5);
+  });
+  // target crosshairs
+  if(!pb)arms.forEach(a=>{
+    if(Math.hypot(a.tx-a.x,a.ty-a.y)>3){
+      cx.strokeStyle='rgba(220,228,236,.35)';cx.lineWidth=1;
+      cx.beginPath();cx.moveTo(a.tx-6,a.ty);cx.lineTo(a.tx+6,a.ty);cx.moveTo(a.tx,a.ty-6);cx.lineTo(a.tx,a.ty+6);cx.stroke();
+    }
+  });
+  // arms
+  arms.forEach(a=>{
+    const [ex,ey]=elbow(a),c=a.i?'#4fd1c5':'#ffb454';
+    cx.lineCap='round';
+    cx.strokeStyle='#3b4b5b';cx.lineWidth=15;
+    cx.beginPath();cx.moveTo(a.sx,a.sy);cx.lineTo(ex,ey);cx.stroke();
+    cx.lineWidth=11;cx.beginPath();cx.moveTo(ex,ey);cx.lineTo(a.x,a.y);cx.stroke();
+    cx.fillStyle='#10161c';
+    [[a.sx,a.sy,9],[ex,ey,8]].forEach(([x,y,r])=>{cx.beginPath();cx.arc(x,y,r,0,7);cx.fill();});
+    cx.strokeStyle=c;cx.lineWidth=3;cx.beginPath();cx.arc(a.sx,a.sy,9,0,7);cx.stroke();
+    // gripper jaws
+    const open=a.g?7:16;
+    cx.strokeStyle=c;cx.lineWidth=4;
+    cx.beginPath();cx.moveTo(a.x-open/2-3,a.y-14);cx.lineTo(a.x-open/2,a.y+5);cx.moveTo(a.x+open/2+3,a.y-14);cx.lineTo(a.x+open/2,a.y+5);cx.stroke();
+    cx.fillStyle=c;cx.beginPath();cx.arc(a.x,a.y-16,5,0,7);cx.fill();
+  });
+  cx.lineCap='butt';
+  // HUD
+  cx.fillStyle='#8394a6';cx.font='11px monospace';cx.textAlign='left';
+  cx.fillText(pb?'REPLAY kf '+(pb.i+1)+'/'+pb.frames.length:'TELEOP',12,20);
+  if(pb)$('#kfList').querySelectorAll('li').forEach(li=>li.classList.toggle('cur',+li.dataset.i===pb.i&&pb.frames.length===timeline.length));
+  else $('#kfList').querySelectorAll('li.cur').forEach(li=>li.classList.remove('cur'));
+}
+
+/* ---------- loop ---------- */
+let last=performance.now();
+function tick(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  stepPlayback(dt);
+  if(!pb){
+    arms.forEach(a=>{
+      const k=Math.min(1,dt*12);
+      a.x+=(a.tx-a.x)*k;a.y+=(a.ty-a.y)*k;
+    });
+  }
+  arms.forEach(a=>{if(a.held!==null){const b=blocks[a.held];b.x=a.x;b.y=a.y+2;b.vy=0;}});
+  blocks.forEach(b=>{
+    if(b.held!==null)return;
+    const ry=restY(b);
+    if(b.y<ry-0.5){b.vy+=1400*dt;b.y=Math.min(b.y+b.vy*dt,ry);if(b.y>=ry)b.vy=0;}
+    else{b.y=ry;b.vy=0;}
+  });
+  if(settle){settle.t-=dt;if(settle.t<=0){const s=settle;settle=null;finishEpisode(s.label,s.adapt);}}
+  if(Math.floor(now/250)!==Math.floor((now-dt*1000)/250))updateStats();
+  draw();
+  requestAnimationFrame(tick);
+}
+
+/* ---------- init ---------- */
+skills.push({name:'tidy both sides',frames:presetTidy(),builtin:true});
+resetScene();renderTimeline();renderSkills();
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
