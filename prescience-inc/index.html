@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lookahead Care Planner - toy demo</title>
+<style>
+:root{--bg:#0f1419;--panel:#171e26;--line:#26313d;--tx:#e6edf3;--mut:#8b9aab;--acc:#f2b84b;--ok:#5ec2a0;--bad:#e0705f;--blue:#6aa5e8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 24px 8px;max-width:1080px;margin:auto}
+h1{font-size:24px;margin:0 0 4px;letter-spacing:-.3px}
+h1 span{color:var(--acc)}
+.sub{color:var(--mut);max-width:760px;margin:0}
+main{max-width:1080px;margin:auto;padding:16px 24px 8px;display:grid;grid-template-columns:300px 1fr;gap:16px}
+@media(max-width:820px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);margin:0 0 10px;font-weight:600}
+label{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+select,input[type=range]{width:100%}
+select{background:#0f1419;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px}
+.chk{display:flex;gap:8px;align-items:center;color:var(--tx);font-size:13px;margin:5px 0}
+.chk small{color:var(--mut);margin-left:auto}
+button{background:var(--acc);color:#1a1405;border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer;font-size:14px}
+button.ghost{background:transparent;color:var(--tx);border:1px solid var(--line)}
+button:hover{filter:brightness(1.1)}
+.row{display:flex;gap:8px;margin-top:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.stat{background:#0f1419;border:1px solid var(--line);border-radius:8px;padding:10px}
+.stat b{display:block;font-size:22px;letter-spacing:-.5px}
+.stat i{font-style:normal;color:var(--mut);font-size:12px}
+.good{color:var(--ok)}
+.warn{color:var(--bad)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button:active{transform:translateY(1px)}
+input[type=range]{accent-color:var(--acc)}
+.card{box-shadow:0 1px 0 rgba(255,255,255,.03) inset}
+.stat b{font-variant-numeric:tabular-nums}
+.pill{white-space:nowrap}
+table.pol{border-collapse:separate;border-spacing:3px;width:100%;font-size:12px}
+table.pol th{color:var(--mut);font-weight:500;text-align:center;padding:2px}
+table.pol th.l{text-align:right;padding-right:6px;white-space:nowrap}
+table.pol td{height:34px;text-align:center;border-radius:5px;cursor:pointer;color:#10161c;font-weight:700;border:2px solid transparent}
+table.pol td.sel{border-color:#fff}
+table.pol td.path{outline:2px dashed var(--acc);outline-offset:1px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--mut);margin-top:8px}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;background:var(--c);vertical-align:-1px}
+.q{display:grid;grid-template-columns:130px 1fr 70px;gap:8px;align-items:center;font-size:13px;margin:4px 0}
+.bar{height:14px;background:#0f1419;border-radius:4px;overflow:hidden;border:1px solid var(--line)}
+.bar div{height:100%;background:var(--blue)}
+.bar div.best{background:var(--acc)}
+.wide{grid-column:1/-1}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.two{grid-template-columns:1fr}}
+canvas{width:100%;height:190px;display:block}
+.note{color:var(--mut);font-size:12.5px;margin:8px 0 0}
+.path-line{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.pill{padding:3px 9px;border-radius:99px;font-size:12px;border:1px solid var(--line);background:#0f1419}
+footer{max-width:1080px;margin:10px auto 30px;padding:14px 24px;color:var(--mut);font-size:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lookahead Care Planner <span>/ toy</span></h1>
+  <p class="sub">A synthetic member moves through health states each quarter. Pick which interventions are allowed, and a backward-search planner finds the action at every (quarter, state) that minimizes <b>expected employer cost</b>. Then 4,000 simulated members play out usual care versus the plan. All data is made up.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Setup</h2>
+    <label for="member">Synthetic member</label>
+    <select id="member"></select>
+    <p class="note" id="memberNote"></p>
+    <label for="hor">Planning horizon: <b id="horV"></b> quarters</label>
+    <input type="range" id="hor" min="2" max="12" value="8">
+    <label for="disc">Member leaves plan each quarter: <b id="churnV"></b></label>
+    <input type="range" id="churn" min="0" max="30" value="0">
+    <label>Allowed interventions</label>
+    <div id="acts"></div>
+    <div class="row">
+      <button id="plan">Re-plan</button>
+      <button class="ghost" id="reseed">New random cohort</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="stats">
+      <div class="stat"><i>Usual care, mean cost</i><b id="sUsual">-</b></div>
+      <div class="stat"><i>Planned, mean cost</i><b id="sPlan">-</b></div>
+      <div class="stat"><i>Savings per member</i><b id="sSave" class="good">-</b></div>
+    </div>
+    <div class="card">
+      <h2>Policy map - best action by quarter and state (click a cell)</h2>
+      <div id="polWrap"></div>
+      <div class="legend" id="legend"></div>
+      <div class="path-line" id="pathLine"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 id="qTitle">Why this move?</h2>
+    <div id="qBars"></div>
+    <p class="note" id="qNote"></p>
+  </section>
+
+  <section class="card">
+    <h2>Simulated annual cost distribution</h2>
+    <canvas id="hist" width="520" height="190"></canvas>
+    <div class="legend"><span style="--c:#8b9aab">Usual care</span><span style="--c:#f2b84b">Planned</span></div>
+    <p class="note" id="histNote"></p>
+  </section>
+
+  <section class="card wide">
+    <h2>Step one member through the plan</h2>
+    <div class="row" style="margin-top:0">
+      <button id="stepBtn">Advance one quarter</button>
+      <button class="ghost" id="resetBtn">Reset member</button>
+    </div>
+    <div id="log" class="note" style="margin-top:12px;font-family:ui-monospace,Menlo,monospace;line-height:1.7"></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Prescience, Inc. (YC S26). Not affiliated with Prescience, Inc.. Every number above is invented for illustration and is not medical or pricing advice.</footer>
+
+<script>
+// ---------- toy world model (all numbers synthetic) ----------
+const STATES = ["Healthy","Elevated risk","Chronic","Complication","Acute event"];
+const SCOL = ["#5ec2a0","#a9d36b","#f2b84b","#ee8f4f","#e0705f"];
+const STATE_COST = [250, 600, 2100, 5200, 24000];   // cost of simply being in this state for a quarter
+const BASE_W = [0.03, 0.10, 0.12, 0.14, 0.00];       // chance to get worse in a quarter
+const BASE_I = [0.00, 0.12, 0.04, 0.05, 0.00];       // chance to improve
+// acute event always drops to Complication next quarter (forced), handled in step()
+const ACTIONS = [
+  {id:"usual", name:"Usual care",        cost:0,   col:"#8b9aab", eff:[[1,1],[1,1],[1,1],[1,1],[1,1]], on:true, lock:true},
+  {id:"coach", name:"Coaching + nudges", cost:140, col:"#6aa5e8", eff:[[.9,1],[.7,1.5],[.85,1.2],[1,1],[1,1]], on:true},
+  {id:"glp1",  name:"GLP-1 therapy",     cost:1100,col:"#c58af0", eff:[[1,1],[.35,1.8],[.45,2.2],[.8,1.2],[1,1]], on:true},
+  {id:"mon",   name:"Remote monitoring", cost:260, col:"#5ec2a0", eff:[[1,1],[.9,1.1],[.6,1.2],[.5,1.3],[1,1]], on:true},
+  {id:"spec",  name:"Early specialist",  cost:700, col:"#f2b84b", eff:[[1,1],[.95,1.1],[.7,1.3],[.4,1.6],[1,1]], on:true}
+];
+const MEMBERS = [
+  {name:"Member A (age 34)", start:0, risk:1.0, note:"Healthy start, average risk. Little to gain from spending."},
+  {name:"Member B (age 47)", start:1, risk:1.3, note:"Elevated markers, family history. Classic early-intervention case."},
+  {name:"Member C (age 55)", start:2, risk:1.2, note:"Established chronic condition, rising complication risk."},
+  {name:"Member D (age 62)", start:3, risk:1.1, note:"Past a complication. Prevention window mostly closed."}
+];
+
+// transition distribution for (state, action, risk): returns [pStay, pWorse, pBetter]
+function trans(s, a, risk){
+  if(s===4) return [0,1,0];
+  const [wm,im] = ACTIONS[a].eff[s];
+  let w = Math.min(.9, BASE_W[s]*risk*wm);
+  let i = Math.min(.9-w, BASE_I[s]*im);
+  if(s===0) i=0;
+  return [1-w-i, w, i];
+}
+const nxt = (s,k)=> k===1 ? Math.min(4,s+1) : k===2 ? Math.max(0,s-1) : s;
+
+// ---------- planner: backward induction over (quarter, state) ----------
+let M, H, churn, enabled, V, Q, POL;
+function plan(){
+  const keep = 1 - churn;                       // chance the member is still on the plan next quarter
+  V = Array.from({length:H+1},()=>Array(5).fill(0));
+  Q = Array.from({length:H},()=>Array.from({length:5},()=>Array(ACTIONS.length).fill(Infinity)));
+  POL = Array.from({length:H},()=>Array(5).fill(0));
+  for(let t=H-1;t>=0;t--) for(let s=0;s<5;s++){
+    let best=Infinity,bi=0;
+    for(let a=0;a<ACTIONS.length;a++){
+      if(!enabled[a]) continue;
+      const p = trans(s,a,M.risk);
+      let fut = 0;
+      for(let k=0;k<3;k++) fut += p[k]*V[t+1][nxt(s,k)];
+      const q = ACTIONS[a].cost + STATE_COST[s] + keep*fut;
+      Q[t][s][a]=q;
+      if(q<best-1e-9){best=q;bi=a}
+    }
+    V[t][s]=best; POL[t][s]=bi;
+  }
+}
+
+// ---------- simulation ----------
+let seed=12345;
+function rng(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+function rollout(usePlan){
+  let s=M.start,cost=0;
+  for(let t=0;t<H;t++){
+    const a = usePlan ? POL[t][s] : 0;
+    cost += ACTIONS[a].cost + STATE_COST[s];
+    if(rng()<churn) break;
+    const p=trans(s,a,M.risk), r=rng();
+    s = nxt(s, r<p[1] ? 1 : r<p[1]+p[2] ? 2 : 0);
+  }
+  return cost;
+}
+function cohort(usePlan,n){ const out=[]; for(let i=0;i<n;i++) out.push(rollout(usePlan)); return out; }
+const mean = a=>a.reduce((x,y)=>x+y,0)/a.length;
+const $ = id=>document.getElementById(id);
+const money = x=>"$"+Math.round(x).toLocaleString();
+
+// ---------- UI ----------
+let sel={t:0,s:0}, sim=null;
+function init(){
+  MEMBERS.forEach((m,i)=>$("member").add(new Option(m.name,i)));
+  $("member").value=1;
+  ACTIONS.forEach((a,i)=>{
+    const d=document.createElement("label"); d.className="chk";
+    d.innerHTML=`<input type="checkbox" ${a.on?"checked":""} ${a.lock?"disabled":""} data-i="${i}"><span style="color:${a.col}">&#9632;</span> ${a.name}<small>${money(a.cost)}/qtr</small>`;
+    $("acts").appendChild(d);
+  });
+  $("legend").innerHTML = ACTIONS.map(a=>`<span style="--c:${a.col}">${a.name}</span>`).join("");
+  ["member","hor","churn"].forEach(id=>$(id).addEventListener("input",run));
+  $("acts").addEventListener("change",run);
+  $("plan").onclick=run;
+  $("reseed").onclick=()=>{seed=(Math.random()*4e9)>>>0; run();};
+  $("stepBtn").onclick=stepMember;
+  $("resetBtn").onclick=()=>{sim=null;$("log").innerHTML="";};
+  run();
+}
+function readInputs(){
+  M=MEMBERS[+$("member").value]; H=+$("hor").value; churn=+$("churn").value/100;
+  enabled=ACTIONS.map((a,i)=>a.lock || document.querySelector(`#acts input[data-i="${i}"]`).checked);
+  $("horV").textContent=H; $("churnV").textContent=Math.round(churn*100)+"%";
+  $("memberNote").textContent=M.note+" Starts in: "+STATES[M.start]+".";
+}
+function run(){
+  readInputs(); plan();
+  const sv=seed; const u=cohort(false,4000); seed=sv; const p=cohort(true,4000);
+  const mu=mean(u), mp=mean(p);
+  $("sUsual").textContent=money(mu); $("sPlan").textContent=money(mp);
+  const sv2=mu-mp; $("sSave").textContent=money(sv2)+" ("+(mu?Math.round(100*sv2/mu):0)+"%)";
+  $("sSave").className = sv2>=0 ? "good" : "warn";
+  sel={t:0,s:M.start}; sim=null; $("log").innerHTML="";
+  drawPolicy(); drawQ(); drawHist(u,p);
+}
+function drawPolicy(){
+  const path=expectedPath();
+  let h='<table class="pol"><tr><th></th>'+Array.from({length:H},(_,t)=>`<th>Q${t+1}</th>`).join("")+"</tr>";
+  for(let s=0;s<5;s++){
+    h+=`<tr><th class="l">${STATES[s]}</th>`;
+    for(let t=0;t<H;t++){
+      const a=POL[t][s], on=path[t]===s;
+      h+=`<td data-t="${t}" data-s="${s}" class="${sel.t===t&&sel.s===s?"sel":""} ${on?"path":""}" style="background:${ACTIONS[a].col}">${ACTIONS[a].name.split(" ")[0].slice(0,5)}</td>`;
+    }
+    h+="</tr>";
+  }
+  $("polWrap").innerHTML=h+"</table>";
+  $("polWrap").querySelectorAll("td").forEach(td=>td.onclick=()=>{sel={t:+td.dataset.t,s:+td.dataset.s};drawPolicy();drawQ();});
+  $("pathLine").innerHTML='<span class="note" style="margin:0">Most likely path (dashed):</span>'+path.map((s,t)=>`<span class="pill" style="border-color:${SCOL[s]}">Q${t+1}: ${STATES[s]} &rarr; ${ACTIONS[POL[t][s]].name}</span>`).join("");
+}
+// follow the single most probable transition at every step
+function expectedPath(){
+  const out=[]; let s=M.start;
+  for(let t=0;t<H;t++){ out.push(s); const p=trans(s,POL[t][s],M.risk); const k=p.indexOf(Math.max(...p)); s=nxt(s,k); }
+  return out;
+}
+function drawQ(){
+  const {t,s}=sel, row=Q[t][s];
+  const fin=row.filter(isFinite), lo=Math.min(...fin), hi=Math.max(...fin);
+  $("qTitle").textContent=`Why this move? Q${t+1}, state: ${STATES[s]}`;
+  let h="";
+  row.forEach((v,a)=>{
+    if(!isFinite(v)) return;
+    const w = hi===lo ? 100 : 25+75*(v-lo)/(hi-lo);
+    h+=`<div class="q"><span>${ACTIONS[a].name}</span><div class="bar"><div class="${a===POL[t][s]?"best":""}" style="width:${w}%"></div></div><span>${money(v)}</span></div>`;
+  });
+  $("qBars").innerHTML=h;
+  const best=POL[t][s], usual=row[0];
+  const early = row[best]<usual ? `Choosing <b>${ACTIONS[best].name}</b> beats usual care by ${money(usual-row[best])} in expected cost over the remaining ${H-t} quarters.` : "Usual care is already cheapest here.";
+  const cheapNow = ACTIONS.map((a,i)=>enabled[i]?a.cost+STATE_COST[s]:Infinity);
+  const myopic = cheapNow.indexOf(Math.min(...cheapNow));
+  $("qNote").innerHTML=early+(myopic!==best?` A one-quarter (greedy) view would pick <b>${ACTIONS[myopic].name}</b>: the plan pays more now to avoid worse states later.`:"");
+}
+function drawHist(u,p){
+  const c=$("hist"),g=c.getContext("2d"),W=c.width,Hh=c.height; g.clearRect(0,0,W,Hh);
+  const all=u.concat(p), mx=Math.max(...all), bins=28, bw=mx/bins;
+  const hist=arr=>{const b=Array(bins).fill(0);arr.forEach(x=>b[Math.min(bins-1,Math.floor(x/bw))]++);return b.map(x=>x/arr.length)};
+  const hu=hist(u),hp=hist(p), top=Math.max(...hu,...hp)*1.1, bx=(W-20)/bins;
+  [[hu,"rgba(139,154,171,.65)"],[hp,"rgba(242,184,75,.7)"]].forEach(([hh,col])=>{
+    g.fillStyle=col; hh.forEach((v,i)=>{const bh=v/top*(Hh-26); g.fillRect(10+i*bx+1,Hh-18-bh,bx-2,bh);});
+  });
+  g.fillStyle="#8b9aab"; g.font="11px system-ui"; g.fillText("$0",10,Hh-4); g.textAlign="right"; g.fillText(money(mx),W-10,Hh-4);
+  const tail=a=>a.filter(x=>x>mx*0.5).length/a.length;
+  $("histNote").textContent=`Share of members above ${money(mx*.5)}: usual ${(tail(u)*100).toFixed(1)}%, planned ${(tail(p)*100).toFixed(1)}%. The plan mostly saves by shrinking the expensive tail.`;
+}
+function stepMember(){
+  if(!sim) sim={t:0,s:M.start,cost:0,left:false};
+  const L=$("log");
+  if(sim.t>=H||sim.left){L.innerHTML+="<div>Horizon reached. Press Reset member to replay.</div>";return;}
+  const a=POL[sim.t][sim.s], c=ACTIONS[a].cost+STATE_COST[sim.s]; sim.cost+=c;
+  const p=trans(sim.s,a,M.risk);
+  if(rng()<churn){ sim.left=true; L.innerHTML+=`<div>Q${sim.t+1}: ${STATES[sim.s]} | ${ACTIONS[a].name} | ${money(c)} | member left the plan. Total ${money(sim.cost)}</div>`; return; }
+  const r=rng(), k=r<p[1]?1:r<p[1]+p[2]?2:0, ns=nxt(sim.s,k);
+  const verb=k===1?"worsened":k===2?"improved":"held";
+  L.innerHTML+=`<div>Q${sim.t+1}: <span style="color:${SCOL[sim.s]}">${STATES[sim.s]}</span> | ${ACTIONS[a].name} | ${money(c)} | ${verb} &rarr; <span style="color:${SCOL[ns]}">${STATES[ns]}</span> (p=${(p[k]*100).toFixed(0)}%)</div>`;
+  sim.s=ns; sim.t++;
+}
+init();
+</script>
+</body>
+</html>

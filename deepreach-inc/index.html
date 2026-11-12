@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spread vs. Depth - a toy field-data allocator</title>
+<style>
+:root{--bg:#10120f;--panel:#181b16;--line:#2b3027;--ink:#e8eadf;--mute:#8d9484;--acc:#d9f26b;--warn:#ff9e5e;--bad:#e5645a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+header{padding:22px 28px 10px;max-width:1200px;margin:auto}
+h1{font:600 22px/1.2 Georgia,serif;margin:0 0 6px}
+header p{margin:0;color:var(--mute);max-width:760px}
+main{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;max-width:1200px;margin:14px auto;padding:0 28px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:0 0 10px;font-weight:600}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+button{background:#232820;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.go{background:var(--acc);color:#1a1f0a;border-color:var(--acc);font-weight:700}
+.budget{margin-left:auto;color:var(--acc)}
+#roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px;max-height:430px;overflow:auto}
+.p{border:1px solid var(--line);border-radius:6px;padding:8px;cursor:pointer;background:#14170f;position:relative}
+.p:hover{border-color:var(--mute)}
+.p.on{border-color:var(--acc);background:#1d2412}
+.p b{display:block;font-size:13px}
+.p small{color:var(--mute)}
+.p .tag{position:absolute;top:8px;right:8px;font-size:10px;color:var(--acc)}
+.p .q{height:3px;background:#2b3027;margin-top:6px;border-radius:2px}
+.p .q i{display:block;height:100%;background:var(--mute);border-radius:2px}
+table{border-collapse:collapse;width:100%}
+th,td{padding:0;text-align:center;font-size:11px}
+th{color:var(--mute);font-weight:400;padding:3px}
+th.r{text-align:right;padding-right:8px;white-space:nowrap}
+td div{margin:2px;height:34px;border-radius:4px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);color:#0e1008}
+.sliders{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;margin-bottom:10px}
+input[type=range]{accent-color:var(--acc);width:100%}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+.stat{background:#14170f;border:1px solid var(--line);border-radius:6px;padding:8px}
+.stat span{display:block;color:var(--mute);font-size:10px;text-transform:uppercase}
+.stat b{font-size:18px}
+.cmp{margin-top:6px}
+.row{display:grid;grid-template-columns:130px 1fr 52px;gap:8px;align-items:center;margin:6px 0}
+.track{height:14px;background:#14170f;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.fill{height:100%;width:0;transition:width .6s}
+#log{font-size:12px;color:var(--mute);max-height:120px;overflow:auto;border-top:1px dashed var(--line);margin-top:10px;padding-top:8px}
+#log .ok{color:var(--acc)} #log .no{color:var(--bad)}
+.note{color:var(--mute);font-size:12px;margin-top:8px}
+footer{max-width:1200px;margin:10px auto 28px;padding:12px 28px;color:var(--mute);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Spread vs. Depth</h1>
+  <p>A toy model of a distributed field-data network. Hand out a limited pool of wearable capture rigs to local partners, run a collection week, push every clip through a quality gate, and see why hours spread over many workplaces can beat the same hours piled into one. All partners and numbers are synthetic.</p>
+</header>
+<main>
+  <section>
+    <h2>1 - Place devices with partners</h2>
+    <div class="bar">
+      <button id="auto">Auto-pick for coverage</button>
+      <button id="deep">Pile into one site</button>
+      <button id="clear">Clear</button>
+      <span class="budget" id="budget"></span>
+    </div>
+    <div id="roster"></div>
+    <p class="note">Click a partner to hand over or reclaim a rig. Bar under each name = typical clip quality for that partner.</p>
+    <h2 style="margin-top:14px">Rig ledger</h2>
+    <div id="ledger"></div>
+  </section>
+  <section>
+    <h2>2 - Collect, gate, pay</h2>
+    <div class="sliders">
+      <label for="sharp">Min sharpness</label><input id="sharp" type="range" min="0" max="90" value="40"><span id="sharpv"></span>
+      <label for="hands">Min hand visibility</label><input id="hands" type="range" min="0" max="90" value="50"><span id="handsv"></span>
+      <label for="rate">Pay per good hour</label><input id="rate" type="range" min="4" max="20" value="9"><span id="ratev"></span>
+    </div>
+    <div class="bar"><button class="go" id="run">Run a collection week</button><button id="again">Run another week</button></div>
+    <div class="stats">
+      <div class="stat"><span>Clips</span><b id="sClips">0</b></div>
+      <div class="stat"><span>Pass rate</span><b id="sPass">-</b></div>
+      <div class="stat"><span>Good hours</span><b id="sHrs">0</b></div>
+      <div class="stat"><span>Payouts</span><b id="sPay">$0</b></div>
+    </div>
+    <h2>Coverage (good hours per workplace x task)</h2>
+    <div id="matrix"></div>
+    <h2 style="margin-top:14px">3 - Toy generalization test</h2>
+    <div class="cmp">
+      <div class="row"><span>Your spread</span><div class="track"><div class="fill" id="f1" style="background:var(--acc)"></div></div><b id="v1">-</b></div>
+      <div class="row"><span>Same hours, 1 site</span><div class="track"><div class="fill" id="f2" style="background:var(--warn)"></div></div><b id="v2">-</b></div>
+    </div>
+    <p class="note" id="explain">Score = expected success on 25 workplace-task combos, using a toy saturating model: each combo gains from its own hours fully and from nearby combos at a discount. Not a real benchmark.</p>
+    <div id="log"></div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by DeepReach Inc. (YC S26). Not affiliated with DeepReach Inc..</footer>
+
+<script>
+"use strict";
+// ---------- seeded RNG so runs are reproducible per week ----------
+function rng(seed){let s=seed>>>0;return()=>{s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){return Math.sqrt(-2*Math.log(1-r()))*Math.cos(2*Math.PI*r())}
+
+const ENVS=["Warehouse","Workshop","Farm","Kitchen","Repair shop"];
+const TASKS=["Pick/pack","Fasten","Handle tools","Prep/cook","Sort/inspect"];
+// which tasks each environment naturally produces (weights); fully synthetic
+const AFFINITY=[
+ [.9,.3,.4,.05,.7],
+ [.2,.9,.9,.05,.5],
+ [.4,.3,.6,.1,.8],
+ [.3,.05,.5,.95,.4],
+ [.1,.7,.8,.05,.9]
+];
+const NAMES=["Okafor","Reyes","Nakamura","Haddad","Silva","Kowalski","Mensah","Ivanova","Singh","Larsen","Torres","Abara","Chen","Dlamini","Moreau","Park","Santos","Yilmaz","Novak","Banerjee","Costa","Ito","Duarte","Lindqvist","Bello","Garza","Sato","Farouk","Lima","Wojcik"];
+const PLACES=["Lagos","Monterrey","Osaka","Cairo","Recife","Gdansk","Accra","Kazan","Pune","Bergen","Puebla","Kano","Chengdu","Durban","Lyon","Busan","Manila","Izmir","Brno","Kolkata","Fortaleza","Nagoya","Cali","Malmo","Ibadan","Leon","Sapporo","Giza","Natal","Lodz"];
+
+// deterministic synthetic roster
+const R0=rng(2026);
+const partners=NAMES.map((n,i)=>({
+  id:i,name:n+" & Co.",place:PLACES[i],env:i%5,
+  quality:0.45+R0()*0.5,        // base clip quality
+  hours:6+Math.round(R0()*10),  // hours per device per week
+  on:false
+}));
+
+const BUDGET=10;
+let week=0,total={clips:0,pass:0,pay:0};
+let cover=ENVS.map(()=>TASKS.map(()=>0)); // good hours
+
+const $=id=>document.getElementById(id);
+const used=()=>partners.filter(p=>p.on).length;
+
+function renderRoster(){
+  $("roster").innerHTML=partners.map(p=>`<div class="p ${p.on?"on":""}" data-id="${p.id}">
+    ${p.on?'<span class="tag">RIG</span>':""}<b>${p.name}</b><small>${p.place} - ${ENVS[p.env].toLowerCase()}</small>
+    <div class="q"><i style="width:${Math.round(p.quality*100)}%"></i></div></div>`).join("");
+  $("budget").textContent=`rigs left: ${BUDGET-used()} / ${BUDGET}`;
+  renderLedger();
+}
+// summary of the current placement: diversity of sites before any data is collected
+function renderLedger(){
+  const act=partners.filter(p=>p.on);
+  if(!act.length){$("ledger").innerHTML='<p class="note">No rigs placed yet.</p>';return}
+  const envs=new Set(act.map(p=>p.env)).size;
+  const exp=act.reduce((a,p)=>a+p.hours*p.quality,0);
+  const rows=act.map(p=>`<tr><td style="text-align:left;padding:2px 4px">${p.name}</td>
+    <td>${ENVS[p.env]}</td><td>${p.hours} h/wk</td><td>${Math.round(p.quality*100)}%</td></tr>`).join("");
+  $("ledger").innerHTML=`<p class="note" style="margin:0 0 6px">${act.length} rigs, ${envs} of 5 workplace types, about ${exp.toFixed(0)} expected good hours/week before the gate.</p>
+    <table><tr><th style="text-align:left">Partner</th><th>Workplace</th><th>Capacity</th><th>Quality</th></tr>${rows}</table>`;
+}
+$("roster").addEventListener("click",e=>{
+  const el=e.target.closest(".p");if(!el)return;
+  const p=partners[+el.dataset.id];
+  if(!p.on&&used()>=BUDGET){log("No rigs left. Reclaim one first.","no");return}
+  p.on=!p.on;renderRoster();
+});
+function setOn(ids){partners.forEach(p=>p.on=ids.includes(p.id));renderRoster()}
+$("clear").onclick=()=>setOn([]);
+$("auto").onclick=()=>{ // greedy: best-quality partner per environment, round robin
+  const ids=[];
+  for(let round=0;ids.length<BUDGET&&round<10;round++){
+    for(let e=0;e<5&&ids.length<BUDGET;e++){
+      const pool=partners.filter(p=>p.env===e&&!ids.includes(p.id)).sort((a,b)=>b.quality-a.quality);
+      if(pool[0])ids.push(pool[0].id);
+    }
+  }
+  setOn(ids);log(`Auto-pick: ${ids.length} rigs spread over 5 workplace types.`,"ok");
+};
+$("deep").onclick=()=>{ // everything into the single environment (warehouses), best quality first
+  const pool=partners.filter(p=>p.env===0).sort((a,b)=>b.quality-a.quality).slice(0,BUDGET);
+  setOn(pool.map(p=>p.id));
+  log(`Piled ${pool.length} rigs into warehouses only.`,"no");
+};
+
+// ---------- the collection + quality gate ----------
+function simulate(){
+  const minS=+$("sharp").value/100,minH=+$("hands").value/100,rate=+$("rate").value;
+  const r=rng(9000+week*77);
+  let clips=0,pass=0,pay=0,hrs=0;const rejects={blur:0,hands:0};
+  partners.filter(p=>p.on).forEach(p=>{
+    const n=Math.round(p.hours*6); // 10-minute clips
+    for(let i=0;i<n;i++){
+      clips++;
+      const sharp=Math.min(1,Math.max(0,p.quality+gauss(r)*.18));
+      const hand=Math.min(1,Math.max(0,p.quality*0.9+0.1+gauss(r)*.2));
+      if(sharp<minS){rejects.blur++;continue}
+      if(hand<minH){rejects.hands++;continue}
+      pass++;
+      // pick a task by environment affinity
+      const w=AFFINITY[p.env];let x=r()*w.reduce((a,b)=>a+b,0),t=0;
+      while(t<w.length-1&&x>w[t]){x-=w[t];t++}
+      cover[p.env][t]+=1/6;hrs+=1/6;pay+=rate/6;
+    }
+  });
+  total.clips+=clips;total.pass+=pass;total.pay+=pay;
+  return{clips,pass,hrs,pay,rejects};
+}
+
+// toy generalization: saturating gain, own cell full weight, neighbors discounted
+function gain(h){return 1-Math.exp(-h/4)}
+function score(grid){
+  let s=0;
+  for(let e=0;e<5;e++)for(let t=0;t<5;t++){
+    let best=gain(grid[e][t]);
+    for(let e2=0;e2<5;e2++)for(let t2=0;t2<5;t2++){
+      if(e2===e&&t2===t)continue;
+      const d=Math.abs(e-e2)+Math.abs(t-t2);
+      best=Math.max(best,gain(grid[e2][t2])*Math.pow(.35,d));
+    }
+    s+=best;
+  }
+  return s/25;
+}
+function concentrated(totalHrs){ // same hours, all in one environment
+  const g=ENVS.map(()=>TASKS.map(()=>0));
+  const w=AFFINITY[0],sum=w.reduce((a,b)=>a+b,0);
+  w.forEach((x,t)=>g[0][t]=totalHrs*x/sum);
+  return g;
+}
+
+function renderMatrix(){
+  const max=Math.max(1,...cover.flat());
+  let h="<table><tr><th></th>"+TASKS.map(t=>`<th>${t}</th>`).join("")+"</tr>";
+  cover.forEach((row,e)=>{
+    h+=`<tr><th class="r">${ENVS[e]}</th>`+row.map(v=>{
+      const a=v/max;
+      const bg=v<0.05?"#14170f":`rgba(217,242,107,${0.15+0.85*a})`;
+      return `<td><div style="background:${bg}">${v<0.05?"":v.toFixed(1)}</div></td>`;
+    }).join("")+"</tr>";
+  });
+  $("matrix").innerHTML=h+"</table>";
+}
+function renderScores(){
+  const hrs=cover.flat().reduce((a,b)=>a+b,0);
+  const a=score(cover),b=score(concentrated(hrs));
+  $("f1").style.width=(a*100)+"%";$("f2").style.width=(b*100)+"%";
+  $("v1").textContent=hrs<0.1?"-":(a*100).toFixed(0)+"%";
+  $("v2").textContent=hrs<0.1?"-":(b*100).toFixed(0)+"%";
+  $("explain").textContent=hrs<0.1?"Run a week to see the comparison.":
+    a>b+.02?`Spread wins by ${((a-b)*100).toFixed(0)} points with identical hours: nearly every workplace-task combo sits close to something you already covered.`
+    :b>a+.02?"Your placement did worse than piling into one site. Likely too few distinct workplaces, or the gate threw out too much.":
+    "Roughly a tie. Add rigs in workplace types you have not covered yet.";
+}
+function renderStats(){
+  $("sClips").textContent=total.clips;
+  $("sPass").textContent=total.clips?Math.round(total.pass/total.clips*100)+"%":"-";
+  $("sHrs").textContent=(cover.flat().reduce((a,b)=>a+b,0)).toFixed(0);
+  $("sPay").textContent="$"+Math.round(total.pay);
+}
+function log(msg,cls){const d=document.createElement("div");d.className=cls||"";d.textContent=msg;$("log").prepend(d)}
+
+function run(){
+  if(!used()){log("Place at least one rig first.","no");return}
+  week++;
+  const s=simulate();
+  renderMatrix();renderStats();renderScores();
+  log(`Week ${week}: ${s.clips} clips, ${s.pass} passed (${s.rejects.blur} too blurry, ${s.rejects.hands} hands out of frame), ${s.hrs.toFixed(1)} good hours, $${Math.round(s.pay)} paid.`,"ok");
+}
+$("run").onclick=()=>{cover=ENVS.map(()=>TASKS.map(()=>0));total={clips:0,pass:0,pay:0};week=0;$("log").innerHTML="";run()};
+$("again").onclick=run;
+
+[["sharp","sharpv",v=>v+"%"],["hands","handsv",v=>v+"%"],["rate","ratev",v=>"$"+v]].forEach(([a,b,f])=>{
+  const upd=()=>{$(b).textContent=f($(a).value)};$(a).oninput=upd;upd();
+});
+renderRoster();renderMatrix();renderScores();
+log("Tip: try 'Auto-pick', run a week, then 'Pile into one site' and run again.");
+</script>
+</body>
+</html>

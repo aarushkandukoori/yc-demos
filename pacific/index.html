@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stalled-site pod matcher - toy demo</title>
+<style>
+:root{--bg:#f3efe6;--ink:#1d1b17;--mute:#6b665b;--line:#d8d1c0;--card:#fbf8f1;--acc:#c2410c;--ok:#2f6f4f;--bad:#a1262b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 10px;max-width:1200px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+header p{margin:0;color:var(--mute);max-width:760px}
+main{max-width:1200px;margin:0 auto;padding:10px 28px 30px;display:grid;grid-template-columns:1.35fr 1fr;gap:18px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute);margin:0 0 10px;font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;grid-column:1/-1}
+@media(max-width:700px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--mute)}
+.site{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:#fff;transition:border-color .15s,transform .15s}
+.site:hover{border-color:var(--acc)}
+.site.sel{border-color:var(--acc);box-shadow:0 0 0 2px #c2410c33}
+.site .top{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.site .sub{font-size:12.5px;color:var(--mute);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:2px}
+.bar{height:10px;background:#ece6d6;border-radius:5px;margin-top:8px;display:flex;gap:2px;overflow:hidden;padding:0}
+.bar i{display:block;flex:1;height:100%;background:var(--ok);border-radius:2px}
+.bar i.q{background:repeating-linear-gradient(45deg,#e0a67e,#e0a67e 4px,#f0c9a8 4px,#f0c9a8 8px)}
+.tag{font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);color:var(--mute)}
+.tag.hot{color:var(--bad);border-color:#e0b0b2}
+.row{display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap}
+label{font-size:13px;color:var(--mute)}
+button{font:inherit;font-size:13.5px;padding:7px 12px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:7px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button.ghost:hover{border-color:var(--ink)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.acc{background:var(--acc);border-color:var(--acc)}
+select,input[type=range]{font:inherit}
+select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+#log{height:150px;overflow:auto;background:#1d1b17;color:#e9e3d3;border-radius:8px;padding:8px 10px;font:12px/1.5 ui-monospace,Menlo,monospace}
+#log div{white-space:pre-wrap}
+#log .g{color:#8fd1a8}#log .o{color:#f0a070}
+svg{width:100%;height:120px;display:block;background:#fff;border:1px solid var(--line);border-radius:8px}
+.legend{font-size:12px;color:var(--mute);display:flex;gap:14px;margin-top:6px}
+.legend i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:4px 6px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mute);font-weight:600;font-size:11.5px}
+footer{max-width:1200px;margin:0 auto;padding:6px 28px 30px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+footer p{margin:12px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pod matcher: put idle interconnects to work</h1>
+  <p>Stalled construction sites sit on grid power they cannot use while interest piles up. A small factory builds identical compute pods. Your job: decide which site gets the next pod. Cooling limits how much of each pod's rating survives local heat, so the best site is not always the one with the most megawatts. All sites and numbers are synthetic.</p>
+</header>
+
+<main>
+  <section class="kpis" aria-label="summary">
+    <div class="kpi"><b id="kDay">0</b><span>day</span></div>
+    <div class="kpi"><b id="kRev">$0</b><span>revenue earned (cumulative)</span></div>
+    <div class="kpi"><b id="kBurn">$0</b><span>idle interest still bleeding per day</span></div>
+    <div class="kpi"><b id="kInv">0</b><span>pods in yard (ready to ship)</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Stalled sites (click one to select)</h2>
+    <div id="sites"></div>
+  </section>
+
+  <section>
+    <div class="card" style="margin-bottom:18px">
+      <h2>Factory and dispatch</h2>
+      <div class="row">
+        <label for="rate">Factory output</label>
+        <input id="rate" type="range" min="0" max="6" step="1" value="2">
+        <span class="mono" id="rateV">2 pods/day</span>
+      </div>
+      <div class="row">
+        <label for="cool">Cooling</label>
+        <select id="cool">
+          <option value="air">Air-cooled (cheap, heat-sensitive)</option>
+          <option value="liq" selected>Direct liquid (flat until ~35 C)</option>
+          <option value="dia">Liquid + high-conductivity spreader (flat until ~48 C)</option>
+        </select>
+      </div>
+      <div class="row">
+        <button id="ship" class="acc">Ship 1 pod to selected</button>
+        <button id="auto" class="ghost">Auto-dispatch best</button>
+        <button id="play" class="ghost">Pause</button>
+        <button id="reset" class="ghost">Reset</button>
+      </div>
+      <div class="row"><label>Speed</label>
+        <select id="spd"><option value="900">1x</option><option value="450" selected>2x</option><option value="150">6x</option></select>
+        <span class="mono" id="hint"></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h2>Selected site: yield per pod</h2>
+      <table id="yield"></table>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h2>Cumulative: revenue vs interest bleed avoided</h2>
+      <svg id="chart" viewBox="0 0 400 120" preserveAspectRatio="none"></svg>
+      <div class="legend"><span><i style="background:#2f6f4f"></i>revenue</span><span><i style="background:#c2410c"></i>idle interest paid</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Event log</h2>
+      <div id="log"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p><b>Independent demo built by Aarush Kandukoori, inspired by Pacific (YC S26). Not affiliated with Pacific.</b></p>
+  <p>Toy model: 1 pod = 1.0 MW rated, 2-day install after shipping, $1,900 per effective MW-day, revenue scaled by a cooling derating curve. No network requests, no real data.</p>
+</footer>
+
+<script>
+(function(){
+"use strict";
+var REV_PER_MW_DAY = 1900, POD_MW = 1.0, INSTALL_DAYS = 2;
+
+// Synthetic sites. mw = unused interconnect, temp = summer design ambient (C), debt in $M, rate = annual interest
+var SITE_DEFS = [
+  {name:"Harbor Rail Terminal", region:"Gulf coast", mw:6,  temp:34, debt:420, rate:.071},
+  {name:"Mesa Solar Spur",      region:"Desert southwest", mw:9,  temp:46, debt:310, rate:.064},
+  {name:"Northgate Substation", region:"Upper midwest", mw:4,  temp:26, debt:690, rate:.082},
+  {name:"Old Foundry Campus",   region:"Appalachia", mw:5,  temp:29, debt:260, rate:.069},
+  {name:"Dune Pass Logistics",  region:"Arabian peninsula", mw:8,  temp:50, debt:880, rate:.077},
+  {name:"Lakeshore Mixed-Use",  region:"Great Lakes", mw:3,  temp:24, debt:540, rate:.088}
+];
+
+var S;           // state
+var timer = null, selected = 0, paused = false;
+var $ = function(id){return document.getElementById(id);};
+
+function derate(temp, mode){
+  var knee = mode==="air" ? 22 : mode==="liq" ? 35 : 48;
+  var slope = mode==="air" ? .04 : mode==="liq" ? .03 : .025;
+  return Math.max(.15, Math.min(1, 1 - slope*Math.max(0, temp-knee)));
+}
+function fmt(n){
+  var a = Math.abs(n);
+  if(a>=1e6) return "$"+(n/1e6).toFixed(2)+"M";
+  if(a>=1e3) return "$"+(n/1e3).toFixed(1)+"k";
+  return "$"+Math.round(n);
+}
+function dailyInterest(s){ return s.debt*1e6*s.rate/365; }
+function used(s){ return (s.live.length + s.queue.length)*POD_MW; }
+function freeMW(s){ return s.mw - used(s); }
+function idleShare(s){ return Math.max(0, 1 - s.live.length*POD_MW/s.mw); }
+
+function init(){
+  S = {day:0, inv:0, frac:0, rev:0, paid:0, hist:[{r:0,p:0}], sites:SITE_DEFS.map(function(d,i){
+    return {id:i,name:d.name,region:d.region,mw:d.mw,temp:d.temp,debt:d.debt,rate:d.rate,live:[],queue:[]};
+  })};
+  $("log").innerHTML = "";
+  log("Factory online. Pods roll out at "+$("rate").value+"/day. Pick a site.");
+  render();
+}
+
+function log(msg, cls){
+  var d = document.createElement("div");
+  if(cls) d.className = cls;
+  d.textContent = "day "+S.day+"  "+msg;
+  var el = $("log"); el.appendChild(d); el.scrollTop = el.scrollHeight;
+  while(el.children.length>80) el.removeChild(el.firstChild);
+}
+
+function effPod(s){ return POD_MW*derate(s.temp, $("cool").value); }
+
+function ship(i){
+  var s = S.sites[i];
+  if(S.inv<1){ log("No pods in yard. Wait for the factory.","o"); return false; }
+  if(freeMW(s) < POD_MW){ log(s.name+" has no free interconnect left.","o"); return false; }
+  S.inv--; s.queue.push({eta:S.day+INSTALL_DAYS, mode:$("cool").value});
+  log("shipped pod to "+s.name+" ("+Math.round(derate(s.temp,$("cool").value)*100)+"% rating survives "+s.temp+" C), live day "+(S.day+INSTALL_DAYS));
+  return true;
+}
+
+// Greedy: highest effective output per pod, tie-break on largest daily interest
+function bestSite(){
+  var best=-1, bs=-1;
+  S.sites.forEach(function(s,i){
+    if(freeMW(s)<POD_MW) return;
+    var score = effPod(s)*REV_PER_MW_DAY + dailyInterest(s)/1e4*idleShare(s);
+    if(score>bs){bs=score;best=i;}
+  });
+  return best;
+}
+
+function tick(){
+  S.day++;
+  S.frac += +$("rate").value;
+  var made = Math.floor(S.frac); S.frac -= made; S.inv += made;
+  S.sites.forEach(function(s){
+    s.queue = s.queue.filter(function(p){
+      if(p.eta<=S.day){ s.live.push({mode:p.mode}); log(s.name+": pod live, earning.","g"); return false; }
+      return true;
+    });
+    s.live.forEach(function(p){ S.rev += POD_MW*derate(s.temp,p.mode)*REV_PER_MW_DAY; });
+    S.paid += dailyInterest(s)*idleShare(s);
+  });
+  S.hist.push({r:S.rev,p:S.paid});
+  if(S.hist.length>200) S.hist.shift();
+  render();
+}
+
+function render(){
+  $("kDay").textContent = S.day;
+  $("kRev").textContent = fmt(S.rev);
+  var burn = S.sites.reduce(function(a,s){return a+dailyInterest(s)*idleShare(s);},0);
+  $("kBurn").textContent = fmt(burn);
+  $("kInv").textContent = S.inv;
+  $("rateV").textContent = $("rate").value+" pods/day";
+
+  var h = "";
+  S.sites.forEach(function(s,i){
+    var cells = "";
+    for(var k=0;k<Math.floor(s.mw);k++){
+      var st = k<s.live.length ? '' : (k<s.live.length+s.queue.length ? ' class="q"' : ' style="background:#d9d2bf"');
+      cells += '<i'+st+'></i>';
+    }
+    var d = derate(s.temp,$("cool").value);
+    h += '<div class="site'+(i===selected?' sel':'')+'" data-i="'+i+'">'+
+      '<div class="top"><span>'+s.name+'</span><span class="mono">'+fmt(dailyInterest(s))+'/day interest</span></div>'+
+      '<div class="sub"><span>'+s.region+'</span><span>'+s.mw+' MW idle</span><span>'+s.temp+' C design</span>'+
+      '<span class="tag'+(d<.8?' hot':'')+'">'+Math.round(d*100)+'% rating</span>'+
+      '<span>'+s.live.length+' live, '+s.queue.length+' installing</span></div>'+
+      '<div class="bar">'+cells+'</div></div>';
+  });
+  $("sites").innerHTML = h;
+
+  var sel = S.sites[selected];
+  var rows = '<tr><th>Cooling</th><th>Rating kept</th><th>MW / pod</th><th>$ / pod-day</th></tr>';
+  [["air","Air"],["liq","Liquid"],["dia","Liquid + spreader"]].forEach(function(m){
+    var d = derate(sel.temp,m[0]);
+    var on = m[0]===$("cool").value;
+    rows += '<tr'+(on?' style="font-weight:700"':'')+'><td>'+m[1]+'</td><td>'+Math.round(d*100)+'%</td><td>'+d.toFixed(2)+'</td><td>'+fmt(d*REV_PER_MW_DAY)+'</td></tr>';
+  });
+  $("yield").innerHTML = rows;
+  $("hint").textContent = sel.name+": "+freeMW(sel)+" MW free";
+  $("ship").disabled = S.inv<1 || freeMW(sel)<POD_MW;
+  $("auto").disabled = S.inv<1 || bestSite()<0;
+
+  drawChart();
+}
+
+function drawChart(){
+  var H = S.hist, max = Math.max(1, S.rev, S.paid), n = Math.max(2,H.length);
+  function pts(key){
+    return H.map(function(p,i){return (i/(n-1)*400).toFixed(1)+","+(116-p[key]/max*108).toFixed(1);}).join(" ");
+  }
+  $("chart").innerHTML =
+    '<polyline fill="none" stroke="#2f6f4f" stroke-width="2" points="'+pts("r")+'"/>'+
+    '<polyline fill="none" stroke="#c2410c" stroke-width="2" points="'+pts("p")+'"/>';
+}
+
+function loop(){
+  clearInterval(timer);
+  if(!paused) timer = setInterval(tick, +$("spd").value);
+}
+
+$("sites").addEventListener("click", function(e){
+  var el = e.target.closest(".site");
+  if(el){ selected = +el.dataset.i; render(); }
+});
+$("ship").onclick = function(){ ship(selected); render(); };
+$("auto").onclick = function(){
+  var i = bestSite();
+  if(i>=0){ selected = i; ship(i); render(); }
+};
+$("rate").oninput = render;
+$("cool").onchange = function(){ log("cooling set to "+$("cool").selectedOptions[0].text.split(" (")[0]+" for new pods"); render(); };
+$("spd").onchange = loop;
+$("play").onclick = function(){
+  paused = !paused; $("play").textContent = paused ? "Resume" : "Pause"; loop();
+};
+$("reset").onclick = function(){ init(); };
+document.addEventListener("keydown", function(e){
+  if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
+  if(e.key===" "){ e.preventDefault(); $("ship").click(); }
+  if(e.key==="a") $("auto").click();
+});
+
+init();
+loop();
+})();
+</script>
+</body>
+</html>
