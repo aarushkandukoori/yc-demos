@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arc Planner - a toy ballistic cargo hop solver</title>
+<style>
+:root{--bg:#0d1117;--panel:#151b23;--line:#263140;--ink:#e6edf3;--mut:#8b98a8;--ok:#5fd4a0;--bad:#ff6b5e;--acc:#7cc4ff;--warn:#f2c94c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:18px 24px 6px}
+h1{margin:0;font-size:20px;letter-spacing:.2px}
+header p{margin:4px 0 0;color:var(--mut);max-width:780px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;padding:12px 24px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+canvas{width:100%;display:block;border-radius:6px;background:#0a0e14;cursor:crosshair}
+h2{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);font-weight:600}
+label{display:flex;justify-content:space-between;margin-top:10px;color:var(--mut)}
+label b{color:var(--ink);font-weight:600}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.row{display:flex;gap:6px;margin-top:10px}
+button{flex:1;background:#1d2631;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#06121f;border-color:var(--acc)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.stat{background:#0f151d;border:1px solid var(--line);border-radius:6px;padding:8px}
+.stat span{display:block;color:var(--mut);font-size:11px}
+.stat b{font-size:17px;font-variant-numeric:tabular-nums}
+.verdict{margin-top:10px;padding:9px;border-radius:6px;border:1px solid var(--line);font-weight:600}
+.verdict.ok{color:var(--ok);border-color:#2b6b52}
+.verdict.bad{color:var(--bad);border-color:#7a3a35}
+.verdict.warn{color:var(--warn);border-color:#76652a}
+.hint{color:var(--mut);font-size:12px;margin-top:8px}
+table{width:100%;border-collapse:collapse;margin-top:6px;font-variant-numeric:tabular-nums}
+td{padding:3px 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right}
+footer{padding:14px 24px 28px;color:var(--mut);font-size:12px;border-top:1px solid var(--line);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Arc Planner</h1>
+  <p>Toy point-to-point rocket hop solver. Pick a launch site and a target, load the payload, set the loft angle. It solves the ballistic burnout speed, checks it against a rocket-equation budget, and tests the arc against synthetic air-defense rings. All data is invented.</p>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>Ground track (click to place, right-click or shift-click a ring to toggle it)</h2>
+      <canvas id="map" width="1000" height="520"></canvas>
+      <div class="row" style="max-width:520px">
+        <button id="modeL" class="on">Place launch</button>
+        <button id="modeT">Place target</button>
+        <button id="fly">Fly it</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Altitude profile (km above ground vs km downrange)</h2>
+      <canvas id="prof" width="1000" height="300"></canvas>
+      <div class="hint">Shaded blocks are ring coverage along your ground track, up to each ring's ceiling. Red path segments are inside a ring below its ceiling.</div>
+    </div>
+  </section>
+  <aside>
+    <div class="card">
+      <h2>Mission</h2>
+      <label>Payload <b id="payV"></b></label>
+      <input id="pay" type="range" min="0" max="2500" step="50" value="800">
+      <label>Loft angle <b id="gamV"></b></label>
+      <input id="gam" type="range" min="8" max="80" step="1" value="40">
+      <div class="row">
+        <button id="opt">Auto-pick safest angle</button>
+      </div>
+      <div class="verdict" id="verdict"></div>
+      <div class="stats">
+        <div class="stat"><span>Range</span><b id="sRange"></b></div>
+        <div class="stat"><span>Flight time</span><b id="sTime"></b></div>
+        <div class="stat"><span>Burnout speed</span><b id="sV"></b></div>
+        <div class="stat"><span>Apogee</span><b id="sApo"></b></div>
+        <div class="stat"><span>Delta-v needed</span><b id="sDv"></b></div>
+        <div class="stat"><span>Delta-v budget</span><b id="sBud"></b></div>
+        <div class="stat"><span>Time in rings</span><b id="sExp"></b></div>
+        <div class="stat"><span>Max range, this load</span><b id="sMax"></b></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Same trip, other ways</h2>
+      <table id="cmp"></table>
+      <div class="hint">Cruise speeds: truck 60 km/h, transport aircraft 540 km/h. Straight-line distance, no detours.</div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Model</h2>
+      <div class="hint">Spherical Earth, vacuum Kepler arc from burnout to impact, no drag, instant burn. Range angle psi and loft angle gamma give the speed ratio nu = tan(psi/2) / (cos g (sin g + tan(psi/2) cos g)). Budget = Isp g ln(m0/mf) minus a fixed 450 m/s loss for gravity and drag. Vehicle numbers are made up.</div>
+    </div>
+  </aside>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Hop Aero (YC S26). Not affiliated with Hop Aero.</footer>
+
+<script>
+(function(){
+const R=6371, MU=398600.4418; // km, km^3/s^2
+const W=1000,H=520, KM_PER_PX=1.6; // map is 1600 km x 832 km
+const $=id=>document.getElementById(id);
+const map=$('map'), mc=map.getContext('2d'), prof=$('prof'), pc=prof.getContext('2d');
+
+const state={
+  L:{x:120,y:420}, T:{x:1180,y:180}, mode:'L', pay:800, gam:40, prog:1, anim:null,
+  rings:[
+    {x:520,y:330,r:150,ceil:35,name:'A',on:true},
+    {x:820,y:210,r:170,ceil:90,name:'B',on:true},
+    {x:1040,y:300,r:110,ceil:28,name:'C',on:true},
+    {x:330,y:200,r:120,ceil:130,name:'D',on:true}
+  ]
+};
+const VEH={dry:1500,prop:6000,isp:300,loss:450};
+const toPx=p=>({x:p.x/KM_PER_PX,y:p.y/KM_PER_PX});
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+function budget(pay){
+  const m0=VEH.dry+VEH.prop+pay, mf=VEH.dry+pay;
+  return VEH.isp*9.80665*Math.log(m0/mf)-VEH.loss; // m/s usable
+}
+// speed ratio nu = v^2 R / mu for a given range angle and loft angle
+function nuFor(psi,g){
+  const t=Math.tan(psi/2), c=Math.cos(g), s=Math.sin(g);
+  return t/(c*(s+t*c));
+}
+function solve(rangeKm,gDeg){
+  const psi=rangeKm/R, g=gDeg*Math.PI/180;
+  const nu=nuFor(psi,g);
+  if(!(nu>0)||nu>=2) return null;
+  const v=Math.sqrt(nu*MU/R); // km/s
+  const c2=Math.cos(g)**2;
+  const e=Math.sqrt(1+nu*(nu-2)*c2);
+  const p=R*nu*c2;
+  const th0=Math.PI-psi/2;
+  // sample the arc, integrate time with dt = r^2/h dtheta
+  const N=300, h=Math.sqrt(MU*p), pts=[]; let tt=0, prevR=null;
+  for(let i=0;i<=N;i++){
+    const th=th0+psi*i/N, r=p/(1+e*Math.cos(th));
+    if(prevR!==null) tt+=((r+prevR)/2)**2/h*(psi/N);
+    prevR=r;
+    pts.push({d:rangeKm*i/N, alt:r-R, t:tt});
+  }
+  const apo=Math.max(...pts.map(q=>q.alt));
+  return {v,e,pts,time:tt,apo,dv:v*1000+VEH.loss};
+}
+function maxRange(pay){
+  const b=budget(pay)/1000; if(b<=0) return 0;
+  // best loft for range at speed v is about 45 deg minus a bit; scan angles, binary search range
+  let best=0;
+  for(let g=20;g<=60;g+=4){
+    let lo=50,hi=19000;
+    for(let k=0;k<40;k++){
+      const mid=(lo+hi)/2, s=solve(mid,g);
+      if(s&&s.v<=b) lo=mid; else hi=mid;
+    }
+    best=Math.max(best,lo);
+  }
+  return Math.round(best/10)*10;
+}
+
+function geometry(){
+  const L=state.L,T=state.T, D=dist(L,T);
+  const ux=(T.x-L.x)/(D||1), uy=(T.y-L.y)/(D||1);
+  const cover=[];
+  for(const r of state.rings){
+    if(!r.on) continue;
+    const dx=r.x-L.x, dy=r.y-L.y;
+    const along=dx*ux+dy*uy, perp=Math.abs(-dx*uy+dy*ux);
+    if(perp<r.r){
+      const half=Math.sqrt(r.r*r.r-perp*perp);
+      cover.push({a:along-half,b:along+half,ceil:r.ceil,name:r.name});
+    }
+  }
+  return {D,cover};
+}
+function exposed(d,alt,cover){
+  for(const c of cover) if(d>=c.a&&d<=c.b&&alt<c.ceil) return true;
+  return false;
+}
+function evaluate(g){
+  const geo=geometry();
+  if(geo.D<30) return {geo,sol:null};
+  const sol=solve(geo.D,g);
+  if(!sol) return {geo,sol:null};
+  let exp=0;
+  for(let i=1;i<sol.pts.length;i++){
+    if(exposed(sol.pts[i].d,sol.pts[i].alt,geo.cover)) exp+=sol.pts[i].t-sol.pts[i-1].t;
+  }
+  return {geo,sol,exp,hit:exp>0};
+}
+
+function fmtT(s){
+  if(s<90) return s.toFixed(0)+' s';
+  const m=s/60; if(m<90) return m.toFixed(1)+' min';
+  return (m/60).toFixed(1)+' h';
+}
+
+function drawMap(){
+  mc.clearRect(0,0,W,H);
+  // grid
+  mc.strokeStyle='#141c26'; mc.lineWidth=1;
+  for(let x=0;x<=W;x+=62.5){mc.beginPath();mc.moveTo(x,0);mc.lineTo(x,H);mc.stroke();}
+  for(let y=0;y<=H;y+=62.5){mc.beginPath();mc.moveTo(0,y);mc.lineTo(W,y);mc.stroke();}
+  mc.fillStyle='#3a4757'; mc.font='11px ui-monospace,monospace';
+  mc.fillText('100 km grid',8,H-8);
+  // rings
+  for(const r of state.rings){
+    const p=toPx(r), rr=r.r/KM_PER_PX;
+    mc.beginPath(); mc.arc(p.x,p.y,rr,0,7);
+    mc.fillStyle=r.on?'rgba(255,107,94,.12)':'rgba(120,130,140,.05)'; mc.fill();
+    mc.setLineDash(r.on?[]:[4,4]); mc.strokeStyle=r.on?'#ff6b5e':'#4a5666'; mc.stroke(); mc.setLineDash([]);
+    mc.fillStyle=r.on?'#ffb1aa':'#5d6b7c'; mc.font='12px ui-monospace,monospace';
+    mc.fillText(r.name+' cap '+r.ceil+' km',p.x-rr*0.6,p.y+4);
+  }
+  const ev=evaluate(state.gam), a=toPx(state.L), b=toPx(state.T);
+  // ground track, painted by exposure
+  if(ev.sol){
+    const s=ev.sol;
+    for(let i=1;i<s.pts.length;i++){
+      const f0=s.pts[i-1].d/ev.geo.D, f1=s.pts[i].d/ev.geo.D;
+      mc.beginPath(); mc.moveTo(a.x+(b.x-a.x)*f0,a.y+(b.y-a.y)*f0);
+      mc.lineTo(a.x+(b.x-a.x)*f1,a.y+(b.y-a.y)*f1);
+      mc.strokeStyle=exposed(s.pts[i].d,s.pts[i].alt,ev.geo.cover)?'#ff6b5e':'#7cc4ff';
+      mc.lineWidth=3; mc.stroke();
+    }
+    mc.lineWidth=1;
+    // vehicle
+    const f=state.prog, idx=Math.min(s.pts.length-1,Math.round(f*(s.pts.length-1)));
+    const q=s.pts[idx], px=a.x+(b.x-a.x)*(q.d/ev.geo.D), py=a.y+(b.y-a.y)*(q.d/ev.geo.D);
+    mc.beginPath(); mc.arc(px,py,6,0,7); mc.fillStyle='#fff'; mc.fill();
+  } else {
+    mc.beginPath(); mc.moveTo(a.x,a.y); mc.lineTo(b.x,b.y);
+    mc.strokeStyle='#8b98a8'; mc.setLineDash([6,5]); mc.stroke(); mc.setLineDash([]);
+  }
+  dot(a,'#5fd4a0','LAUNCH'); dot(b,'#f2c94c','TARGET');
+}
+function dot(p,col,label){
+  mc.beginPath(); mc.arc(p.x,p.y,7,0,7); mc.fillStyle=col; mc.fill();
+  mc.fillStyle='#e6edf3'; mc.font='bold 11px ui-monospace,monospace'; mc.fillText(label,p.x+11,p.y+4);
+}
+
+function drawProf(){
+  const w=prof.width,h=prof.height,pad={l:44,r:12,t:14,b:26};
+  pc.clearRect(0,0,w,h);
+  const ev=evaluate(state.gam);
+  const D=Math.max(ev.geo.D,1), top=Math.max(160,ev.sol?ev.sol.apo*1.1:0,...state.rings.map(r=>r.on?r.ceil:0));
+  const X=d=>pad.l+(w-pad.l-pad.r)*d/D, Y=a=>h-pad.b-(h-pad.t-pad.b)*a/top;
+  pc.font='11px ui-monospace,monospace'; pc.fillStyle='#5d6b7c'; pc.strokeStyle='#18212c';
+  for(let k=0;k<=4;k++){
+    const a=top*k/4; pc.beginPath(); pc.moveTo(pad.l,Y(a)); pc.lineTo(w-pad.r,Y(a)); pc.stroke();
+    pc.fillText(Math.round(a)+' km',4,Y(a)+4);
+  }
+  pc.fillText('0',pad.l,h-8); pc.fillText(Math.round(D)+' km',w-pad.r-52,h-8);
+  for(const c of ev.geo.cover){
+    const x0=X(Math.max(0,c.a)), x1=X(Math.min(D,c.b));
+    pc.fillStyle='rgba(255,107,94,.18)'; pc.fillRect(x0,Y(c.ceil),x1-x0,Y(0)-Y(c.ceil));
+    pc.strokeStyle='#ff6b5e'; pc.strokeRect(x0,Y(c.ceil),x1-x0,Y(0)-Y(c.ceil));
+    pc.fillStyle='#ffb1aa'; pc.fillText(c.name,x0+4,Y(c.ceil)+12);
+  }
+  if(!ev.sol) return;
+  const s=ev.sol, n=Math.round(state.prog*(s.pts.length-1));
+  pc.lineWidth=3;
+  for(let i=1;i<=n;i++){
+    pc.beginPath(); pc.moveTo(X(s.pts[i-1].d),Y(s.pts[i-1].alt)); pc.lineTo(X(s.pts[i].d),Y(s.pts[i].alt));
+    pc.strokeStyle=exposed(s.pts[i].d,s.pts[i].alt,ev.geo.cover)?'#ff6b5e':'#7cc4ff'; pc.stroke();
+  }
+  pc.lineWidth=1;
+}
+
+function update(){
+  $('payV').textContent=state.pay+' kg';
+  $('gamV').textContent=state.gam+' deg';
+  const ev=evaluate(state.gam), bud=budget(state.pay), D=ev.geo.D;
+  const mx=maxRange(state.pay);
+  $('sRange').textContent=D.toFixed(0)+' km';
+  $('sBud').textContent=(bud/1000).toFixed(2)+' km/s';
+  $('sMax').textContent=mx+' km';
+  const v=$('verdict');
+  if(!ev.sol){
+    ['sTime','sV','sApo','sDv','sExp'].forEach(i=>$(i).textContent='-');
+    v.className='verdict warn';
+    v.textContent=D<30?'Targets closer than 30 km are not worth a rocket.':'No arc exists at this loft angle for this range.';
+  } else {
+    const s=ev.sol;
+    $('sTime').textContent=fmtT(s.time);
+    $('sV').textContent=s.v.toFixed(2)+' km/s (M'+(s.v*1000/340).toFixed(0)+')';
+    $('sApo').textContent=s.apo.toFixed(0)+' km';
+    $('sDv').textContent=(s.dv/1000).toFixed(2)+' km/s';
+    $('sExp').textContent=ev.exp>0?fmtT(ev.exp):'none';
+    const fuelOk=s.dv<=bud;
+    if(!fuelOk){v.className='verdict bad';v.textContent='Out of delta-v by '+((s.dv-bud)).toFixed(0)+' m/s. Lighten the load, shorten the hop, or change the angle.';}
+    else if(ev.hit){v.className='verdict bad';v.textContent='Reachable, but the arc is inside a ring below its ceiling for '+fmtT(ev.exp)+'.';}
+    else {v.className='verdict ok';v.textContent='Delivered in '+fmtT(s.time)+'. Clear of every active ring.';}
+  }
+  const rows=[['Rocket hop',ev.sol?fmtT(ev.sol.time):'-'],['Transport aircraft',fmtT(D/540*3600)],['Truck convoy',fmtT(D/60*3600)]];
+  $('cmp').innerHTML=rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>').join('');
+  drawMap(); drawProf();
+}
+
+function autoAngle(){
+  let best=null;
+  for(let g=8;g<=80;g++){
+    const ev=evaluate(g); if(!ev.sol||ev.sol.dv>budget(state.pay)) continue;
+    const score=ev.exp*1000+ev.sol.time; // exposure first, then speed
+    if(!best||score<best.score) best={g,score};
+  }
+  if(best){state.gam=best.g;$('gam').value=best.g;} else {$('verdict').textContent='No angle fits the budget. Reduce payload or range.';return;}
+  state.prog=1; update();
+}
+
+function fly(){
+  cancelAnimationFrame(state.anim);
+  const ev=evaluate(state.gam); if(!ev.sol) return;
+  const t0=performance.now(), dur=Math.min(6000,2500+ev.sol.time*5);
+  (function step(now){
+    state.prog=Math.min(1,(now-t0)/dur); update();
+    if(state.prog<1) state.anim=requestAnimationFrame(step);
+  })(t0);
+}
+
+function canvasPos(e){
+  const r=map.getBoundingClientRect();
+  return {x:(e.clientX-r.left)*W/r.width*KM_PER_PX, y:(e.clientY-r.top)*H/r.height*KM_PER_PX};
+}
+map.addEventListener('click',e=>{
+  const p=canvasPos(e);
+  // clicking a ring (that isn't the target of placement via modifier) toggles it
+  if(e.shiftKey){
+    const r=state.rings.find(r=>dist(r,p)<r.r); if(r){r.on=!r.on;state.prog=1;update();return;}
+  }
+  state[state.mode]={x:Math.max(0,Math.min(W*KM_PER_PX,p.x)),y:Math.max(0,Math.min(H*KM_PER_PX,p.y))};
+  state.prog=1; update();
+});
+map.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const p=canvasPos(e), r=state.rings.find(r=>dist(r,p)<r.r);
+  if(r){r.on=!r.on;state.prog=1;update();}
+});
+$('modeL').onclick=()=>{state.mode='L';$('modeL').className='on';$('modeT').className='';};
+$('modeT').onclick=()=>{state.mode='T';$('modeT').className='on';$('modeL').className='';};
+$('pay').oninput=e=>{state.pay=+e.target.value;state.prog=1;update();};
+$('gam').oninput=e=>{state.gam=+e.target.value;state.prog=1;update();};
+$('opt').onclick=autoAngle;
+$('fly').onclick=fly;
+$('modeL').title=$('modeT').title='Shift-click or right-click a ring to switch it on or off';
+update();
+})();
+</script>
+</body>
+</html>
