@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signal Desk - toy demo of signal-timed client origination</title>
+<style>
+:root{--bg:#f4efe6;--ink:#1d2430;--mute:#6b7280;--card:#fffdf8;--line:#dcd3c2;--acc:#0f5c4d;--acc2:#b4531f;--warn:#9a3412}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Georgia,"Times New Roman",serif}
+h1,h2,h3,button,label,.mono,.tag,th{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 32px 8px;max-width:1200px;margin:auto}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.4px}
+header p{margin:0;color:var(--mute);max-width:720px}
+main{max-width:1200px;margin:auto;padding:16px 32px 24px;display:grid;grid-template-columns:290px 1fr 340px;gap:18px}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:0 0 12px}
+.ctl{margin-bottom:14px}
+.ctl label{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:4px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:4px 10px;font-size:12px;cursor:pointer}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.card{border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fff;cursor:pointer;transition:transform .25s,border-color .15s;position:relative}
+.card:hover{border-color:var(--acc)}
+.card.sel{border-color:var(--acc);box-shadow:0 0 0 2px #0f5c4d33}
+.card.dim{opacity:.4}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.name{font-weight:700;font-size:15px}
+.score{font:700 22px ui-sans-serif,system-ui;color:var(--acc)}
+.bar{height:6px;background:#eee7d8;border-radius:4px;margin:8px 0;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),#3a9d86);transition:width .35s}
+.sub{color:var(--mute);font-size:13px}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:4px;background:#eee7d8;margin:4px 4px 0 0}
+.tag.x{background:#f6dfcf;color:var(--warn)}
+.tag.c{background:#d8ece6;color:var(--acc)}
+.why{font:12px ui-monospace,Menlo,monospace;margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;display:none}
+.card.sel .why{display:block}
+.why div{display:flex;justify-content:space-between}
+button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}
+button.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
+button:disabled{opacity:.4;cursor:default}
+textarea{width:100%;min-height:210px;border:1px solid var(--line);border-radius:6px;padding:10px;font:14px/1.5 Georgia,serif;background:#fff;resize:vertical}
+.pipe{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.col{background:#f4efe6;border-radius:6px;padding:8px;min-height:80px}
+.col h3{margin:0 0 6px;font-size:11px;text-transform:uppercase;color:var(--mute)}
+.pc{background:#fff;border:1px solid var(--line);border-radius:5px;padding:5px 7px;font-size:12px;margin-bottom:5px;cursor:pointer}
+.empty{color:var(--mute);font-size:13px;text-align:center;padding:18px 0}
+.row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+footer{max-width:1200px;margin:auto;padding:8px 32px 32px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+.kpi{display:flex;gap:18px;margin:6px 0 14px;font-family:ui-sans-serif,system-ui}
+.kpi b{font-size:20px;display:block}
+.kpi span{font-size:11px;color:var(--mute);text-transform:uppercase}
+</style>
+</head>
+<body>
+<header>
+  <h1>Signal Desk</h1>
+  <p>A toy origination engine for a law firm. Describe the clients you want, watch a synthetic feed of public events re-rank live, then draft outreach and move leads through a pipeline. All data below is made up.</p>
+</header>
+
+<main>
+  <section aria-label="Firm profile">
+    <h2>1 - Firm profile</h2>
+    <div class="ctl"><label>Practice areas</label><div class="chips" id="areas"></div></div>
+    <div class="ctl"><label>Sectors</label><div class="chips" id="sectors"></div></div>
+    <div class="ctl"><label>Minimum company size <span id="sizeV"></span></label><input type="range" id="size" min="0" max="500" step="10" value="50"></div>
+    <div class="ctl"><label>Signal half-life multiplier <span id="hlV"></span></label><input type="range" id="hl" min="0.25" max="3" step="0.25" value="1"></div>
+    <div class="ctl"><label>Existing-client boost <span id="xsV"></span></label><input type="range" id="xs" min="0" max="30" step="1" value="15"></div>
+    <div class="ctl"><label>Today (days after feed start) <span id="dayV"></span></label><input type="range" id="day" min="0" max="45" step="1" value="10"></div>
+    <div class="sub">Older signals fade exponentially. Slide time forward to watch urgent leads cool off.</div>
+    <h2 style="margin-top:18px">Our clients</h2>
+    <div id="clients" class="sub"></div>
+  </section>
+
+  <section aria-label="Opportunities">
+    <h2>2 - Ranked opportunities</h2>
+    <div class="kpi"><div><b id="kShown">0</b><span>match profile</span></div><div><b id="kHot">0</b><span>score 70+</span></div><div><b id="kPipe">0</b><span>in pipeline</span></div></div>
+    <div id="feed"></div>
+  </section>
+
+  <section aria-label="Outreach and pipeline">
+    <h2>3 - Outreach and pipeline</h2>
+    <div id="draftBox"><div class="empty">Select an opportunity to draft outreach.</div></div>
+    <div class="pipe" id="pipe"></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Osmaura (YC S26). Not affiliated with Osmaura. All companies, people and events are fictional.</footer>
+
+<script>
+"use strict";
+// ---------- synthetic data ----------
+const AREAS = ["Venture financing","M&A","Employment","IP licensing","Regulatory","Real estate"];
+const SECTORS = ["Biotech","Fintech","Climate","Logistics","Software"];
+const CLIENTS = ["Harlow Dynamics","Verdant Grid"]; // existing clients of the fictional firm
+
+// signal type -> which practice area it implies, base weight, half-life in days
+const SIGNALS = {
+  funding:   {label:"Funding filing",        area:"Venture financing", w:40, hl:14},
+  acquire:   {label:"Acquisition announced",  area:"M&A",               w:45, hl:21},
+  gcHire:    {label:"General counsel hired",  area:"Regulatory",        w:25, hl:60},
+  headcount: {label:"Hiring surge",           area:"Employment",        w:30, hl:30},
+  patent:    {label:"Patent grant",           area:"IP licensing",      w:35, hl:45},
+  lease:     {label:"New HQ lease",           area:"Real estate",       w:30, hl:35},
+  probe:     {label:"Regulator inquiry",      area:"Regulatory",        w:45, hl:10}
+};
+
+const COMPANIES = [
+  {id:1, n:"Lumenwick Bio",     s:"Biotech",   size:85,  contact:"Priya Natarajan, CFO", events:[["funding",3,"Series B, $42M"],["patent",20,"Assay method patent"]]},
+  {id:2, n:"Harlow Dynamics",   s:"Logistics", size:410, contact:"Tom Reinholt, COO",    events:[["acquire",5,"Buys a regional carrier"],["headcount",9,"+60 open roles"]]},
+  {id:3, n:"Quillfast",         s:"Fintech",   size:140, contact:"Dana Okafor, CEO",     events:[["funding",8,"Seed extension, $9M"],["gcHire",2,"First in-house counsel"]]},
+  {id:4, n:"Verdant Grid",      s:"Climate",   size:230, contact:"Marcus Lindqvist, GC", events:[["lease",12,"Signs 40k sq ft HQ"],["probe",1,"State utility inquiry"]]},
+  {id:5, n:"Pebblecode",        s:"Software",  size:35,  contact:"Ana Reyes, Founder",   events:[["headcount",4,"+12 open roles"]]},
+  {id:6, n:"Tidewater Freight", s:"Logistics", size:300, contact:"Ben Achterberg, CEO",  events:[["probe",6,"Customs review opened"],["lease",25,"Port warehouse lease"]]},
+  {id:7, n:"Corvid Therapeutics",s:"Biotech",  size:60,  contact:"Dr. Mei Zhang, CEO",   events:[["patent",2,"Compound patent grant"],["funding",30,"Series A, $18M"]]},
+  {id:8, n:"Ledgerly",          s:"Fintech",   size:190, contact:"Sam Oduya, CFO",       events:[["acquire",15,"Acquires payments startup"],["gcHire",40,"Hires deputy GC"]]},
+  {id:9, n:"Solstice Cells",    s:"Climate",   size:120, contact:"Ines Moreau, CEO",     events:[["funding",1,"Series C, $110M"],["headcount",3,"+80 open roles"]]}
+];
+
+// ---------- state ----------
+const st = {areas:new Set(["Venture financing","M&A","Regulatory"]), sectors:new Set(["Biotech","Fintech","Climate"]),
+  size:50, hl:1, xs:15, day:10, sel:null, pipe:{}}; // pipe: id -> stage index
+const STAGES = ["Sourced","Contacted","Onboarding"];
+const $ = id => document.getElementById(id);
+
+// ---------- scoring ----------
+// Each event contributes w * 2^(-age/halfLife) when its area matches the profile.
+// Score = saturating sum of contributions + fit bonuses, capped at 100.
+function score(c){
+  const parts = [];
+  let raw = 0;
+  for(const [type, startDay, note] of c.events){
+    const sg = SIGNALS[type];
+    const age = st.day - startDay;
+    if(age < 0) continue;                         // event hasn't happened yet
+    const decay = Math.pow(2, -age / (sg.hl * st.hl));
+    const match = st.areas.has(sg.area) ? 1 : 0.15;
+    const v = sg.w * decay * match;
+    raw += v;
+    parts.push({k:`${sg.label} (${age}d ago)`, v, note, area:sg.area, match:match===1});
+  }
+  const sector = st.sectors.has(c.s);
+  const fitSize = c.size >= st.size;
+  if(sector) parts.push({k:"Sector fit", v:12, note:c.s});
+  if(!fitSize) parts.push({k:"Below size floor", v:-25, note:`${c.size} < ${st.size}`});
+  const existing = CLIENTS.includes(c.n);
+  if(existing) parts.push({k:"Existing client (cross-sell)", v:st.xs, note:"relationship"});
+  const sum = parts.reduce((a,p)=>a+p.v,0);
+  // saturating curve so stacked signals don't blow past 100
+  const s = Math.max(0, Math.round(100 * (1 - Math.exp(-Math.max(sum,0) / 55))));
+  return {s, parts, sector, fitSize, existing, raw};
+}
+
+function ranked(){
+  return COMPANIES.map(c => ({c, r:score(c)}))
+    .filter(x => x.r.parts.some(p => /ago/.test(p.k)))
+    .sort((a,b)=>b.r.s-a.r.s);
+}
+
+// ---------- rendering ----------
+function chips(el, items, set){
+  el.innerHTML = "";
+  items.forEach(t => {
+    const b = document.createElement("button");
+    b.className = "chip" + (set.has(t) ? " on" : "");
+    b.type = "button";
+    b.setAttribute("aria-pressed", set.has(t));
+    b.textContent = t;
+    b.onclick = () => { set.has(t) ? set.delete(t) : set.add(t); render(); };
+    el.appendChild(b);
+  });
+}
+
+function bestArea(x){
+  const hit = x.r.parts.filter(p => p.match).sort((a,b)=>b.v-a.v)[0];
+  return hit ? hit.area : null;
+}
+
+function renderFeed(){
+  const list = ranked();
+  const feed = $("feed");
+  feed.innerHTML = "";
+  let shown = 0, hot = 0;
+  list.forEach(x => {
+    const eligible = x.r.sector && x.r.fitSize;
+    if(eligible) shown++;
+    if(eligible && x.r.s >= 70) hot++;
+    const d = document.createElement("div");
+    d.className = "card" + (st.sel === x.c.id ? " sel" : "") + (eligible ? "" : " dim");
+    d.tabIndex = 0;
+    const tags = x.r.parts.filter(p=>/ago/.test(p.k)).map(p =>
+      `<span class="tag ${p.match?"c":"x"}">${p.k.split(" (")[0]}</span>`).join("");
+    const why = x.r.parts.map(p =>
+      `<div><span>${p.k}${p.note?" - "+p.note:""}</span><span>${p.v>=0?"+":""}${p.v.toFixed(1)}</span></div>`).join("");
+    d.innerHTML = `<div class="top"><span class="name">${x.c.n}</span><span class="score">${x.r.s}</span></div>
+      <div class="sub">${x.c.s} · ${x.c.size} people · ${x.c.contact}</div>
+      <div class="bar"><i style="width:${x.r.s}%"></i></div>
+      ${tags}${x.r.existing?'<span class="tag c">cross-sell</span>':""}${eligible?"":'<span class="tag x">outside profile</span>'}
+      <div class="why">${why}</div>`;
+    d.onclick = () => { st.sel = x.c.id; render(); };
+    d.onkeydown = e => { if(e.key==="Enter"||e.key===" "){ e.preventDefault(); d.click(); } };
+    feed.appendChild(d);
+  });
+  $("kShown").textContent = shown;
+  $("kHot").textContent = hot;
+  $("kPipe").textContent = Object.keys(st.pipe).length;
+  if(!list.length) feed.innerHTML = '<div class="empty">No signals yet. Move the day slider forward.</div>';
+}
+
+// ---------- outreach drafting (template + signal-aware phrasing) ----------
+const OPENERS = {
+  funding:"Congratulations on the raise",
+  acquire:"I saw the news about the acquisition",
+  gcHire:"I noticed you've brought legal in-house",
+  headcount:"I saw how quickly the team is growing",
+  patent:"Congratulations on the patent grant",
+  lease:"I saw you're moving into new space",
+  probe:"I understand there is a regulator inquiry underway"
+};
+const ASKS = {
+  "Venture financing":"Rounds like this tend to raise questions on investor rights and option pool sizing before the next close.",
+  "M&A":"Integration usually surfaces contract assignment and employee-transfer issues in the first ninety days.",
+  "Regulatory":"Early, calm engagement with the regulator usually shapes how the matter ends.",
+  "Employment":"Fast hiring is when offer letters, contractor classification and equity grants start to drift.",
+  "IP licensing":"A grant is often the moment to decide between licensing out and keeping it exclusive.",
+  "Real estate":"Lease terms signed now can quietly limit options when the team doubles."
+};
+function draft(x){
+  const top = x.r.parts.filter(p=>/ago/.test(p.k)).sort((a,b)=>b.v-a.v)[0];
+  const type = Object.keys(SIGNALS).find(k => top.k.startsWith(SIGNALS[k].label));
+  const area = SIGNALS[type].area;
+  const first = x.c.contact.split(" ")[0].replace(",","");
+  const intro = x.r.existing
+    ? `Since we already work together on other matters, I wanted to flag something relevant.`
+    : `We advise ${x.c.s.toLowerCase()} companies at roughly your stage.`;
+  return `Hi ${first},\n\n${OPENERS[type]} (${top.note.toLowerCase()}). ${intro} ${ASKS[area]}\n\nIf useful, I can send a one-page checklist we use with similar teams. No obligation.\n\nBest,\nA. Partner\nFictional Firm LLP`;
+}
+
+function renderDraft(){
+  const box = $("draftBox");
+  const x = ranked().find(y => y.c.id === st.sel);
+  if(!x){ box.innerHTML = '<div class="empty">Select an opportunity to draft outreach.</div>'; return; }
+  const inPipe = st.pipe[x.c.id] !== undefined;
+  const keep = $("draftTxt") && box.dataset.id == x.c.id && box.dataset.day == st.day ? $("draftTxt").value : null;
+  box.dataset.id = x.c.id; box.dataset.day = st.day;
+  box.innerHTML = `<div class="name" style="margin-bottom:6px">${x.c.n} <span class="sub">- ${x.r.s}/100</span></div>
+    <textarea id="draftTxt" aria-label="Outreach draft"></textarea>
+    <div class="row"><button id="addBtn" ${inPipe?"disabled":""}>${inPipe?"In pipeline":"Send and add to pipeline"}</button>
+    <button class="alt" id="copyBtn">Copy</button></div>`;
+  $("draftTxt").value = keep ?? draft(x);
+  $("addBtn").onclick = () => { st.pipe[x.c.id] = 0; render(); };
+  $("copyBtn").onclick = e => { navigator.clipboard?.writeText($("draftTxt").value); e.target.textContent = "Copied"; };
+}
+
+function renderPipe(){
+  const p = $("pipe");
+  p.innerHTML = "";
+  STAGES.forEach((s,i) => {
+    const col = document.createElement("div");
+    col.className = "col";
+    col.innerHTML = `<h3>${s}</h3>`;
+    Object.entries(st.pipe).filter(([,v])=>v===i).forEach(([id]) => {
+      const c = COMPANIES.find(z=>z.id==id);
+      const el = document.createElement("div");
+      el.className = "pc";
+      el.title = i<2 ? "Click to advance" : "Click to remove";
+      el.textContent = c.n;
+      el.onclick = () => { if(i<2) st.pipe[id]=i+1; else delete st.pipe[id]; render(); };
+      col.appendChild(el);
+    });
+    p.appendChild(col);
+  });
+}
+
+function render(){
+  chips($("areas"), AREAS, st.areas);
+  chips($("sectors"), SECTORS, st.sectors);
+  $("sizeV").textContent = st.size + "+";
+  $("hlV").textContent = st.hl + "x";
+  $("xsV").textContent = "+" + st.xs;
+  $("dayV").textContent = "day " + st.day;
+  $("clients").textContent = CLIENTS.join(", ") + " (fictional existing clients)";
+  renderFeed(); renderDraft(); renderPipe();
+}
+
+[["size","size"],["hl","hl"],["xs","xs"],["day","day"]].forEach(([id,k]) =>
+  $(id).oninput = e => { st[k] = parseFloat(e.target.value); render(); });
+
+st.sel = ranked()[0]?.c.id ?? null;
+render();
+</script>
+</body>
+</html>

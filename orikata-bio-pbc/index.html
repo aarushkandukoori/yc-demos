@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tidepool - a shared lab notebook where results remember how they were made</title>
+<style>
+:root {
+  --bg: #14171c;
+  --panel: #1c2027;
+  --panel2: #232831;
+  --line: #313845;
+  --ink: #e6e9ef;
+  --mute: #8b94a5;
+  --human: #f2b45a;
+  --agent: #6fd3c0;
+  --ok: #7fcf8a;
+  --stale: #f08a6b;
+  --idle: #6b7385;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+h1 span { color: var(--agent); }
+header p { margin: 0; color: var(--mute); max-width: 560px; font-size: 13px; }
+.who {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--mute);
+}
+.who button {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.who button.on.h { border-color: var(--human); color: var(--human); }
+.who button.on.a { border-color: var(--agent); color: var(--agent); }
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  padding: 20px 24px;
+  max-width: 1300px;
+  margin: auto;
+}
+@media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+.cell {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--idle);
+  border-radius: 10px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  transition: border-color .2s;
+}
+.cell.fresh { border-left-color: var(--ok); }
+.cell.stale { border-left-color: var(--stale); }
+.cell.sel { box-shadow: 0 0 0 1px var(--agent); }
+.cell.hl { background: var(--panel2); }
+.ch { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ch h3 { margin: 0; font-size: 15px; }
+.chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--mute);
+}
+.chip.h { color: var(--human); border-color: #6b5230; }
+.chip.a { color: var(--agent); border-color: #2c6a60; }
+.chip.fresh { color: var(--ok); }
+.chip.stale { color: var(--stale); }
+.sp { flex: 1; }
+.btn {
+  background: var(--panel2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 11px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.btn:hover { border-color: var(--agent); }
+.btn.pri { background: var(--agent); color: #0c1a17; border-color: var(--agent); font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: wait; }
+.desc { color: var(--mute); font-size: 12.5px; margin: 6px 0 10px; }
+.params { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.params label { font-size: 12px; color: var(--mute); display: flex; flex-direction: column; gap: 3px; }
+.params input, .params select {
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  width: 104px;
+  font: inherit;
+}
+.out {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  overflow: auto;
+  max-height: 230px;
+}
+.out.empty { color: var(--idle); font-style: italic; }
+.out.dim { opacity: .45; }
+table { border-collapse: collapse; width: 100%; }
+td, th { text-align: left; padding: 2px 8px 2px 0; white-space: nowrap; }
+th { color: var(--mute); font-weight: 500; }
+.bar { display: inline-block; height: 8px; border-radius: 2px; background: var(--agent); vertical-align: middle; }
+.bar.neg { background: var(--stale); }
+.prov { margin-top: 8px; font-size: 11.5px; color: var(--mute); }
+.prov b { color: var(--ink); font-weight: 500; }
+aside .box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+aside h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--mute);
+}
+svg text { font: 11px ui-monospace, Menlo, monospace; fill: var(--ink); }
+.node { cursor: pointer; }
+.log { max-height: 240px; overflow: auto; font-size: 12px; }
+.log div { padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.prop { border: 1px dashed var(--agent); border-radius: 8px; padding: 10px; margin-top: 10px; font-size: 12.5px; }
+.prop .row { display: flex; gap: 8px; margin-top: 8px; }
+.trace li { margin-bottom: 4px; font-size: 12.5px; }
+.toolbar { padding: 0 24px 8px; max-width: 1300px; margin: auto; }
+footer {
+  padding: 22px 24px;
+  text-align: center;
+  color: var(--mute);
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+}
+.hint { color: var(--mute); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Tide<span>pool</span></h1></div>
+  <p>A toy shared notebook. Every result carries a fingerprint of the code, parameters and upstream
+     results that made it. Edit anything and everything downstream turns stale, whether a person or
+     an agent made the edit.</p>
+  <div class="who">acting as
+    <button id="asH" class="on h">Mara (human)</button>
+    <button id="asA" class="a">Pip (agent)</button>
+  </div>
+</header>
+
+<div class="toolbar" style="padding-top:16px">
+  <button class="btn pri" id="runall">Run all stale</button>
+  <button class="btn" id="reset">Reset notebook</button>
+  <span class="hint" style="margin-left:10px">Try: run all, then change "min length" in step 2 and watch
+    the chain go stale. Switching compute in step 4 does not.</span>
+</div>
+
+<main>
+  <section id="cells"></section>
+  <aside>
+    <div class="box">
+      <h4>Lineage graph</h4>
+      <svg id="dag" width="100%" viewBox="0 0 310 230"></svg>
+      <div class="hint">Click a node to trace how that result was produced.</div>
+    </div>
+    <div class="box"><h4>Trace</h4><div id="trace" class="hint">Select a cell.</div></div>
+    <div class="box">
+      <h4>Agent</h4>
+      <button class="btn pri" id="ask">Ask Pip for a next step</button>
+      <div id="prop"></div>
+    </div>
+    <div class="box">
+      <h4>Run ledger</h4>
+      <div class="log" id="log"></div>
+    </div>
+  </aside>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Orikata Bio PBC (YC S26). Not affiliated with Orikata Bio PBC. All data here is synthetic and computed in your browser.</footer>
+
+<script>
+"use strict";
+
+const AA = "ACDEFGHIKLMNPQRSTVWY";
+// Kyte-Doolittle hydropathy scale
+const KD = {
+  A: 1.8, R: -4.5, N: -3.5, D: -3.5, C: 2.5, Q: -3.5, E: -3.5, G: -0.4, H: -3.2, I: 4.5,
+  L: 3.8, K: -3.9, M: 1.9, F: 2.8, P: -1.6, S: -0.8, T: -0.7, W: -0.9, Y: -1.3, V: 4.2
+};
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// tiny seeded PRNG so "load" is reproducible from its params
+function rng(seed) {
+  let s = (seed >>> 0) || 1;
+  return () => {
+    s = (Math.imul(s ^ (s >>> 15), 2246822519) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+// FNV-1a: our stand-in for a content hash
+function hash(str) {
+  let h = 2166136261;
+  for (const c of str) {
+    h ^= c.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function bars(pairs, scale) {
+  const rows = pairs.slice(0, 12).map(([n, v]) => {
+    const w = Math.min(120, (Math.abs(v) / scale) * 120) + 2;
+    return `<tr><td>${n}</td><td>${v.toFixed(2)}</td>` +
+           `<td><span class="bar ${v < 0 ? "neg" : ""}" style="width:${w}px"></span></td></tr>`;
+  });
+  const more = pairs.length > 12 ? `<span class="hint">+${pairs.length - 12} more</span>` : "";
+  return `<table>${rows.join("")}</table>${more}`;
+}
+
+/* ---- cell definitions: each is a pure function of (params, upstream outputs) ---- */
+const DEFS = [
+  {
+    id: "load", title: "1. Load peptides", by: "h", deps: [], ver: "v1",
+    desc: "Draw a synthetic peptide library (stand-in for assembling data from an assay).",
+    params: {
+      count: { label: "count", type: "number", v: 24, min: 6, max: 60 },
+      seed: { label: "seed", type: "number", v: 7, min: 1, max: 999 }
+    },
+    fn: (p) => {
+      const r = rng(p.seed);
+      const seqs = Array.from({ length: p.count }, (_, i) => {
+        const len = 6 + Math.floor(r() * 24);
+        let s = "";
+        for (let k = 0; k < len; k++) s += AA[Math.floor(r() * 20)];
+        return { name: "pep-" + String(i + 1).padStart(2, "0"), seq: s };
+      });
+      return { seqs };
+    },
+    view: (o) => {
+      const lens = o.seqs.map(s => s.seq.length);
+      const sample = o.seqs.slice(0, 3).map(s => s.name + " " + s.seq).join("<br>");
+      return `${o.seqs.length} sequences, lengths ${Math.min(...lens)}-${Math.max(...lens)}` +
+             `<br><span class="mono">${sample}</span><br>...`;
+    }
+  },
+  {
+    id: "filter", title: "2. Filter by length", by: "h", deps: ["load"], ver: "v1",
+    desc: "Keep peptides long enough to fold into something interesting.",
+    params: { minLen: { label: "min length", type: "number", v: 8, min: 1, max: 30 } },
+    fn: (p, i) => ({ seqs: i.load.seqs.filter(s => s.seq.length >= p.minLen) }),
+    view: (o) => `${o.seqs.length} peptides kept<br>` +
+      `<span class="mono">${o.seqs.map(s => s.name.slice(4)).join(" ")}</span>`
+  },
+  {
+    id: "hydro", title: "3. Hydropathy scan", by: "a", deps: ["filter"], ver: "v1",
+    desc: "Mean Kyte-Doolittle hydropathy per peptide.",
+    params: { scale: { label: "scale", type: "select", v: "kd", opts: ["kd"] } },
+    fn: (p, i) => ({
+      rows: i.filter.seqs.map(s => ({
+        name: s.name,
+        g: [...s.seq].reduce((a, c) => a + KD[c], 0) / s.seq.length
+      }))
+    }),
+    view: (o) => bars(o.rows.map(r => [r.name, r.g]), 5)
+  },
+  {
+    id: "model", title: "4. Stability model", by: "a", deps: ["filter"], ver: "v1",
+    desc: "Toy linear model on residue composition. Where it runs is logged in the ledger but is not part of the fingerprint.",
+    params: { wseed: { label: "weights seed", type: "number", v: 3, min: 1, max: 99 } },
+    compute: true,
+    fn: (p, i) => {
+      const r = rng(p.wseed * 97);
+      const w = {};
+      for (const a of AA) w[a] = r() * 2 - 1;
+      return {
+        rows: i.filter.seqs.map(s => ({
+          name: s.name,
+          s: [...s.seq].reduce((a, c) => a + w[c], 0) / Math.sqrt(s.seq.length)
+        }))
+      };
+    },
+    view: (o) => bars(o.rows.map(r => [r.name, r.s]), 3)
+  },
+  {
+    id: "rank", title: "5. Shortlist", by: "h", deps: ["hydro", "model"], ver: "v1",
+    desc: "Rank by predicted stability, penalising very hydrophobic sequences.",
+    params: {
+      k: { label: "top k", type: "number", v: 5, min: 1, max: 15 },
+      pen: { label: "penalty", type: "number", v: 0.5, min: 0, max: 2, step: 0.1 }
+    },
+    fn: (p, i) => {
+      const g = Object.fromEntries(i.hydro.rows.map(r => [r.name, r.g]));
+      const top = i.model.rows
+        .map(r => ({ name: r.name, score: r.s - p.pen * Math.max(0, g[r.name]) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, p.k);
+      return { top };
+    },
+    view: (o) => `<table><tr><th>#</th><th>peptide</th><th>score</th></tr>` +
+      o.top.map((t, n) => `<tr><td>${n + 1}</td><td>${t.name}</td><td>${t.score.toFixed(2)}</td></tr>`).join("") +
+      `</table>`
+  }
+];
+
+/* ---- notebook state ---- */
+let S, actor = "h", selected = null;
+const by = id => DEFS.find(d => d.id === id);
+const who = a => (a === "h" ? "Mara" : "Pip");
+
+function fresh() {
+  S = { log: [], prop: null, i: 0 };
+  DEFS.forEach(d => {
+    S[d.id] = {
+      params: Object.fromEntries(Object.entries(d.params).map(([k, x]) => [k, x.v])),
+      out: null, sig: null, author: d.by, where: "local", busy: false
+    };
+  });
+}
+
+// The core mechanic: a cell's expected fingerprint depends on its own code version,
+// its own params, and the expected fingerprints of everything upstream.
+function expected(id) {
+  const d = by(id);
+  return hash(id + d.ver + JSON.stringify(S[id].params) + d.deps.map(expected).join("|"));
+}
+function state(id) {
+  if (!S[id].out) return "never";
+  return S[id].sig === expected(id) ? "fresh" : "stale";
+}
+function downstream(id) {
+  return DEFS.filter(d => d.deps.includes(id)).flatMap(d => [d.id, ...downstream(d.id)]);
+}
+function upstream(id) {
+  return by(id).deps.flatMap(d => [...upstream(d), d]);
+}
+
+async function run(id, force) {
+  const d = by(id), c = S[id];
+  for (const u of d.deps) if (state(u) !== "fresh") await run(u);
+  if (!force && state(id) === "fresh") return;
+  c.busy = true;
+  render();
+  const where = d.compute ? c.where : "local";
+  const ms = d.compute ? (where === "hosted" ? 420 : 1400) : 380;
+  await sleep(ms);
+  const ins = Object.fromEntries(d.deps.map(u => [u, S[u].out]));
+  c.out = d.fn(c.params, ins);
+  c.sig = expected(id);
+  c.busy = false;
+  S.log.unshift({ t: ++S.i, who: actor, id, sig: c.sig, where, ms });
+  render();
+}
+
+async function runAll() {
+  for (const d of DEFS) if (state(d.id) !== "fresh") await run(d.id);
+}
+
+function edit(id, key, val, as) {
+  const prev = S[id].params[key];
+  if (prev === val) return;
+  S[id].params[key] = val;
+  S[id].author = as || actor;
+  S.log.unshift({ t: ++S.i, who: as || actor, id, edit: `${key}: ${prev} -> ${val}` });
+  render();
+}
+
+/* ---- rendering ---- */
+function render() {
+  $("#asH").className = "h" + (actor === "h" ? " on" : "");
+  $("#asA").className = "a" + (actor === "a" ? " on" : "");
+  const hl = selected ? new Set([selected, ...upstream(selected)]) : new Set();
+  $("#cells").innerHTML = DEFS.map(d => {
+    const c = S[d.id], st = state(d.id);
+    const ps = Object.entries(d.params).map(([k, x]) => x.type === "select"
+      ? `<label>${x.label}<select disabled>${x.opts.map(o => `<option>${o}</option>`)}</select></label>`
+      : `<label>${x.label}<input data-c="${d.id}" data-k="${k}" type="number" value="${c.params[k]}" ` +
+        `min="${x.min}" max="${x.max}" step="${x.step || 1}"></label>`).join("");
+    const comp = d.compute
+      ? `<label>compute<select data-where="${d.id}">` +
+        `<option value="local" ${c.where === "local" ? "selected" : ""}>local CPU</option>` +
+        `<option value="hosted" ${c.where === "hosted" ? "selected" : ""}>hosted GPU</option></select></label>`
+      : "";
+    const last = S.log.find(l => l.id === d.id && l.sig);
+    const prov = c.out
+      ? `fingerprint <b>${c.sig}</b>` +
+        (last ? ` &middot; ran by ${who(last.who)} on ${last.where}` : "") +
+        (st === "stale" ? ` &middot; <span style="color:var(--stale)">now expects ${expected(d.id)}</span>` : "")
+      : "";
+    return `<div class="cell ${st === "never" ? "" : st} ${selected === d.id ? "sel" : ""} ${hl.has(d.id) ? "hl" : ""}">
+      <div class="ch">
+        <h3>${d.title}</h3>
+        <span class="chip ${c.author}">last edited by ${who(c.author)}</span>
+        <span class="chip ${st}">${st === "never" ? "not run" : st}</span>
+        <span class="sp"></span>
+        <button class="btn" data-trace="${d.id}">Trace</button>
+        <button class="btn pri" data-run="${d.id}" ${c.busy ? "disabled" : ""}>${c.busy ? "Running..." : "Run"}</button>
+      </div>
+      <div class="desc">${d.desc}</div>
+      <div class="params">${ps}${comp}</div>
+      <div class="out ${c.out ? "" : "empty"} ${st === "stale" ? "dim" : ""}">${c.out ? d.view(c.out) : "No result yet."}</div>
+      <div class="prov mono">${prov}</div>
+    </div>`;
+  }).join("");
+  drawDag();
+  drawLog();
+  drawTrace();
+  drawProp();
+}
+
+function drawDag() {
+  const lay = {
+    load: [155, 24], filter: [155, 76], hydro: [80, 140], model: [230, 140], rank: [155, 200]
+  };
+  let s = "";
+  DEFS.forEach(d => d.deps.forEach(u => {
+    const [a, b] = lay[u], [x, y] = lay[d.id];
+    s += `<line x1="${a}" y1="${b + 10}" x2="${x}" y2="${y - 12}" stroke="#4a5365" stroke-width="1.5"/>`;
+  }));
+  DEFS.forEach(d => {
+    const [x, y] = lay[d.id], st = state(d.id);
+    const col = st === "fresh" ? "var(--ok)" : st === "stale" ? "var(--stale)" : "var(--idle)";
+    s += `<g class="node" data-n="${d.id}"><rect x="${x - 38}" y="${y - 12}" width="76" height="24" rx="12" ` +
+         `fill="#1c2027" stroke="${col}" stroke-width="${selected === d.id ? 3 : 1.6}"/>` +
+         `<text x="${x}" y="${y + 4}" text-anchor="middle">${d.id}</text></g>`;
+  });
+  $("#dag").innerHTML = s;
+}
+
+function drawLog() {
+  if (!S.log.length) {
+    $("#log").innerHTML = '<span class="hint">No runs yet. Hit "Run all stale".</span>';
+    return;
+  }
+  $("#log").innerHTML = S.log.slice(0, 40).map(l => l.edit
+    ? `<div><span class="chip ${l.who}">${who(l.who)}</span> edited <b>${l.id}</b> <span class="mono">${l.edit}</span></div>`
+    : `<div><span class="chip ${l.who}">${who(l.who)}</span> ran <b>${l.id}</b> on ${l.where} (${l.ms}ms) ` +
+      `&rarr; <span class="mono">${l.sig}</span></div>`).join("");
+}
+
+function drawTrace() {
+  if (!selected) {
+    $("#trace").innerHTML = '<span class="hint">Select a cell.</span>';
+    return;
+  }
+  const id = selected, st = state(id);
+  const chain = [...new Set([...upstream(id), id])];
+  const items = chain.map(u => {
+    const l = S.log.find(x => x.id === u && x.sig);
+    const p = Object.entries(S[u].params).map(([k, v]) => k + "=" + v).join(", ");
+    const info = l ? `run by ${who(l.who)} on ${l.where}, fp ${l.sig}` : "never run";
+    return `<li><b>${u}</b> <span class="mono">(${p})</span><br>` +
+           `<span class="hint">${info}${state(u) === "stale" ? " - stale" : ""}</span></li>`;
+  }).join("");
+  const dn = downstream(id);
+  $("#trace").innerHTML =
+    `<div style="margin-bottom:6px"><b>${id}</b> is <span class="chip ${st}">${st === "never" ? "not run" : st}</span></div>` +
+    `<ol class="trace">${items}</ol>` +
+    `<div class="hint">${dn.length ? "Downstream of this: " + [...new Set(dn)].join(", ") + "." : "Nothing depends on this."}</div>`;
+}
+
+/* ---- agent proposals: scripted, but they read the live notebook state ---- */
+const IDEAS = [
+  () => S.filter.params.minLen < 12
+    ? { id: "filter", key: "minLen", val: 12, why: "Peptides under 12 residues score noisily in the model. Raising the cutoff to 12 should cut variance." }
+    : null,
+  () => ({
+    id: "rank", key: "pen", val: S.rank.params.pen === 1.2 ? 0.5 : 1.2,
+    why: "Top hits skew hydrophobic. A heavier penalty should surface more soluble candidates."
+  }),
+  () => ({
+    id: "model", key: "wseed", val: S.model.params.wseed + 1,
+    why: "Try another weight draw as a quick robustness check on the shortlist."
+  }),
+  () => ({
+    id: "load", key: "count", val: Math.min(60, S.load.params.count + 12),
+    why: "Small library. Twelve more peptides gives the shortlist more to choose from."
+  })
+];
+
+function drawProp() {
+  const p = S.prop;
+  if (!p) { $("#prop").innerHTML = ""; return; }
+  const down = [...new Set(downstream(p.id))];
+  $("#prop").innerHTML = `<div class="prop"><b>Pip proposes:</b> set <span class="mono">${p.id}.${p.key}</span> to
+    <span class="mono">${p.val}</span><br>${p.why}<br>
+    <span class="hint">Would mark stale: ${down.length ? down.join(", ") : "nothing downstream"}</span>
+    <div class="row"><button class="btn pri" id="acc">Accept</button><button class="btn" id="rej">Dismiss</button></div></div>`;
+  $("#acc").onclick = () => { edit(p.id, p.key, p.val, "a"); S.prop = null; render(); };
+  $("#rej").onclick = () => { S.prop = null; drawProp(); };
+}
+
+/* ---- events ---- */
+$("#cells").addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.where) { S[t.dataset.where].where = t.value; render(); return; }
+  if (t.dataset.c) {
+    const x = by(t.dataset.c).params[t.dataset.k];
+    let v = parseFloat(t.value);
+    if (isNaN(v)) v = x.v;
+    v = Math.max(x.min, Math.min(x.max, v));
+    edit(t.dataset.c, t.dataset.k, v);
+    render();
+  }
+});
+$("#cells").addEventListener("click", e => {
+  const r = e.target.closest("[data-run]");
+  if (r) { run(r.dataset.run, true); return; }
+  const t = e.target.closest("[data-trace]");
+  if (t) { selected = t.dataset.trace; render(); }
+});
+$("#dag").addEventListener("click", e => {
+  const n = e.target.closest("[data-n]");
+  if (n) { selected = n.dataset.n; render(); }
+});
+$("#asH").onclick = () => { actor = "h"; render(); };
+$("#asA").onclick = () => { actor = "a"; render(); };
+$("#runall").onclick = runAll;
+$("#reset").onclick = () => { fresh(); selected = null; render(); };
+$("#ask").onclick = () => {
+  for (let k = 0; k < IDEAS.length; k++) {
+    const idea = IDEAS[(S.i + k) % IDEAS.length]();
+    if (idea) { S.prop = idea; break; }
+  }
+  drawProp();
+};
+
+fresh();
+render();
+</script>
+</body>
+</html>

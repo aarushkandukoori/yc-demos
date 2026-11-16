@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gatewalk - a toy gated model rollout</title>
+<style>
+:root{
+  --bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2b303b;--text:#e7e9ee;--mute:#8d94a3;
+  --ok:#5fd08a;--bad:#f06a6a;--warn:#e9b44c;--acc:#7aa8ff;--teal:#4fd1c5;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 28px 8px;max-width:1180px;margin:0 auto}
+h1{margin:0 0 4px;font-size:22px;letter-spacing:-.01em}
+h1 span{color:var(--teal)}
+.sub{color:var(--mute);max-width:760px;margin:0}
+main{max-width:1180px;margin:0 auto;padding:12px 28px 40px;display:grid;grid-template-columns:1fr 340px;gap:18px}
+@media(max-width:960px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute);font-weight:600}
+.controls{display:flex;flex-wrap:wrap;gap:20px;align-items:end;margin-bottom:14px}
+.controls label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mute)}
+.controls output{color:var(--text);font-variant-numeric:tabular-nums}
+input[type=range]{accent-color:var(--teal);width:170px}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--teal)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--teal);color:#06231f;border-color:var(--teal);font-weight:600}
+button.danger:hover:not(:disabled){border-color:var(--bad)}
+.route{border:1px solid var(--line);border-radius:9px;padding:12px;margin-bottom:10px;background:var(--panel2)}
+.route.sel{border-color:var(--acc)}
+.top{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.name{font-weight:600}
+.meta{color:var(--mute);font-size:12px}
+.gates{display:flex;gap:4px;margin:10px 0}
+.gate{flex:1;text-align:center;padding:5px 2px;font-size:11px;border-radius:5px;background:#12151b;border:1px solid var(--line);color:var(--mute)}
+.gate.done{background:rgba(95,208,138,.14);border-color:rgba(95,208,138,.5);color:var(--ok)}
+.gate.cur{border-color:var(--acc);color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.gate.rolled{background:rgba(240,106,106,.15);border-color:var(--bad);color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:12px}
+.stats div b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.stats div span{color:var(--mute)}
+.bar{height:8px;background:#12151b;border-radius:4px;position:relative;margin:6px 0 2px;border:1px solid var(--line)}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--acc);transition:width .4s}
+.bar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--warn)}
+.bar s{position:absolute;top:0;bottom:0;border-radius:3px;background:rgba(79,209,197,.55);transition:all .4s}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.good{color:var(--ok)}
+.log{max-height:430px;overflow:auto;font:12px/1.45 ui-monospace,Menlo,monospace}
+.entry{border-top:1px solid var(--line);padding:7px 0}
+.entry:first-child{border-top:0}
+.chk{display:inline-block;margin-right:6px}
+.chk.p{color:var(--ok)}.chk.f{color:var(--bad)}
+.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;margin-right:6px}
+.tag.pass{background:rgba(95,208,138,.15);color:var(--ok)}
+.tag.fail{background:rgba(240,106,106,.15);color:var(--bad)}
+.tag.sys{background:rgba(122,168,255,.15);color:var(--acc)}
+.tag.warn{background:rgba(233,180,76,.15);color:var(--warn)}
+details{color:var(--mute);font-size:13px;margin-top:6px}
+summary{cursor:pointer;color:var(--text)}
+footer{max-width:1180px;margin:0 auto;padding:18px 28px 36px;color:var(--mute);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Gatewalk</span> - replace a big model, one gate at a time</h1>
+  <p class="sub">A toy simulation. Each route below is a kind of task an agent sends to a large frontier model. Fine-tune a small model on that route's traffic, let expert-written graders score it, and promote it through traffic gates only when it clears the bar with statistical confidence. If it slips later, it rolls back on its own. All data and scores here are synthetic.</p>
+</header>
+
+<main>
+  <section>
+    <div class="card" style="margin-bottom:14px">
+      <h2>Policy</h2>
+      <div class="controls">
+        <label>Pass-rate bar (Wilson lower bound)
+          <span><input id="bar" type="range" min="70" max="95" value="82"> <output id="barO">82%</output></span></label>
+        <label>Graded requests per gate check
+          <span><input id="n" type="range" min="20" max="200" step="10" value="80"> <output id="nO">80</output></span></label>
+        <label>Seed
+          <span><input id="seed" type="number" value="7" style="width:70px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px"></span></label>
+        <button id="auto" class="primary">Auto-pilot all routes</button>
+        <button id="reset">Reset</button>
+      </div>
+      <div class="meta">Gates: <b>Shadow</b> (small model runs silently, 0% live) → <b>5%</b> → <b>25%</b> → <b>100%</b>. Each gate re-grades fresh traffic. Failing the bar holds the route; a failed check at a live gate rolls it back one step.</div>
+    </div>
+    <div id="routes"></div>
+    <details class="card"><summary>How the toy works</summary>
+      <p>Every request is graded by 3 rubric checks (like "cites the right policy clause"). A response passes only if all three pass. The frontier model passes each check at a high fixed rate. A small model's per-check skill starts lower and climbs with each fine-tuning round toward a route-specific ceiling, with diminishing returns. "Drift" simulates production traffic changing under a deployed model, so the monitor has something to catch.</p>
+      <p>The gate uses the Wilson lower confidence bound of the observed pass rate, not the raw average, so a lucky small sample cannot promote a model. Bigger samples tighten the bound, which is why raising the sample size lets borderline models through.</p>
+    </details>
+  </section>
+
+  <aside>
+    <div class="card" style="margin-bottom:14px">
+      <h2>Monthly spend (synthetic volumes)</h2>
+      <div class="big" id="spend">$0</div>
+      <div class="meta">vs <span id="base">$0</span> all-frontier</div>
+      <div class="big good" id="saved" style="margin-top:8px">0%</div>
+      <div class="meta">saved at current routing</div>
+    </div>
+    <div class="card">
+      <h2>Grader log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </aside>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Duet Machines (YC S26). Not affiliated with Duet Machines.</footer>
+
+<script>
+"use strict";
+// ---------- seeded RNG ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rng=mulberry32(7);
+
+// ---------- config ----------
+const STAGES=[{k:"Shadow",share:0},{k:"5%",share:.05},{k:"25%",share:.25},{k:"100%",share:1}];
+const FRONTIER_COST=0.012, SMALL_COST=0.0007, FRONTIER_CHECK=0.985;
+const ROUTES_DEF=[
+  {id:"refund",name:"Refund triage",vol:420000,base:.80,cap:.985,checks:["picks correct policy clause","amount within limit","tone follows style guide"],
+   samples:["Order 1042 arrived cracked, asks for refund","Customer wants refund after 45 days","Duplicate charge on invoice 7781"]},
+  {id:"extract",name:"Invoice field extraction",vol:900000,base:.74,cap:.99,checks:["all line items found","totals reconcile","dates normalized"],
+   samples:["PDF text: Acme Tools Ltd, 3 line items, net 30","Scanned invoice with two currencies","Credit note referencing INV-2210"]},
+  {id:"sql",name:"SQL repair",vol:150000,base:.62,cap:.96,checks:["query parses","result matches reference","no unsafe statements"],
+   samples:["Fix: GROUP BY missing column in monthly rollup","Fix: ambiguous join on user_id","Fix: window function in WHERE"]},
+  {id:"legal",name:"Contract clause review",vol:60000,base:.52,cap:.905,checks:["flags indemnity risk","quotes clause verbatim","no invented terms"],
+   samples:["MSA with uncapped liability in section 9","NDA with perpetual term","SaaS order form with auto-renew"]}
+];
+let S; // state
+function fresh(){
+  const seed=+document.getElementById("seed").value||1; rng=mulberry32(seed);
+  S=ROUTES_DEF.map(d=>({...d,rounds:0,stage:-1,rolled:false,drift:0,last:null,trainSet:0,status:"No small model yet"}));
+}
+const $=id=>document.getElementById(id);
+const bar=()=>+$("bar").value/100, N=()=>+$("n").value;
+
+// ---------- math ----------
+function skill(r){ // small-model per-request pass prob after training, minus drift
+  const s=r.cap-(r.cap-r.base)*Math.pow(.58,r.rounds);
+  return Math.max(.05,s-r.drift);
+}
+const perCheck=p=>Math.pow(p,1/3);
+function wilson(k,n,z=1.96){ // lower bound
+  if(!n)return 0; const p=k/n,d=1+z*z/n;
+  const c=p+z*z/(2*n), m=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));
+  return (c-m)/d;
+}
+function grade(r,model){ // returns {pass, checks[]}
+  const pc=model==="frontier"?FRONTIER_CHECK:perCheck(skill(r));
+  const checks=r.checks.map(c=>({c,ok:rng()<pc}));
+  return {pass:checks.every(x=>x.ok),checks};
+}
+
+// ---------- logging ----------
+function log(html,cls){
+  const e=document.createElement("div");e.className="entry";e.innerHTML=html;
+  const L=$("log");L.prepend(e);while(L.children.length>80)L.lastChild.remove();
+}
+const esc=s=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+// ---------- actions ----------
+function train(i){
+  const r=S[i]; r.rounds++; r.trainSet+=Math.round(r.vol/30*(1+rng()*.3));
+  if(r.stage<0)r.stage=-1;
+  r.status=`Fine-tuned round ${r.rounds} on ${r.trainSet.toLocaleString()} logged calls`;
+  r.last=null;
+  log(`<span class="tag sys">train</span><b>${esc(r.name)}</b> round ${r.rounds}. Small model post-trained on production traffic; graders unchanged.`);
+  render();
+}
+function evalGate(i,quiet){
+  const r=S[i];
+  if(r.rounds===0){log(`<span class="tag warn">hold</span>${esc(r.name)}: train a small model first.`);return null;}
+  const target=Math.min(r.stage+1,STAGES.length-1);
+  let k=0,shown=0;const n=N();
+  for(let j=0;j<n;j++){
+    const g=grade(r,"small"); if(g.pass)k++;
+    if(!quiet&&shown<2){
+      shown++;
+      log(`<span class="tag ${g.pass?"pass":"fail"}">${g.pass?"pass":"fail"}</span>${esc(r.samples[Math.floor(rng()*r.samples.length)])}<br>`+
+        g.checks.map(x=>`<span class="chk ${x.ok?"p":"f"}">${x.ok?"✓":"✗"} ${esc(x.c)}</span>`).join(""));
+    } else if(quiet) {} else rng();
+  }
+  const lb=wilson(k,n);
+  r.last={k,n,raw:k/n,lb};
+  if(lb>=bar()){
+    r.stage=target; r.rolled=false;
+    r.status=`Cleared gate "${STAGES[target].k}" (LB ${(lb*100).toFixed(1)}%)`;
+    log(`<span class="tag pass">promote</span><b>${esc(r.name)}</b> → ${STAGES[target].k}. ${k}/${n} passed, lower bound ${(lb*100).toFixed(1)}% ≥ ${(bar()*100).toFixed(0)}%.`);
+  } else {
+    r.status=`Held at "${r.stage<0?"none":STAGES[r.stage].k}" (LB ${(lb*100).toFixed(1)}% < ${(bar()*100).toFixed(0)}%)`;
+    log(`<span class="tag fail">hold</span><b>${esc(r.name)}</b> ${k}/${n} passed, lower bound ${(lb*100).toFixed(1)}% < ${(bar()*100).toFixed(0)}%. Train more or lower the bar.`);
+  }
+  render();return lb>=bar();
+}
+function drift(i){
+  const r=S[i]; r.drift+=.12;
+  log(`<span class="tag warn">drift</span><b>${esc(r.name)}</b>: production inputs shifted (new customer segment). Small model quality drops.`);
+  render();
+}
+function monitor(i){ // live-traffic check at current gate
+  const r=S[i]; if(r.stage<1)return;
+  let k=0;const n=N();
+  for(let j=0;j<n;j++) if(grade(r,"small").pass)k++;
+  const lb=wilson(k,n); r.last={k,n,raw:k/n,lb};
+  if(lb<bar()){
+    const from=STAGES[r.stage].k; r.stage=Math.max(-1,r.stage-1); r.rolled=true;
+    r.status=`Rolled back from ${from} (LB ${(lb*100).toFixed(1)}%)`;
+    log(`<span class="tag fail">rollback</span><b>${esc(r.name)}</b> live check failed (${k}/${n}, LB ${(lb*100).toFixed(1)}%). Routed traffic returns toward the frontier model.`);
+  } else {
+    r.status=`Live check ok at ${STAGES[r.stage].k} (LB ${(lb*100).toFixed(1)}%)`;
+    log(`<span class="tag pass">monitor</span><b>${esc(r.name)}</b> live check ok, LB ${(lb*100).toFixed(1)}%.`);
+  }
+  render();
+}
+function fixDrift(i){ // retrain on new traffic
+  const r=S[i]; r.drift=0; r.rounds++; r.trainSet+=Math.round(r.vol/30);
+  r.status=`Retrained on drifted traffic (round ${r.rounds})`;
+  log(`<span class="tag sys">train</span><b>${esc(r.name)}</b> retrained on the new segment; drift recovered.`);
+  render();
+}
+
+// ---------- autopilot ----------
+let autoTimer=null;
+function auto(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;$("auto").textContent="Auto-pilot all routes";return;}
+  $("auto").textContent="Stop auto-pilot";
+  autoTimer=setInterval(()=>{
+    let moved=false;
+    for(let i=0;i<S.length;i++){
+      const r=S[i];
+      if(r.stage===STAGES.length-1)continue;
+      moved=true;
+      if(r.rounds===0){train(i);continue;}
+      if(!evalGate(i,true)&&r.rounds<8)train(i);
+      else if(r.rounds>=8&&r.last&&r.last.lb<bar()){r.status="Ceiling reached: needs a stronger base model or a lower bar";}
+    }
+    if(!moved||S.every(r=>r.stage===STAGES.length-1||(r.rounds>=8&&r.last&&r.last.lb<bar()))){
+      clearInterval(autoTimer);autoTimer=null;$("auto").textContent="Auto-pilot all routes";
+      log(`<span class="tag sys">done</span>Auto-pilot finished. Routes that hit their ceiling stay on the frontier model.`);
+    }
+    render();
+  },700);
+}
+
+// ---------- render ----------
+const money=x=>"$"+Math.round(x).toLocaleString();
+function render(){
+  $("barO").textContent=$("bar").value+"%";$("nO").textContent=$("n").value;
+  let spend=0,base=0;
+  const host=$("routes");host.innerHTML="";
+  S.forEach((r,i)=>{
+    const share=r.stage<0?0:STAGES[r.stage].share;
+    const cost=r.vol*((1-share)*FRONTIER_COST+share*SMALL_COST);
+    spend+=cost;base+=r.vol*FRONTIER_COST;
+    const sk=r.rounds?skill(r):0;
+    const lb=r.last?r.last.lb:null;
+    const el=document.createElement("div");el.className="route";
+    el.innerHTML=`
+      <div class="top"><div><span class="name">${esc(r.name)}</span> <span class="meta">${r.vol.toLocaleString()} calls / mo</span></div>
+      <div class="meta">${esc(r.status)}</div></div>
+      <div class="gates">${STAGES.map((g,j)=>`<div class="gate ${j<=r.stage?"done":""} ${j===r.stage+1&&r.rounds?"cur":""} ${r.rolled&&j===r.stage+1?"rolled":""}">${g.k}</div>`).join("")}</div>
+      <div class="stats">
+        <div><b>${r.rounds}</b><span>train rounds</span></div>
+        <div><b>${r.rounds?(sk*100).toFixed(1)+"%":"-"}</b><span>true small-model pass</span></div>
+        <div><b>${lb==null?"-":(lb*100).toFixed(1)+"%"}</b><span>last Wilson LB</span></div>
+        <div><b>${money(cost)}</b><span>this route / mo</span></div>
+      </div>
+      <div class="bar" title="blue: true pass rate, teal: last lower bound, yellow: bar">
+        <i style="width:${sk*100}%"></i>${lb==null?"":`<s style="left:0;width:${lb*100}%;height:3px;top:2px"></s>`}<u style="left:${bar()*100}%"></u></div>
+      <div class="actions">
+        <button data-a="train">Fine-tune round</button>
+        <button data-a="eval" ${r.rounds?"":"disabled"} class="primary">${r.stage>=STAGES.length-1?"Re-check":"Grade next gate"}</button>
+        <button data-a="mon" ${r.stage>=1?"":"disabled"}>Live monitor</button>
+        <button data-a="drift" class="danger" ${r.stage>=0?"":"disabled"}>Simulate drift</button>
+        ${r.drift>0?`<button data-a="fix">Retrain on new traffic</button>`:""}
+      </div>`;
+    el.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+      const a=b.dataset.a;
+      if(a==="train")train(i);
+      else if(a==="eval"){ if(r.stage>=STAGES.length-1)monitor(i);else evalGate(i);}
+      else if(a==="mon")monitor(i);
+      else if(a==="drift")drift(i);
+      else if(a==="fix")fixDrift(i);
+    });
+    host.appendChild(el);
+  });
+  $("spend").textContent=money(spend);$("base").textContent=money(base);
+  $("saved").textContent=((1-spend/base)*100).toFixed(1)+"%";
+}
+
+$("bar").oninput=render;$("n").oninput=render;
+$("auto").onclick=auto;
+$("reset").onclick=()=>{if(autoTimer)auto();fresh();$("log").innerHTML="";log(`<span class="tag sys">reset</span>All routes back on the frontier model.`);render();};
+$("seed").onchange=()=>$("reset").click();
+fresh();
+log(`<span class="tag sys">ready</span>Pick a route: fine-tune a few rounds, then grade the next gate. Or hit auto-pilot.`);
+render();
+</script>
+</body>
+</html>
