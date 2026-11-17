@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledgerline - a toy negotiating collections agent</title>
+<style>
+:root {
+  --bg: #f4efe6;
+  --ink: #1d2320;
+  --mute: #6b736d;
+  --line: #d9d1c1;
+  --card: #fbf8f2;
+  --acc: #1f5c4a;
+  --acc2: #b5532b;
+  --ok: #2d7a4f;
+  --bad: #a63d2f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 Georgia, "Iowan Old Style", serif;
+}
+header { padding: 28px 32px 12px; max-width: 1180px; margin: 0 auto; }
+h1 { margin: 0; font-size: 28px; letter-spacing: -.5px; }
+h1 span { color: var(--acc2); }
+header p { margin: 6px 0 0; color: var(--mute); max-width: 780px; }
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 12px 32px 24px;
+  display: grid;
+  grid-template-columns: 330px 1fr 290px;
+  gap: 18px;
+}
+@media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+h2 {
+  font: 600 12px/1 ui-monospace, Menlo, monospace;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--mute);
+  margin: 0 0 12px;
+}
+.mono { font-family: ui-monospace, Menlo, monospace; }
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.row:hover { background: #efe9dc; }
+.row.sel { border-color: var(--acc); background: #e9efe9; }
+.row b { flex: 1; font-weight: 600; }
+.row small { color: var(--mute); }
+.tag {
+  font: 11px ui-monospace, Menlo, monospace;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.t-pay { background: #dcebe0; color: #1d5a37; }
+.t-help { background: #f3e3c4; color: #7a5410; }
+.t-nudge { background: #e4e0f0; color: #43397a; }
+.t-lowhope { background: #efd8d3; color: #8a3226; }
+.done-ok { color: var(--ok); }
+.done-bad { color: var(--bad); }
+.chat {
+  height: 430px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 4px 2px;
+}
+.msg {
+  max-width: 82%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.msg.agent { align-self: flex-start; border-left: 3px solid var(--acc); }
+.msg.b { align-self: flex-end; background: #f6ebdc; border-right: 3px solid var(--acc2); }
+.msg.sys {
+  align-self: center;
+  background: none;
+  border: 1px dashed var(--line);
+  color: var(--mute);
+  font-size: 13px;
+  max-width: 100%;
+}
+.msg i {
+  display: block;
+  font: 10px ui-monospace, Menlo, monospace;
+  color: var(--mute);
+  margin-bottom: 2px;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+button {
+  font: 600 13px ui-monospace, Menlo, monospace;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+button.alt { background: none; color: var(--ink); }
+button:disabled { opacity: .35; cursor: not-allowed; }
+.bar { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+label { display: block; margin: 12px 0 2px; font-size: 13px; }
+label output { float: right; font-family: ui-monospace, Menlo, monospace; }
+input[type=range] { width: 100%; accent-color: var(--acc); }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13px; }
+.kv span:nth-child(odd) { color: var(--mute); }
+.meter { height: 10px; background: #e6dfd0; border-radius: 6px; overflow: hidden; margin: 6px 0 2px; }
+.meter div { height: 100%; background: var(--acc); width: 0; transition: width .5s; }
+.quad { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 8px 0; }
+.quad div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 11px;
+  min-height: 48px;
+  color: var(--mute);
+}
+.quad div.on { background: #e9efe9; border-color: var(--acc); color: var(--ink); }
+.big { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+.hint { color: var(--mute); font-size: 13px; }
+aside { display: flex; flex-direction: column; gap: 18px; }
+footer {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 6px 32px 32px;
+  color: var(--mute);
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+footer p { margin: 14px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ledger<span>line</span> <small class="mono" style="font-size:12px;color:var(--mute)">toy negotiating collections agent</small></h1>
+  <p>Pick a synthetic borrower. The agent sorts them by <b>ability</b> and <b>willingness</b> to pay, opens with a matching offer, then concedes step by step (longer plan first, then discount) until it hits the floor you set. Move the policy sliders and re-run the whole portfolio to watch recovery change.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Portfolio (synthetic, 90+ days late)</h2>
+    <div id="list"></div>
+    <div class="bar">
+      <button id="runAll" class="alt">Run whole portfolio</button>
+      <button id="reset" class="alt">Reset</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 id="who">Conversation</h2>
+    <div id="chat" class="chat"></div>
+    <div class="bar">
+      <button id="step">Next turn</button>
+      <button id="auto" class="alt">Auto-run</button>
+      <span class="hint" id="status" style="align-self:center"></span>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Agent's read</h2>
+      <div class="quad" id="quad"></div>
+      <div class="kv" id="kv"></div>
+    </div>
+    <div class="card">
+      <h2>Policy</h2>
+      <label>Minimum settlement <output id="oFloor"></output></label>
+      <input type="range" id="floor" min="40" max="100" step="5" value="70">
+      <label>Longest plan (months) <output id="oMax"></output></label>
+      <input type="range" id="maxm" min="1" max="12" step="1" value="6">
+      <label>Discount step <output id="oStep"></output></label>
+      <input type="range" id="dstep" min="2" max="15" step="1" value="5">
+    </div>
+    <div class="card">
+      <h2>Sandbox: hidden truth</h2>
+      <p class="hint" style="margin:0">What the borrower can really afford. The agent doesn't see it until they push back.</p>
+      <label>True monthly capacity <output id="oCap"></output></label>
+      <input type="range" id="cap" min="20" max="2000" step="10" value="500">
+    </div>
+    <div class="card">
+      <h2>Portfolio result</h2>
+      <div class="big" id="rec">-</div>
+      <div class="meter"><div id="meter"></div></div>
+      <div class="hint" id="recNote">Run the portfolio to compute.</div>
+    </div>
+  </aside>
+</main>
+<footer>
+  <p>Independent demo built by Aarush Kandukoori, inspired by Callbook AI (YC S26). Not affiliated with Callbook AI.</p>
+  <p>All borrowers, balances and replies are invented. Nothing leaves this page: no network calls, no real accounts, no real contact details.</p>
+</footer>
+
+<script>
+"use strict";
+// Synthetic borrowers. cap = what they can really afford per month,
+// w = willingness 0..1 (hidden from the agent), ch = preferred channel.
+const BORROWERS = [
+  { id: 1, name: "Dana Okafor",   bal: 4200,  dpd: 97,  cap: 900,  w: .85, ch: "sms" },
+  { id: 2, name: "Marco Reyes",   bal: 1800,  dpd: 120, cap: 150,  w: .80, ch: "call" },
+  { id: 3, name: "Priya Nair",    bal: 7600,  dpd: 104, cap: 1500, w: .30, ch: "email" },
+  { id: 4, name: "Tom Lindqvist", bal: 950,   dpd: 180, cap: 40,   w: .20, ch: "sms" },
+  { id: 5, name: "Aiko Tanaka",   bal: 3100,  dpd: 91,  cap: 520,  w: .65, ch: "call" },
+  { id: 6, name: "Samuel Bekele", bal: 5400,  dpd: 140, cap: 260,  w: .55, ch: "sms" },
+  { id: 7, name: "Lena Fischer",  bal: 2300,  dpd: 110, cap: 700,  w: .45, ch: "email" },
+  { id: 8, name: "Omar Haddad",   bal: 12800, dpd: 210, cap: 380,  w: .35, ch: "call" }
+];
+const $ = id => document.getElementById(id);
+const money = n => "$" + Math.round(n).toLocaleString("en-US");
+const policy = () => ({ floor: +$("floor").value / 100, maxm: +$("maxm").value, step: +$("dstep").value / 100 });
+const CH = { sms: "SMS", call: "Voice", email: "Email" };
+
+// 1) Segment: ability = months to clear the balance at the borrower's capacity,
+//    willingness = how they respond to the first contact. Four quadrants, four openers.
+function segment(b) {
+  const monthsToClear = b.bal / b.cap;
+  const able = monthsToClear <= 8;
+  const willing = b.w >= .5;
+  const key = (able ? "A" : "a") + (willing ? "W" : "w");
+  const map = {
+    AW: { tag: "t-nudge",   label: "Pay soon",    open: { d: 0,   m: 1 },    note: "Can pay and will. Light reminder plus a payment link." },
+    Aw: { tag: "t-pay",     label: "Persuade",    open: { d: .10, m: 1 },    note: "Can pay, reluctant. Lump-sum discount creates urgency." },
+    aW: { tag: "t-help",    label: "Restructure", open: { d: 0,   m: null }, note: "Willing but cash-poor. Lead with a plan sized to income." },
+    aw: { tag: "t-lowhope", label: "Low yield",   open: { d: .15, m: null }, note: "Neither. Cheap channel, small settlement, then park." }
+  };
+  return Object.assign({ key, monthsToClear }, map[key]);
+}
+
+// 2) Borrower model: accepts when the monthly payment fits their capacity, but a reluctant
+//    borrower also stalls a few rounds first (turnsNeeded).
+function turnsNeeded(b) { return Math.max(0, Math.round((1 - b.w) * 4)); }
+function borrowerReacts(b, offer, round) {
+  const pay = offer.total / offer.m;
+  if (pay > b.cap) return { ok: false, counter: Math.floor(b.cap / 10) * 10 || 10, why: "afford" };
+  if (round < turnsNeeded(b)) return { ok: false, counter: null, why: "stall" };
+  return { ok: true };
+}
+
+// 3) Agent: open by segment, then concede (a) longer plan, (b) deeper discount, until the floor.
+function startState(b) {
+  const s = segment(b), p = policy();
+  let m = s.open.m || Math.max(1, Math.ceil(b.bal / b.cap));
+  m = Math.min(m, p.maxm);
+  return { b, seg: s, d: s.open.d, m, round: 0, log: [], done: false, result: null, knownCap: null };
+}
+function offerOf(st) { return { total: st.b.bal * (1 - st.d), m: st.m, d: st.d }; }
+function say(st, who, text) { st.log.push({ who, text, ch: st.b.ch }); }
+function fmtOffer(o) {
+  const disc = o.d > 0 ? ` (${Math.round(o.d * 100)}% off)` : "";
+  if (o.m === 1) return `${money(o.total)} today${disc}`;
+  return `${money(o.total / o.m)}/month for ${o.m} months${disc}, ${money(o.total)} total`;
+}
+function giveUp(st, why) {
+  say(st, "sys", why);
+  st.done = true;
+  st.result = { won: false, amount: 0, m: 0 };
+}
+
+function advance(st) {
+  if (st.done) return;
+  const p = policy(), b = st.b;
+  if (st.round === 0 && !st.log.length) {
+    say(st, "sys", `Segment: ${st.seg.label}. ${st.seg.note}`);
+    say(st, "agent", `Hi ${b.name.split(" ")[0]}, this is about your account, ${b.dpd} days past due, balance ${money(b.bal)}. I'd like to find something that works for you.`);
+  }
+  const o = offerOf(st);
+  say(st, "agent", `Here's an option: ${fmtOffer(o)}.`);
+  const r = borrowerReacts(b, o, st.round);
+  if (r.ok) {
+    say(st, "b", "That works. Send me the link.");
+    say(st, "sys", `Agreed: ${fmtOffer(o)}. Payment link sent, follow-up scheduled.`);
+    st.done = true;
+    st.result = { won: true, amount: o.total, m: o.m };
+    return;
+  }
+  st.round++;
+  if (r.why === "stall") {
+    say(st, "b", ["I need to think about it.", "Can you do better?", "Not sure I trust this."][st.round % 3]);
+    if (st.round > 4) giveUp(st, "Borrower kept stalling. Parked for a later retry.");
+    return;
+  }
+  // Borrower can't afford it: they reveal a ceiling, the agent updates its belief.
+  st.knownCap = r.counter;
+  say(st, "b", `I can't do that. Realistically ${money(r.counter)} a month.`);
+  const canDiscount = (1 - st.d - p.step) >= p.floor - 1e-9;
+  if (st.m < p.maxm) {
+    st.m = Math.min(p.maxm, Math.max(st.m + 1, Math.ceil(o.total / r.counter)));
+    say(st, "sys", `Agent concedes: stretch the plan to ${st.m} months.`);
+  } else if (canDiscount) {
+    st.d = +(st.d + p.step).toFixed(3);
+    say(st, "sys", `Agent concedes: discount now ${Math.round(st.d * 100)}%.`);
+  } else {
+    giveUp(st, `Hit policy floor (${Math.round(p.floor * 100)}% of balance, ${p.maxm} months). Routed to a human, follow-up in 14 days.`);
+  }
+}
+
+// ---------- UI ----------
+let states = {}, selected = 1, timer = null;
+function stateFor(id) { return states[id] || (states[id] = startState(BORROWERS.find(x => x.id === id))); }
+
+function renderList() {
+  $("list").innerHTML = "";
+  BORROWERS.forEach(b => {
+    const s = segment(b), st = states[b.id];
+    const row = document.createElement("div");
+    row.className = "row" + (b.id === selected ? " sel" : "");
+    const nm = document.createElement("b"); nm.textContent = b.name;
+    const sm = document.createElement("small"); sm.textContent = money(b.bal);
+    const tg = document.createElement("span"); tg.className = "tag " + s.tag; tg.textContent = s.label;
+    row.append(nm, sm, tg);
+    if (st && st.done) {
+      const r = document.createElement("span");
+      r.className = st.result.won ? "done-ok" : "done-bad";
+      r.textContent = st.result.won ? "✓" : "✗";
+      row.append(r);
+    }
+    row.onclick = () => { stopAuto(); selected = b.id; render(); };
+    $("list").append(row);
+  });
+}
+
+function renderChat() {
+  const st = stateFor(selected), b = st.b;
+  $("who").textContent = `Conversation with ${b.name} (${CH[b.ch]})`;
+  const c = $("chat");
+  c.innerHTML = "";
+  if (!st.log.length) {
+    const h = document.createElement("div");
+    h.className = "msg sys";
+    h.textContent = "Press Next turn to let the agent open the conversation.";
+    c.append(h);
+  }
+  st.log.forEach(m => {
+    const d = document.createElement("div");
+    d.className = "msg " + m.who;
+    if (m.who !== "sys") {
+      const i = document.createElement("i");
+      i.textContent = (m.who === "agent" ? "Agent" : b.name.split(" ")[0]) + " · " + CH[m.ch];
+      d.append(i);
+    }
+    d.append(document.createTextNode(m.text));
+    c.append(d);
+  });
+  c.scrollTop = c.scrollHeight;
+  $("step").disabled = st.done;
+  $("auto").disabled = st.done;
+  $("status").textContent = st.done ? (st.result.won ? `Recovered ${money(st.result.amount)}` : "No agreement") : `Round ${st.round}`;
+}
+
+function renderRead() {
+  const st = stateFor(selected), s = st.seg, b = st.b;
+  const cells = [["AW", "Able + willing"], ["Aw", "Able, reluctant"], ["aW", "Willing, cash-poor"], ["aw", "Neither"]];
+  $("quad").innerHTML = "";
+  cells.forEach(([k, t]) => {
+    const d = document.createElement("div");
+    d.textContent = t;
+    if (k === s.key) d.className = "on";
+    $("quad").append(d);
+  });
+  const rows = [
+    ["Balance", money(b.bal)],
+    ["Days late", b.dpd],
+    ["Months to clear at capacity", s.monthsToClear.toFixed(1)],
+    ["Current offer", st.done ? "-" : fmtOffer(offerOf(st)).split(",")[0]],
+    ["Learned ceiling", st.knownCap ? money(st.knownCap) + "/mo" : "unknown"]
+  ];
+  $("kv").innerHTML = "";
+  rows.forEach(([a, v]) => {
+    const x = document.createElement("span"); x.textContent = a;
+    const y = document.createElement("span"); y.className = "mono"; y.textContent = v;
+    $("kv").append(x, y);
+  });
+  $("cap").value = b.cap;
+  $("oCap").textContent = money(b.cap);
+}
+
+function render() { renderList(); renderChat(); renderRead(); }
+
+function stopAuto() {
+  if (timer) { clearInterval(timer); timer = null; $("auto").textContent = "Auto-run"; }
+}
+$("step").onclick = () => { advance(stateFor(selected)); render(); };
+$("auto").onclick = () => {
+  if (timer) { stopAuto(); return; }
+  $("auto").textContent = "Pause";
+  timer = setInterval(() => {
+    const st = stateFor(selected);
+    advance(st);
+    render();
+    if (st.done) stopAuto();
+  }, 650);
+};
+$("reset").onclick = () => {
+  stopAuto();
+  states = {};
+  $("rec").textContent = "-";
+  $("meter").style.width = "0";
+  $("recNote").textContent = "Run the portfolio to compute.";
+  render();
+};
+
+// Headless run of the whole book under the current policy.
+function runAll() {
+  stopAuto();
+  states = {};
+  let rec = 0, face = 0, won = 0;
+  BORROWERS.forEach(b => {
+    const st = stateFor(b.id);
+    let guard = 0;
+    while (!st.done && guard++ < 30) advance(st);
+    face += b.bal;
+    if (st.result.won) { rec += st.result.amount; won++; }
+  });
+  $("rec").textContent = money(rec);
+  $("meter").style.width = (rec / face * 100).toFixed(1) + "%";
+  $("recNote").textContent = `${(rec / face * 100).toFixed(1)}% of ${money(face)} face value, ${won}/${BORROWERS.length} resolved.`;
+  render();
+}
+$("runAll").onclick = runAll;
+
+function syncLabels() {
+  $("oFloor").textContent = $("floor").value + "%";
+  $("oMax").textContent = $("maxm").value;
+  $("oStep").textContent = $("dstep").value + "%";
+}
+["floor", "maxm", "dstep"].forEach(id => {
+  $(id).oninput = syncLabels;
+  $(id).onchange = () => {
+    if (Object.keys(states).length > 1) runAll();
+    else { states = {}; render(); }
+  };
+});
+// Editing the hidden truth restarts only that borrower's conversation.
+$("cap").oninput = () => {
+  stopAuto();
+  const b = BORROWERS.find(x => x.id === selected);
+  b.cap = +$("cap").value;
+  delete states[selected];
+  render();
+};
+syncLabels();
+render();
+</script>
+</body>
+</html>

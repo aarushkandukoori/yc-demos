@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teach-once cell - a toy robotic assembly demo</title>
+<style>
+  :root{--bg:#0f1214;--panel:#171b1e;--line:#2a3136;--ink:#e6e9eb;--dim:#8a949a;--acc:#f2b134;--ok:#4cc38a;--bad:#ef5b5b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  header{padding:18px 24px 6px;max-width:1100px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px;letter-spacing:.02em}
+  header p{margin:0;color:var(--dim);max-width:78ch}
+  main{max-width:1100px;margin:12px auto;padding:0 24px;display:grid;grid-template-columns:minmax(0,740px) 1fr;gap:16px}
+  @media(max-width:960px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+  canvas{width:100%;height:auto;display:block;border-radius:6px;background:#0b0d0f;cursor:crosshair}
+  .steps{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+  .step{flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;color:var(--dim)}
+  .step b{display:block;color:var(--ink)}
+  .step.on{border-color:var(--acc);color:var(--ink)}
+  .step.done b::after{content:" \2713";color:var(--ok)}
+  button{background:#22292d;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--acc)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.go{background:var(--acc);color:#1a1405;border-color:var(--acc);font-weight:700}
+  label{display:block;margin:10px 0 2px;color:var(--dim)}
+  input[type=range],select{width:100%}
+  select{background:#22292d;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .toggle{display:flex;align-items:center;gap:8px;margin:12px 0 0;color:var(--ink)}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .stat{border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+  .stat span{display:block;color:var(--dim);font-size:12px}
+  .stat b{font-size:18px}
+  #strip{display:flex;flex-wrap:wrap;gap:3px;margin-top:10px;min-height:14px}
+  #strip i{width:10px;height:10px;border-radius:2px;display:block}
+  #log{height:110px;overflow:auto;margin-top:10px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:6px}
+  #log div.bad{color:var(--bad)} #log div.ok{color:var(--ok)}
+  #msg{min-height:20px;margin:8px 0 0;color:var(--acc)}
+  footer{max-width:1100px;margin:18px auto 28px;padding:0 24px;color:var(--dim);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Teach-once assembly cell</h1>
+  <p>Demonstrate a 3-part build one time. The cell records your pick and place moves, then repeats it for a whole batch.
+  Parts never land in exactly the same spot, so you can watch blind replay fail and camera correction fix it, at a cost in cycle time.</p>
+</header>
+<main>
+  <section class="card">
+    <div class="steps">
+      <div class="step on" id="s1"><b>1. Demonstrate</b>Move parts to the fixture, base first</div>
+      <div class="step" id="s2"><b>2. Program saved</b>Waypoints recorded</div>
+      <div class="step" id="s3"><b>3. Run a batch</b>Cell repeats it alone</div>
+    </div>
+    <canvas id="cv" width="720" height="380"></canvas>
+    <p style="margin:8px 0 0;color:var(--dim);font-size:12px">
+      Dashed circles = where the taught program will grab (grasp tolerance 12 px).<br>
+      Blind replay misses when the real part sits outside that circle.<br>
+      Camera mode re-locates every part first, so it never misses, but each pick takes longer.<br>
+      Keys: R = run batch, X = stop.
+    </p>
+    <div id="msg">Click a part on the left tray, then click its outlined slot on the fixture.</div>
+  </section>
+  <aside class="card">
+    <div class="row">
+      <button id="reset">Reset / re-teach</button>
+      <button id="run" class="go" disabled>Run batch</button>
+      <button id="stop" disabled>Stop</button>
+    </div>
+    <label>Part placement scatter (tray jitter): <b id="sigv">8</b> px</label>
+    <input id="sig" type="range" min="0" max="20" value="8">
+    <label>Batch size</label>
+    <select id="batch"><option>10</option><option selected>40</option><option>150</option></select>
+    <label>Sim speed: <b id="spdv">4</b>x</label>
+    <input id="spd" type="range" min="1" max="12" value="4">
+    <label class="toggle"><input type="checkbox" id="vis"> Camera correction (re-locates each part, +0.45 s per pick)</label>
+    <div class="stats">
+      <div class="stat"><span>Units built</span><b id="n">0</b></div>
+      <div class="stat"><span>Yield</span><b id="y">-</b></div>
+      <div class="stat"><span>Avg cycle</span><b id="ct">-</b></div>
+      <div class="stat"><span>Throughput</span><b id="tp">-</b></div>
+    </div>
+    <label>Expected blind-replay yield vs scatter (theory)</label>
+    <canvas id="cv2" width="320" height="110" style="cursor:default"></canvas>
+    <div id="strip" title="Last 60 units: green = good, red = mis-pick"></div>
+    <div id="log"></div>
+  </aside>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Tensr (YC S26). Not affiliated with Tensr. All data here is synthetic, generated in your browser.</footer>
+
+<script>
+(function(){
+"use strict";
+const cv=document.getElementById("cv"),ctx=cv.getContext("2d");
+const W=cv.width,H=cv.height,$=id=>document.getElementById(id);
+const TYPES=[
+  {name:"base plate",col:"#6aa9d8",shape:"sq",slot:{x:520,y:262}},
+  {name:"motor puck",col:"#e0a24a",shape:"ci",slot:{x:520,y:190}},
+  {name:"cap",col:"#a78bdc",shape:"tr",slot:{x:520,y:118}}
+];
+const NOM=[{x:90,y:95},{x:90,y:190},{x:90,y:285}];
+const TOL=12;              // px the gripper can be off and still grasp
+const HOME={x:330,y:34};
+let mode="teach";          // teach | ready | run
+let parts=[],sel=null,program=[],flash=0,fx=null;
+let grip={x:HOME.x,y:HOME.y,carry:null};
+let queue=[],cur=null,curT=0,unit=null;
+let stats={n:0,good:0,time:0},target=0,results=[];
+
+function gauss(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function sigma(){return +$("sig").value}
+function spawn(){
+  parts=TYPES.map((t,i)=>({i,x:NOM[i].x+gauss()*sigma(),y:NOM[i].y+gauss()*sigma(),placed:false}));
+}
+function log(t,c){const d=document.createElement("div");d.textContent=t;if(c)d.className=c;const L=$("log");L.appendChild(d);L.scrollTop=L.scrollHeight}
+function say(t){$("msg").textContent=t}
+function setStep(n){["s1","s2","s3"].forEach((id,i)=>{const e=$(id);e.className="step"+(i+1<n?" done":"")+(i+1===n?" on":"")})}
+
+/* ---------- drawing ---------- */
+function shape(kind,x,y,s,col,a){
+  ctx.save();ctx.globalAlpha=a==null?1:a;ctx.fillStyle=col;ctx.beginPath();
+  if(kind==="sq")ctx.rect(x-s,y-s*.7,s*2,s*1.4);
+  else if(kind==="ci")ctx.arc(x,y,s*.8,0,7);
+  else{ctx.moveTo(x,y-s*.9);ctx.lineTo(x+s*.9,y+s*.7);ctx.lineTo(x-s*.9,y+s*.7);ctx.closePath()}
+  ctx.fill();ctx.restore();
+}
+function outline(kind,x,y,s,col){
+  ctx.save();ctx.strokeStyle=col;ctx.setLineDash([5,4]);ctx.lineWidth=1.5;ctx.beginPath();
+  if(kind==="sq")ctx.rect(x-s,y-s*.7,s*2,s*1.4);
+  else if(kind==="ci")ctx.arc(x,y,s*.8,0,7);
+  else{ctx.moveTo(x,y-s*.9);ctx.lineTo(x+s*.9,y+s*.7);ctx.lineTo(x-s*.9,y+s*.7);ctx.closePath()}
+  ctx.stroke();ctx.restore();
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // grid floor
+  ctx.strokeStyle="#15191c";ctx.lineWidth=1;
+  for(let x=0;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+  for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+  // tray + fixture
+  ctx.fillStyle="#12171a";ctx.strokeStyle="#2a3136";
+  ctx.fillRect(20,50,150,280);ctx.strokeRect(20,50,150,280);
+  ctx.fillRect(440,60,160,280);ctx.strokeRect(440,60,160,280);
+  ctx.fillStyle="#8a949a";ctx.font="12px monospace";
+  ctx.fillText("PART TRAY",52,44);ctx.fillText("FIXTURE",488,54);
+  // taught pick points
+  if(program.length&&mode!=="teach"&&!$("vis").checked){
+    program.forEach(p=>{ctx.strokeStyle="#f2b13466";ctx.beginPath();ctx.arc(p.pick.x,p.pick.y,TOL,0,7);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(p.pick.x-4,p.pick.y);ctx.lineTo(p.pick.x+4,p.pick.y);ctx.moveTo(p.pick.x,p.pick.y-4);ctx.lineTo(p.pick.x,p.pick.y+4);ctx.stroke()});
+  }
+  TYPES.forEach((t,i)=>{
+    const filled=parts[i]&&parts[i].placed;
+    if(!filled)outline(t.shape,t.slot.x,t.slot.y,26,mode==="teach"&&sel!=null&&sel===i?"#f2b134":"#3b454b");
+  });
+  parts.forEach(p=>{const t=TYPES[p.i];if(grip.carry===p)return;shape(t.shape,p.x,p.y,22,t.col,sel===p.i?1:.92);
+    if(sel===p.i){ctx.strokeStyle="#f2b134";ctx.lineWidth=2;ctx.strokeRect(p.x-28,p.y-28,56,56);ctx.lineWidth=1}});
+  // arm + gripper
+  ctx.strokeStyle="#59636a";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(W/2-30,0);ctx.lineTo(grip.x,grip.y);ctx.stroke();
+  ctx.fillStyle="#cfd5d8";ctx.beginPath();ctx.arc(grip.x,grip.y,9,0,7);ctx.fill();
+  if(grip.carry){const t=TYPES[grip.carry.i];shape(t.shape,grip.x,grip.y+2,22,t.col,.95)}
+  if(fx){ctx.strokeStyle=fx.col;ctx.lineWidth=3;ctx.beginPath();ctx.arc(fx.x,fx.y,18+(1-fx.t)*18,0,7);ctx.stroke();ctx.lineWidth=1}
+}
+
+/* ---------- teach mode ---------- */
+cv.addEventListener("click",e=>{
+  if(mode!=="teach")return;
+  const r=cv.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  const free=parts.filter(p=>!p.placed);
+  const hit=free.find(p=>Math.hypot(p.x-x,p.y-y)<30);
+  if(hit){sel=hit.i;say("Picked the "+TYPES[sel].name+". Now click its dashed slot on the fixture.");return}
+  if(sel==null){say("Click a part on the tray first.");return}
+  const t=TYPES[sel];
+  if(Math.hypot(t.slot.x-x,t.slot.y-y)>38){say("That is not the "+t.name+" slot. Look for the dashed "+({sq:"rectangle",ci:"circle",tr:"triangle"})[t.shape]+".");return}
+  const placed=parts.filter(p=>p.placed).length;
+  if(sel!==placed){say("Collision: stack order matters. Place the "+TYPES[placed].name+" next.");sel=null;return}
+  const p=parts[sel];
+  program.push({type:sel,pick:{x:p.x,y:p.y},place:{x:t.slot.x,y:t.slot.y}});
+  log("recorded step "+program.length+": pick ("+p.x.toFixed(0)+","+p.y.toFixed(0)+") -> place "+t.name,"ok");
+  p.x=t.slot.x;p.y=t.slot.y;p.placed=true;sel=null;fx={x:p.x,y:p.y,col:"#4cc38a",t:1};
+  if(program.length===3){
+    mode="ready";$("run").disabled=false;setStep(3);
+    say("Program saved: 3 waypoint pairs. Crosshairs show where the cell will grab. Hit Run batch.");
+    setTimeout(()=>{if(mode==="ready"){spawn();grip.carry=null}},900);
+  }else say("Good. Next: the "+TYPES[program.length].name+".");
+});
+
+/* ---------- batch execution ---------- */
+function build(){
+  // returns action list for one unit using the taught program
+  const vision=$("vis").checked,acts=[];let blown=false;
+  acts.push({k:"move",x:HOME.x,y:HOME.y,d:150});
+  program.forEach((st,idx)=>{
+    const p=parts[st.type];
+    let tx=st.pick.x,ty=st.pick.y;
+    if(vision){tx=p.x+gauss()*1.5;ty=p.y+gauss()*1.5;acts.push({k:"wait",d:450,note:"locate"})}
+    const miss=Math.hypot(tx-p.x,ty-p.y)>TOL;
+    acts.push({k:"move",x:tx,y:ty-6,d:Math.hypot(tx-grip.x,ty-grip.y)*1.4+120});
+    acts.push({k:"grip",idx:st.type,ok:!miss,d:140,miss:Math.hypot(tx-p.x,ty-p.y)});
+    if(miss){blown=true}
+    else{
+      acts.push({k:"move",x:st.place.x,y:st.place.y-6,d:Math.hypot(st.place.x-tx,st.place.y-ty)*1.4+150});
+      acts.push({k:"release",idx:st.type,d:140});
+    }
+    if(miss){acts.push({k:"fail"})}
+  });
+  acts.push({k:"move",x:HOME.x,y:HOME.y,d:300});
+  acts.push({k:"done"});
+  return acts;
+}
+function startUnit(){
+  spawn();grip.carry=null;queue=build();cur=null;unit={t:0,failed:false};
+}
+function finishUnit(good){
+  stats.n++;if(good)stats.good++;stats.time+=unit.t/1000;
+  results.push(good);if(results.length>60)results.shift();
+  render();
+  if(stats.n>=target||mode!=="run"){endRun();return}
+  startUnit();
+}
+function endRun(){
+  mode="ready";$("run").disabled=false;$("stop").disabled=true;$("reset").disabled=false;
+  log("batch done: "+stats.good+"/"+stats.n+" good, "+(stats.n?(stats.time/stats.n).toFixed(2):"-")+" s/unit",stats.good===stats.n?"ok":"bad");
+  grip.carry=null;spawn();
+}
+function curve(){
+  const c=$("cv2"),g=c.getContext("2d"),w=c.width,h=c.height;
+  g.clearRect(0,0,w,h);g.strokeStyle="#2a3136";g.strokeRect(.5,.5,w-1,h-1);
+  // per-pick miss: taught-vs-actual offset ~ N(0,2s^2) per axis, so P(miss)=exp(-TOL^2/(4s^2)); unit yield=(1-P)^3
+  const Y=s=>s<.01?1:Math.pow(1-Math.exp(-TOL*TOL/(4*s*s)),3);
+  g.strokeStyle="#f2b134";g.beginPath();
+  for(let s=0;s<=20;s+=.25){const x=4+s/20*(w-8),y=h-6-Y(s)*(h-12);s?g.lineTo(x,y):g.moveTo(x,y)}
+  g.stroke();
+  const sg=sigma(),mx=4+sg/20*(w-8),my=h-6-Y(sg)*(h-12);
+  g.fillStyle="#e6e9eb";g.beginPath();g.arc(mx,my,4,0,7);g.fill();
+  g.fillStyle="#8a949a";g.font="11px monospace";
+  g.fillText("now: "+(Y(sg)*100).toFixed(0)+"% good",Math.min(mx+8,w-100),Math.max(my-6,12));
+  g.fillText("0 px",6,h-10);g.fillText("20 px",w-40,h-10);
+}
+function render(){
+  curve();
+  $("n").textContent=stats.n;
+  $("y").textContent=stats.n?(100*stats.good/stats.n).toFixed(0)+"%":"-";
+  const avg=stats.n?stats.time/stats.n:0;
+  $("ct").textContent=stats.n?avg.toFixed(2)+" s":"-";
+  $("tp").textContent=stats.n?Math.round(3600/avg*stats.good/stats.n)+"/hr":"-";
+  const s=$("strip");s.innerHTML="";
+  results.forEach(g=>{const i=document.createElement("i");i.style.background=g?"var(--ok)":"var(--bad)";s.appendChild(i)});
+}
+$("run").onclick=()=>{
+  if(mode!=="ready")return;
+  mode="run";stats={n:0,good:0,time:0};results=[];render();
+  target=+$("batch").value;$("run").disabled=true;$("stop").disabled=false;$("reset").disabled=true;
+  log("run: "+target+" units, scatter "+sigma()+" px, camera "+($("vis").checked?"on":"off"));
+  say("Running. Toggle camera correction mid-run to compare yield and throughput.");
+  startUnit();
+};
+$("stop").onclick=()=>{mode="stopping";};
+$("reset").onclick=()=>{
+  mode="teach";program=[];sel=null;queue=[];cur=null;grip={x:HOME.x,y:HOME.y,carry:null};
+  stats={n:0,good:0,time:0};results=[];render();spawn();setStep(1);$("run").disabled=true;$("stop").disabled=true;
+  $("log").innerHTML="";say("Click a part on the left tray, then click its outlined slot on the fixture.");
+};
+$("sig").oninput=()=>{$("sigv").textContent=sigma();curve();if(mode!=="run"){spawn();if(mode==="teach"&&program.length){/* keep placed parts */
+  program.forEach(s=>{parts[s.type].placed=true;parts[s.type].x=s.place.x;parts[s.type].y=s.place.y})}}};
+document.addEventListener("keydown",e=>{
+  if(e.key==="r"&&!$("run").disabled)$("run").click();
+  if(e.key==="x"&&!$("stop").disabled)$("stop").click();
+});
+$("spd").oninput=()=>{$("spdv").textContent=$("spd").value};
+
+/* ---------- main loop ---------- */
+let last=performance.now();
+function tick(now){
+  let dt=Math.min(now-last,50);last=now;
+  if(fx){fx.t-=dt/500;if(fx.t<=0)fx=null}
+  if(mode==="run"||mode==="stopping"){
+    const sim=dt*(+$("spd").value);
+    // process possibly several actions per frame at high speed
+    let budget=sim;
+    while(budget>0&&queue.length+(cur?1:0)>0){
+      if(!cur){cur=queue.shift();curT=0;if(cur.k==="move"){cur.fx=grip.x;cur.fy=grip.y}}
+      const a=cur;
+      if(a.k==="done"){cur=null;finishUnit(!unit.failed);budget=0;break}
+      if(a.k==="fail"){unit.failed=true;queue.length=0;queue.push({k:"move",x:HOME.x,y:HOME.y,d:300},{k:"done"});cur=null;continue}
+      const need=a.d-curT,use=Math.min(need,budget);
+      curT+=use;budget-=use;unit.t+=use;
+      if(a.k==="move"){const f=Math.min(1,curT/a.d),e=f<.5?2*f*f:1-Math.pow(-2*f+2,2)/2;grip.x=a.fx+(a.x-a.fx)*e;grip.y=a.fy+(a.y-a.fy)*e}
+      if(curT>=a.d){
+        if(a.k==="grip"){
+          if(a.ok){grip.carry=parts[a.idx]}
+          else{fx={x:grip.x,y:grip.y,col:"#ef5b5b",t:1};log("unit "+(stats.n+1)+": mis-pick on "+TYPES[a.idx].name+", off by "+a.miss.toFixed(0)+" px","bad")}
+        }
+        if(a.k==="release"&&grip.carry){const p=grip.carry,t=TYPES[p.i];p.x=t.slot.x;p.y=t.slot.y;p.placed=true;grip.carry=null}
+        cur=null;
+      }
+    }
+  }
+  draw();requestAnimationFrame(tick);
+}
+spawn();render();requestAnimationFrame(t=>{last=t;tick(t)});
+})();
+</script>
+</body>
+</html>
