@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ripple - change one value, watch the package follow</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1d2320;--mute:#6a726c;--line:#d8d3c6;--card:#fffdf8;--acc:#0f6b5c;--warn:#b4570b;--bad:#a3262a;--ok:#2d7a3e;--chg:#fff2c2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 8px;display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+h1{margin:0;font-size:22px;letter-spacing:-.3px}
+h1 span{color:var(--acc)}
+.sub{color:var(--mute);max-width:640px}
+main{display:grid;grid-template-columns:300px 1fr 310px;gap:16px;padding:12px 28px 24px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px}
+.card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+label{display:block;font-size:12px;color:var(--mute);margin:10px 0 3px}
+input,select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:5px;font:inherit;background:#fff}
+input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
+button{font:inherit;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:7px 11px;border-radius:5px;cursor:pointer}
+button.sec{background:transparent;color:var(--ink);border-color:var(--line)}
+button.sec:hover{border-color:var(--ink)}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.pending{background:var(--chg);border:1px solid #e6cf72;border-radius:6px;padding:8px 10px;margin-top:12px;font-size:13px;display:none}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:-4px 0 12px;flex-wrap:wrap}
+.tab{padding:7px 11px;cursor:pointer;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;color:var(--mute);display:flex;gap:6px;align-items:center}
+.tab.on{background:#fff;border-color:var(--line);color:var(--ink);margin-bottom:-1px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mute)}
+.dot.approved{background:var(--ok)}.dot.stale{background:var(--warn)}.dot.review{background:var(--bad)}
+.doc{background:#fff;border:1px solid var(--line);border-radius:6px;padding:14px;min-height:340px}
+.doc h3{margin:0 0 2px;font-size:16px}
+.meta{color:var(--mute);font-size:12px;margin-bottom:10px}
+table{border-collapse:collapse;width:100%}
+td,th{text-align:left;padding:6px 8px;border-bottom:1px solid #ece8dc;font-size:13px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute)}
+td.v{font-family:ui-monospace,Menlo,monospace}
+.flash{animation:fl 2.2s ease-out}
+@keyframes fl{0%,35%{background:var(--chg);box-shadow:0 0 0 3px var(--chg)}100%{background:transparent;box-shadow:none}}
+.stale td.v{color:var(--warn);text-decoration:line-through;text-decoration-color:#e0b27a}
+.badge{display:inline-block;font-size:11px;padding:2px 7px;border-radius:10px;border:1px solid var(--line)}
+.b-approved{color:var(--ok);border-color:var(--ok)}.b-stale{color:var(--warn);border-color:var(--warn)}.b-review{color:var(--bad);border-color:var(--bad)}.b-draft{color:var(--mute)}
+.cite{color:var(--mute);font-size:11px}
+.check{padding:7px 9px;border-left:3px solid var(--ok);background:#f3f8f3;margin-bottom:6px;font-size:13px}
+.check.warn{border-color:var(--warn);background:#fcf3e8}.check.fail{border-color:var(--bad);background:#fbeded}
+.log{max-height:300px;overflow:auto;font-size:12.5px}
+.log div{padding:3px 0}
+.log .hd{border-top:2px solid var(--ink);margin-top:8px;padding-top:6px}
+.log b{font-family:ui-monospace,Menlo,monospace;font-weight:600}
+svg text{font:11px ui-monospace,Menlo,monospace;fill:var(--ink)}
+svg .p{stroke:var(--ink);stroke-width:1.6;fill:none}
+.stamp{display:inline-block;border:2px solid var(--ink);padding:2px 8px;font-weight:700;letter-spacing:.1em;font-size:11px;transform:rotate(-3deg)}
+footer{padding:14px 28px 28px;color:var(--mute);font-size:12px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1><span>Ripple</span> - one value, every sheet</h1>
+    <div class="sub">A toy engineering package for a steam relief valve. Edit a design input, see which sheets go stale, propagate it, then watch checks run and approvals reset. All data is synthetic.</div>
+  </div>
+  <div class="badge b-approved" id="pkgState">package: approved</div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Shared values (entered once)</h2>
+    <label for="W">Relief load W (lb/h)</label><input id="W" type="number" step="500">
+    <label for="Pset">Set pressure (psig)</label><input id="Pset" type="number" step="5">
+    <label for="din">Inlet pipe size</label>
+    <select id="din"></select>
+    <label for="orf">Installed orifice</label>
+    <select id="orf"></select>
+    <div class="pending" id="pending"></div>
+    <div class="row">
+      <button id="go" disabled>Propagate</button>
+      <button class="sec" id="undo" disabled>Discard edit</button>
+    </div>
+    <h2 style="margin-top:18px">Try a scenario</h2>
+    <div class="row">
+      <button class="sec" data-sc="load">+30% relief load</button>
+      <button class="sec" data-sc="press">Set pressure 250</button>
+      <button class="sec" data-sc="pipe">Inlet to 1.5 in</button>
+      <button class="sec" data-sc="fix">Upsize orifice</button>
+      <button class="sec" data-sc="reset">Reset all</button>
+    </div>
+    <p class="cite" style="margin-top:14px">Sizing uses a simplified API 520 steam formula: A = W / (51.5 x P1 x Kd x Kb x Kc), with 10% overpressure. A teaching toy, not for design.</p>
+  </section>
+
+  <section class="card">
+    <div class="tabs" id="tabs"></div>
+    <div class="doc" id="doc"></div>
+    <div class="row" id="docActions"></div>
+  </section>
+
+  <section class="card">
+    <h2>Consistency checks</h2>
+    <div id="checks"></div>
+    <h2 style="margin-top:16px">Change log</h2>
+    <div class="log" id="log"><div class="cite">No changes yet.</div></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Torus (YC S26). Not affiliated with Torus.</footer>
+
+<script>
+"use strict";
+const ORIFICES={D:.110,E:.196,F:.307,G:.503,H:.785,J:1.287,K:1.838,L:2.853,M:3.60,N:4.34,P:6.38,Q:11.05,R:16.0,T:26.0};
+const PIPES={'1.5':1.61,'2':2.067,'3':3.068,'4':4.026,'6':6.065}; // schedule 40 ID, inches
+const KD=0.975,KB=1,KC=1,VMAX=200;
+const BASE={W:12000,Pset:150,din:'3',orf:'K'};
+let committed={...BASE};   // values the documents currently reflect
+let draft={...BASE};       // values typed into the form
+const docState={};         // approved | stale | review | draft
+const prevState={};        // state to restore if a pending edit is discarded
+const shown={};            // snapshot of values a stale doc still displays
+let activeTab='pid';
+let flashKeys=new Set();
+let history=[];
+
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+function derive(v){
+  const P1=v.Pset*1.1+14.7;
+  const areaReq=v.W/(51.5*P1*KD*KB*KC);
+  const letter=Object.keys(ORIFICES).find(k=>ORIFICES[k]>=areaReq)||'>T';
+  const areaInst=ORIFICES[v.orf];
+  const id=PIPES[v.din],aft2=Math.PI*(id/12)**2/4;
+  const rho=0.0022*P1;                       // toy steam density, lb/ft3
+  const vel=v.W/3600/(rho*aft2);
+  const cap=areaInst*51.5*P1*KD*KB*KC;
+  return {P1,areaReq,letter,areaInst,vel,cap,margin:(cap/v.W-1)*100};
+}
+
+/* Each document is a view over the shared inputs. 'uses' says which inputs it depends on. */
+const DOCS={
+ pid:{name:'P&ID',uses:['W','Pset','din','orf'],title:'P&ID PID-0412 rev B'},
+ data:{name:'PSV datasheet',uses:['W','Pset','orf'],title:'Pressure relief valve datasheet DS-PSV-101'},
+ line:{name:'Line list',uses:['W','Pset','din'],title:'Line list LL-0412'},
+ calc:{name:'Sizing calc',uses:['W','Pset','orf'],title:'Calculation note CN-PSV-101'}
+};
+const order=Object.keys(DOCS);
+const labelFor=s=>({approved:'approved',stale:'out of date',review:'needs engineer review',draft:'not approved'}[s]);
+
+function render(k,v){
+  const d=derive(v);
+  const fl=key=>flashKeys.has(k+'.'+key)?' flash':'';
+  const f=(key,label,val,src)=>`<tr><td>${label}</td><td class="v${fl(key)}">${val}</td><td class="cite">${src}</td></tr>`;
+  const head=`<h3>${DOCS[k].title}</h3><div class="meta">Every value cites its source. Status: <span class="badge b-${docState[k]}">${labelFor(docState[k])}</span></div>`;
+  if(k==='pid'){
+    const c=key=>fl(key)?' class="flash"':'';
+    return head+`<svg viewBox="0 0 520 220" width="100%" role="img" aria-label="Simplified P&amp;ID">
+      <rect class="p" x="30" y="90" width="110" height="80" rx="14"/><text x="52" y="135">V-100 vessel</text>
+      <path class="p" d="M140 110 H260 V60 H330"/>
+      <path class="p" d="M330 40 L350 60 L330 80 Z"/><path class="p" d="M350 60 H450"/>
+      <text x="150" y="102">${v.din}"-PS-0412</text>
+      <text x="262" y="30"${c('Pset')}>set ${v.Pset} psig</text>
+      <text x="262" y="16"${c('orf')}>PSV-101 orifice ${v.orf}</text>
+      <text x="262" y="124"${c('W')}>W = ${fmt(v.W,0)} lb/h</text>
+      <text x="360" y="85">4"-VENT-0413</text>
+      <text x="30" y="200" class="cite">Annotations are bound to shared values, not typed by hand.</text></svg>`;
+  }
+  if(k==='data')return head+`<table><tr><th>Field</th><th>Value</th><th>Source</th></tr>`+
+    f('tag','Tag','PSV-101','Equipment list')+
+    f('Pset','Set pressure',v.Pset+' psig','Process basis')+
+    f('P1','Relieving pressure (10% over)',fmt(d.P1,1)+' psia','Calc CN-PSV-101')+
+    f('W','Required capacity',fmt(v.W,0)+' lb/h','Relief scenario RS-3')+
+    f('orf','Orifice',v.orf+' ('+ORIFICES[v.orf]+' in&sup2;)','Vendor catalog')+
+    f('cap','Rated capacity',fmt(d.cap,0)+' lb/h','Derived')+`</table>`;
+  if(k==='line')return head+`<table><tr><th>Line</th><th>Size</th><th>Flow</th><th>Press</th><th>Velocity</th></tr>
+    <tr><td>PS-0412 (V-100 to PSV-101)</td><td class="v${fl('din')}">${v.din} in</td><td class="v${fl('W')}">${fmt(v.W,0)} lb/h</td><td class="v${fl('Pset')}">${fmt(d.P1,1)} psia</td><td class="v${fl('vel')}">${fmt(d.vel,0)} ft/s</td></tr></table>
+    <p class="cite">Velocity limit ${VMAX} ft/s for relief inlet in this toy rule set.</p>`;
+  return head+`<table><tr><th>Step</th><th>Result</th><th>Source</th></tr>`+
+    f('P1','P1 = 1.1 x Pset + 14.7',fmt(d.P1,1)+' psia','Overpressure rule')+
+    f('areaReq','A = W / (51.5 x P1 x Kd x Kb x Kc)',fmt(d.areaReq,3)+' in&sup2;','API 520 (simplified)')+
+    f('letter','Smallest standard orifice',d.letter,'Orifice table')+
+    f('orf','Installed orifice',v.orf+' ('+ORIFICES[v.orf]+' in&sup2;)','Datasheet')+
+    f('margin','Capacity margin',fmt(d.margin,1)+' %','Derived')+`</table>`;
+}
+
+function checks(v){
+  const d=derive(v),out=[];
+  out.push(d.areaInst>=d.areaReq
+    ?{t:'ok',m:`Orifice ${v.orf} (${d.areaInst} in²) covers required ${fmt(d.areaReq,3)} in². Margin ${fmt(d.margin,1)}%.`}
+    :{t:'fail',m:`Orifice ${v.orf} (${d.areaInst} in²) is too small. Needs ${fmt(d.areaReq,3)} in², smallest fit is ${d.letter}.`});
+  out.push(d.vel<=VMAX
+    ?{t:'ok',m:`Inlet velocity ${fmt(d.vel,0)} ft/s is under ${VMAX}.`}
+    :{t:'fail',m:`Inlet velocity ${fmt(d.vel,0)} ft/s exceeds ${VMAX}. Increase the line size.`});
+  out.push(v.din==='1.5'||v.din==='2'
+    ?{t:'warn',m:`Inlet ${v.din} in is smaller than the outlet vent (4 in). Check vendor flange rules.`}
+    :{t:'ok',m:`Inlet size ${v.din} in is compatible with outlet.`});
+  out.push(d.margin>60?{t:'warn',m:`Valve is oversized by ${fmt(d.margin,0)}%. Chatter risk, consider a smaller orifice.`}:{t:'ok',m:'Valve is not grossly oversized.'});
+  out.push({t:'ok',m:'Tag PSV-101 is identical on all 4 documents.'});
+  return out;
+}
+const hasFail=v=>checks(v).some(c=>c.t==='fail');
+
+function drawTabs(){
+  $('tabs').innerHTML=order.map(k=>`<div class="tab ${k===activeTab?'on':''}" data-k="${k}"><span class="dot ${docState[k]}"></span>${DOCS[k].name}</div>`).join('');
+  $('tabs').querySelectorAll('.tab').forEach(t=>t.onclick=()=>{activeTab=t.dataset.k;draw()});
+}
+function drawDoc(){
+  const k=activeTab,stale=docState[k]==='stale';
+  $('doc').className='doc'+(stale?' stale':'');
+  $('doc').innerHTML=render(k,stale?shown[k]:committed)+(stale?'<p><span class="badge b-stale">Values above are old. Propagate to refresh this sheet.</span></p>':'');
+  const a=$('docActions');a.innerHTML='';
+  if(docState[k]==='approved'){a.innerHTML='<span class="stamp">APPROVED BY ENGINEER</span>';return}
+  if(stale)return;
+  const fail=hasFail(committed);
+  const b=document.createElement('button');b.textContent='Approve as engineer';b.disabled=fail;
+  b.onclick=()=>{docState[k]='approved';draw()};a.appendChild(b);
+  if(fail)a.insertAdjacentHTML('beforeend','<span class="cite" style="align-self:center">Approval blocked by a failing check.</span>');
+}
+function drawChecks(){
+  $('checks').innerHTML=checks(committed).map(c=>`<div class="check ${c.t==='ok'?'':c.t}">${c.m}</div>`).join('');
+}
+function drawPkg(){
+  const all=order.every(k=>docState[k]==='approved');
+  const e=$('pkgState');e.textContent='package: '+(all?'approved':'not approved');
+  e.className='badge '+(all?'b-approved':'b-stale');
+}
+function updatePending(){
+  const keys=Object.keys(draft).filter(k=>String(draft[k])!==String(committed[k]));
+  const p=$('pending');
+  $('go').disabled=!keys.length;$('undo').disabled=!keys.length;
+  if(!keys.length){p.style.display='none';return}
+  const hit=order.filter(o=>DOCS[o].uses.some(u=>keys.includes(u)));
+  p.style.display='block';
+  p.innerHTML=`<b>${keys.length} edit${keys.length>1?'s':''} pending.</b> Will touch ${hit.length} of ${order.length} documents: ${hit.map(h=>DOCS[h].name).join(', ')}.`;
+}
+function draw(){drawTabs();drawDoc();drawChecks();drawPkg();updatePending()}
+function syncInputs(){$('W').value=draft.W;$('Pset').value=draft.Pset;$('din').value=draft.din;$('orf').value=draft.orf}
+
+/* Typing an edit marks affected docs stale right away, so you see the blast radius before propagating. */
+function onEdit(){
+  draft={W:+$('W').value||0,Pset:+$('Pset').value||0,din:$('din').value,orf:$('orf').value};
+  order.forEach(o=>{
+    const changed=DOCS[o].uses.some(u=>String(draft[u])!==String(committed[u]));
+    if(changed&&docState[o]!=='stale'){prevState[o]=docState[o];shown[o]={...committed};docState[o]='stale'}
+    if(!changed&&docState[o]==='stale')docState[o]=prevState[o];
+  });
+  draw();
+}
+
+function propagate(){
+  const keys=Object.keys(draft).filter(k=>String(draft[k])!==String(committed[k]));
+  if(!keys.length)return;
+  const before=committed,bd=derive(before);
+  const next={...draft},nd=derive(next);
+  flashKeys=new Set();
+  const t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const entries=[];
+  const note=(doc,key,label,a,b)=>{
+    if(a===b||!DOCS[doc].uses.some(u=>keys.includes(u)))return;
+    flashKeys.add(doc+'.'+key);
+    entries.push(`<div><b>${DOCS[doc].name}</b> ${label}: ${a} &rarr; ${b}</div>`);
+  };
+  note('pid','W','load label',fmt(before.W,0),fmt(next.W,0));
+  note('pid','Pset','set label',before.Pset,next.Pset);
+  note('pid','orf','orifice label',before.orf,next.orf);
+  note('data','W','required capacity',fmt(before.W,0),fmt(next.W,0));
+  note('data','Pset','set pressure',before.Pset,next.Pset);
+  note('data','P1','relieving pressure',fmt(bd.P1,1),fmt(nd.P1,1));
+  note('data','orf','orifice',before.orf,next.orf);
+  note('data','cap','rated capacity',fmt(bd.cap,0),fmt(nd.cap,0));
+  note('line','din','line size',before.din+' in',next.din+' in');
+  note('line','W','flow',fmt(before.W,0),fmt(next.W,0));
+  note('line','Pset','pressure',fmt(bd.P1,1),fmt(nd.P1,1));
+  note('line','vel','velocity',fmt(bd.vel,0),fmt(nd.vel,0));
+  note('calc','P1','P1',fmt(bd.P1,1),fmt(nd.P1,1));
+  note('calc','areaReq','required area',fmt(bd.areaReq,3),fmt(nd.areaReq,3));
+  note('calc','letter','smallest orifice',bd.letter,nd.letter);
+  note('calc','orf','installed orifice',before.orf,next.orf);
+  note('calc','margin','margin',fmt(bd.margin,1)+'%',fmt(nd.margin,1)+'%');
+
+  const touched=order.filter(o=>DOCS[o].uses.some(u=>keys.includes(u)));
+  const failing=hasFail(next);
+  touched.forEach(o=>{docState[o]=failing?'review':'draft'});
+  committed=next;
+  history.unshift(`<div class="hd"><b>${t}</b> edited ${keys.join(', ')}. ${touched.length} docs updated, ${order.length-touched.length} untouched.${failing?' <span style="color:var(--bad)">Check failure, engineer review required.</span>':' Approvals reset.'}</div>`+entries.join(''));
+  $('log').innerHTML=history.join('');
+  draft={...committed};syncInputs();
+  if(!touched.includes(activeTab)&&touched.length)activeTab=touched[0];
+  draw();flashKeys=new Set();
+}
+
+function scenario(s){
+  if(s==='reset'){
+    committed={...BASE};draft={...BASE};order.forEach(o=>{docState[o]='approved'});
+    history=[];$('log').innerHTML='<div class="cite">No changes yet.</div>';syncInputs();draw();return;
+  }
+  if(s==='load')$('W').value=Math.round(committed.W*1.3);
+  if(s==='press')$('Pset').value=250;
+  if(s==='pipe')$('din').value='1.5';
+  if(s==='fix'){
+    const need=derive({...draft,W:+$('W').value||0,Pset:+$('Pset').value||0}).letter;
+    $('orf').value=need==='>T'?'T':need;
+  }
+  onEdit();
+}
+
+(function init(){
+  $('din').innerHTML=Object.keys(PIPES).map(k=>`<option value="${k}">${k} in (Sch 40)</option>`).join('');
+  $('orf').innerHTML=Object.keys(ORIFICES).map(k=>`<option value="${k}">${k} - ${ORIFICES[k]} in²</option>`).join('');
+  order.forEach(o=>{docState[o]='approved';prevState[o]='approved';shown[o]={...BASE}});
+  syncInputs();
+  ['W','Pset','din','orf'].forEach(id=>$(id).addEventListener('input',onEdit));
+  $('go').onclick=propagate;
+  $('undo').onclick=()=>{draft={...committed};syncInputs();onEdit()};
+  document.querySelectorAll('[data-sc]').forEach(b=>b.onclick=()=>scenario(b.dataset.sc));
+  draw();
+})();
+</script>
+</body>
+</html>
