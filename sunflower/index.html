@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Intake Triage Sandbox - a toy safety screener for remote addiction care</title>
+<style>
+:root{--bg:#0f1720;--card:#17212d;--line:#2a3a4d;--tx:#e6edf5;--mut:#8da2b8;--ok:#4cc38a;--warn:#f0b429;--bad:#ef6461;--ac:#5b9cf5}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:0 auto}
+h1{margin:0 0 6px;font-size:24px;letter-spacing:-.01em}
+header p{margin:0;color:var(--mut);max-width:70ch}
+.tabs{display:flex;gap:8px;max-width:1100px;margin:16px auto 0;padding:0 24px}
+.tab{background:none;border:1px solid var(--line);color:var(--mut);padding:7px 14px;border-radius:999px;cursor:pointer;font:inherit}
+.tab[aria-selected=true]{background:var(--ac);border-color:var(--ac);color:#06111f;font-weight:600}
+main{max-width:1100px;margin:16px auto;padding:0 24px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:820px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+h2{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+label{display:block;margin:10px 0 4px;font-size:13px;color:var(--mut)}
+select,input[type=number],input[type=text]{width:100%;background:#0f1720;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit}
+.chk{display:flex;gap:8px;align-items:flex-start;margin:7px 0;color:var(--tx);font-size:14px;cursor:pointer}
+.chk input{margin-top:4px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button.go{margin-top:14px;background:var(--ac);color:#06111f;border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer}
+button.ghost{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:6px 10px;font:inherit;cursor:pointer;margin:0 6px 6px 0}
+button.ghost:hover{color:var(--tx);border-color:var(--ac)}
+.verdict{border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid}
+.verdict.ok{border-color:var(--ok);background:rgba(76,195,138,.08)}
+.verdict.warn{border-color:var(--warn);background:rgba(240,180,41,.08)}
+.verdict.bad{border-color:var(--bad);background:rgba(239,100,97,.08)}
+.verdict b{font-size:17px;display:block;margin-bottom:2px}
+.rule{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.dot{flex:none;width:10px;height:10px;border-radius:50%;margin-top:6px}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.dot.off{background:#3a4b5e}
+.rule small{display:block;color:var(--mut)}
+.muted{color:var(--mut);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--mut);font-weight:500;cursor:pointer;user-select:none}
+.pill{padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid}
+.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.bad{color:var(--bad)}
+.stats{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.stat{flex:1;min-width:90px;background:#0f1720;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat b{font-size:20px;display:block}
+.wide{grid-column:1/-1}
+.bar{display:grid;grid-template-columns:260px 1fr 30px;gap:8px;align-items:center;font-size:12px;color:var(--mut);margin:3px 0}
+.bar i{display:block;height:8px;border-radius:4px;background:var(--ac);min-width:2px}
+.bar b{color:var(--tx);text-align:right;font-weight:500}
+@media(max-width:600px){.bar{grid-template-columns:140px 1fr 24px}}
+.tab:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+pre{background:#0b1118;border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;margin:10px 0 0;max-height:220px}
+footer{max-width:1100px;margin:24px auto 36px;padding:0 24px;color:var(--mut);font-size:13px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>Intake Triage Sandbox</h1>
+  <p>A toy model of the safety screen that sits between a remote intake form and a clinician: answers go in, a transparent rule engine decides <em>route</em> (prescribe-eligible, needs clinician review, or refer out), and every decision shows which rule fired. All data is synthetic. Not medical advice.</p>
+</header>
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-tab="screen">Screen one patient</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="queue">Triage a queue</button>
+</div>
+
+<main id="screen">
+  <section>
+    <h2>Intake answers</h2>
+    <div class="muted" style="margin-bottom:8px">Load a sample or fill in your own:</div>
+    <div id="samples"></div>
+    <label for="substance">Primary substance</label>
+    <select id="substance">
+      <option value="alcohol">Alcohol</option>
+      <option value="nicotine">Nicotine</option>
+      <option value="opioid">Opioids</option>
+    </select>
+    <div class="row">
+      <div><label for="age">Age</label><input id="age" type="number" min="1" max="110" value="34"></div>
+      <div><label for="drinks">Drinks per day (alcohol)</label><input id="drinks" type="number" min="0" max="40" value="6"></div>
+    </div>
+    <div class="row">
+      <div><label for="lastuse">Hours since last use</label><input id="lastuse" type="number" min="0" max="500" value="48"></div>
+      <div><label for="state">State of residence</label>
+        <select id="state"><option>PA</option><option>OH</option><option>NY</option><option>TX</option><option>CA</option></select></div>
+    </div>
+    <label>Safety questions</label>
+    <label class="chk"><input type="checkbox" id="seizure"> History of withdrawal seizures or delirium tremens</label>
+    <label class="chk"><input type="checkbox" id="opioidnow"> Currently taking opioid pain medication or MAT</label>
+    <label class="chk"><input type="checkbox" id="liver"> Known liver disease or elevated liver enzymes</label>
+    <label class="chk"><input type="checkbox" id="pregnant"> Pregnant or planning pregnancy</label>
+    <label class="chk"><input type="checkbox" id="psych"> Recent suicidal thoughts or severe depression</label>
+    <label class="chk"><input type="checkbox" id="tapered"> Already tapering under a clinician's care</label>
+    <button class="go" id="run">Run screen</button>
+  </section>
+  <section>
+    <h2>Decision</h2>
+    <div id="out"><p class="muted">Press "Run screen" to see the route and the rule trace.</p></div>
+    <div id="cf" hidden>
+      <h2 style="margin-top:16px">What would change this route?</h2>
+      <p class="muted" style="margin:0 0 8px">Counterfactual search: tries one edit at a time and lists every single change that lowers the severity of the route.</p>
+      <div id="cflist"></div>
+    </div>
+    <pre id="json" hidden></pre>
+  </section>
+</main>
+
+<main id="queue" hidden>
+  <section class="wide">
+    <h2>Synthetic waitlist</h2>
+    <div class="stats" id="stats"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="ghost" id="regen">Regenerate 40 patients</button>
+      <label class="muted" style="margin:0;display:flex;align-items:center;gap:6px">Withdrawal threshold (drinks/day)
+        <input id="thr" type="number" value="10" min="3" max="30" style="width:70px"></label>
+    </div>
+    <p class="muted">Change the threshold and watch patients move between routes. Click a column header to sort.</p>
+    <h2 style="margin-top:14px">Rule firing counts</h2>
+    <div id="firing" style="margin-bottom:14px"></div>
+    <table><thead><tr><th data-k="name">Patient</th><th data-k="sub">Substance</th><th data-k="hours">Hrs since use</th><th data-k="urgency">Urgency</th><th data-k="route">Route</th><th>Why</th></tr></thead><tbody id="rows"></tbody></table>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Sunflower (YC S26). Not affiliated with Sunflower.</footer>
+
+<script>
+"use strict";
+// ---------- Rule engine ----------
+// Each rule: id, label, test(p, cfg) -> null | {level, msg}. Levels: bad = refer out, warn = clinician review.
+const RULES = [
+  { id: "R1", label: "Withdrawal seizure history",
+    test: (p) => p.seizure && p.substance === "alcohol"
+      ? { level: "bad", msg: "Seizure/DT history means unsupervised outpatient care is unsafe. Refer to medically supervised detox." } : null },
+  { id: "R2", label: "Heavy daily drinking, recent use",
+    test: (p, c) => p.substance === "alcohol" && p.drinks >= c.thr && p.lastuse < 72 && !p.tapered
+      ? { level: "bad", msg: `${p.drinks} drinks/day with use in the last 72h puts withdrawal risk above the ${c.thr}/day line. Refer for supervised detox first.` } : null },
+  { id: "R3", label: "Opioid conflict with naltrexone",
+    test: (p) => p.opioidnow && p.substance !== "opioid"
+      ? { level: "bad", msg: "Naltrexone blocks opioids and can precipitate withdrawal. Not eligible until a clinician reconciles opioid use." } : null },
+  { id: "R4", label: "Acute psychiatric risk",
+    test: (p) => p.psych
+      ? { level: "bad", msg: "Recent suicidal thoughts: warm hand-off to crisis line and same-day clinician. Do not route through async flow." } : null },
+  { id: "R5", label: "Liver flag",
+    test: (p) => p.liver
+      ? { level: "warn", msg: "Liver disease or high enzymes: clinician must review labs before any naltrexone." } : null },
+  { id: "R6", label: "Pregnancy",
+    test: (p) => p.pregnant
+      ? { level: "warn", msg: "Pregnancy changes the risk/benefit for every option. Clinician review required." } : null },
+  { id: "R7", label: "Moderate drinking, recent use",
+    test: (p, c) => p.substance === "alcohol" && p.drinks >= Math.ceil(c.thr / 2) && p.drinks < c.thr && p.lastuse < 24
+      ? { level: "warn", msg: "Mid-range intake with very recent use: clinician should confirm a safe start date." } : null },
+  { id: "R8", label: "Minor",
+    test: (p) => p.age < 18
+      ? { level: "warn", msg: "Under 18: guardian consent and a pediatric-capable clinician needed." } : null },
+  { id: "R9", label: "Opioid use disorder is out of scope for this toy",
+    test: (p) => p.substance === "opioid"
+      ? { level: "warn", msg: "Opioid care needs induction planning (buprenorphine timing). Always live clinician review." } : null },
+  { id: "R10", label: "Age sanity",
+    test: (p) => p.age > 100 || p.age < 1 || Number.isNaN(p.age)
+      ? { level: "warn", msg: "Age looks like a typo. Confirm identity before continuing." } : null },
+];
+
+function screen(p, cfg) {
+  const trace = RULES.map(r => ({ id: r.id, label: r.label, hit: r.test(p, cfg) }));
+  const hits = trace.filter(t => t.hit);
+  const route = hits.some(h => h.hit.level === "bad") ? "refer" : hits.length ? "review" : "eligible";
+  const urgency = route === "refer" ? (p.psych ? 100 : 70 + Math.min(20, p.drinks || 0)) : route === "review" ? 40 + hits.length * 5 : 10;
+  return { route, trace, urgency };
+}
+const ROUTE_TEXT = {
+  eligible: ["ok", "Eligible for clinician sign-off", "No safety rule fired. A licensed clinician still reviews before anything is prescribed."],
+  review: ["warn", "Needs clinician review", "At least one flag needs a human to look at the details first."],
+  refer: ["bad", "Refer out", "A hard stop fired. This patient should not enter the standard async pathway."],
+};
+
+// ---------- Single patient UI ----------
+const $ = (id) => document.getElementById(id);
+const SAMPLES = {
+  "Routine, light drinker": { substance: "alcohol", age: 29, drinks: 3, lastuse: 20, state: "PA" },
+  "Heavy, drank today": { substance: "alcohol", age: 46, drinks: 14, lastuse: 6, state: "OH" },
+  "Takes opioid meds": { substance: "alcohol", age: 38, drinks: 5, lastuse: 30, state: "NY", opioidnow: true },
+  "Liver flag": { substance: "alcohol", age: 52, drinks: 7, lastuse: 40, state: "TX", liver: true },
+  "Heavy but tapering": { substance: "alcohol", age: 41, drinks: 12, lastuse: 10, state: "CA", tapered: true },
+  "Nicotine, simple": { substance: "nicotine", age: 33, drinks: 0, lastuse: 5, state: "PA" },
+};
+const FLAGS = ["seizure", "opioidnow", "liver", "pregnant", "psych", "tapered"];
+
+function readForm() {
+  const p = { substance: $("substance").value, age: parseInt($("age").value, 10), drinks: parseInt($("drinks").value, 10) || 0,
+    lastuse: parseInt($("lastuse").value, 10) || 0, state: $("state").value };
+  FLAGS.forEach(f => p[f] = $(f).checked);
+  return p;
+}
+function loadSample(s) {
+  const base = { substance: "alcohol", age: 34, drinks: 0, lastuse: 24, state: "PA" };
+  const p = Object.assign(base, s);
+  ["substance", "age", "drinks", "lastuse", "state"].forEach(k => $(k).value = p[k]);
+  FLAGS.forEach(f => $(f).checked = !!p[f]);
+  run();
+}
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+function run() {
+  const p = readForm();
+  const r = screen(p, { thr: 10 });
+  const [cls, title, sub] = ROUTE_TEXT[r.route];
+  let h = `<div class="verdict ${cls}"><b>${title}</b><span class="muted">${sub}</span></div>`;
+  h += r.trace.map(t => t.hit
+    ? `<div class="rule"><span class="dot ${t.hit.level}"></span><div><strong>${t.id} ${esc(t.label)}</strong><small>${esc(t.hit.msg)}</small></div></div>`
+    : `<div class="rule"><span class="dot off"></span><div class="muted">${t.id} ${esc(t.label)} - not triggered</div></div>`).join("");
+  $("out").innerHTML = h;
+  renderCf(p, r.route);
+  $("json").hidden = false;
+  $("json").textContent = JSON.stringify({ route: r.route, urgency: r.urgency, fired: r.trace.filter(t => t.hit).map(t => t.id), input: p }, null, 2);
+}
+// Counterfactuals: change one input at a time, keep edits that lower the route's severity.
+const SEV = { eligible: 0, review: 1, refer: 2 };
+function counterfactuals(p, cfg) {
+  const base = screen(p, cfg).route;
+  const tries = [];
+  FLAGS.filter(f => p[f]).forEach(f => tries.push(["clear the " + f + " flag", { [f]: false }]));
+  if (!p.tapered && p.substance === "alcohol") tries.push(["start a clinician-supervised taper", { tapered: true }]);
+  [24, 48, 72, 96].forEach(h => { if (h > p.lastuse) tries.push(["wait until " + h + "h since last use", { lastuse: h }]); });
+  [2, 4, 6, 8, 10].forEach(d => { if (d < p.drinks) tries.push(["reduce intake to " + d + " drinks/day", { drinks: d }]); });
+  const out = [];
+  tries.forEach(([label, patch]) => {
+    const r = screen({ ...p, ...patch }, cfg).route;
+    if (SEV[r] < SEV[base]) out.push({ label, to: r });
+  });
+  return out;
+}
+function renderCf(p, route) {
+  $("cf").hidden = route === "eligible";
+  const list = route === "eligible" ? [] : counterfactuals(p, { thr: 10 });
+  $("cflist").innerHTML = list.length
+    ? list.map(o => `<div class="rule"><span class="dot ok"></span><div>If they ${esc(o.label)}<small>route becomes ${o.to}</small></div></div>`).join("")
+    : '<p class="muted">No single change helps. Needs a combination, or a human.</p>';
+}
+
+$("samples").innerHTML =Object.keys(SAMPLES).map(k => `<button class="ghost" data-s="${esc(k)}">${esc(k)}</button>`).join("");
+$("samples").addEventListener("click", e => { const k = e.target.dataset.s; if (k) loadSample(SAMPLES[k]); });
+$("run").addEventListener("click", run);
+// Live re-screen: any edit to the form re-runs the rules, so the trace never goes stale.
+document.querySelectorAll("#screen input, #screen select").forEach(el => {
+  el.addEventListener("change", run);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.tagName === "INPUT" && e.target.type === "number") run();
+});
+// Footnote on the routing model so nobody mistakes the toy for clinical logic.
+const note = document.createElement("p");
+note.className = "muted";
+note.textContent = "Thresholds here are invented for illustration. Real protocols come from clinicians, not from this file.";
+$("out").parentElement.appendChild(note);
+
+// ---------- Queue ----------
+let seed = 7;
+function rnd() { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }
+const FIRST = ["Maya", "Jordan", "Priya", "Luis", "Tess", "Omar", "Hana", "Dev", "Rosa", "Ike", "Nia", "Sam", "Wen", "Ana", "Kai"];
+const LAST = ["Reyes", "Okafor", "Lindqvist", "Shah", "Brandt", "Haddad", "Mori", "Castellano", "Doyle", "Nguyen"];
+let patients = [];
+let sortKey = "urgency", sortDir = -1;
+function gen() {
+  patients = Array.from({ length: 40 }, (_, i) => {
+    const sub = rnd() < .72 ? "alcohol" : rnd() < .7 ? "nicotine" : "opioid";
+    return { name: FIRST[Math.floor(rnd() * FIRST.length)] + " " + LAST[Math.floor(rnd() * LAST.length)], substance: sub, sub,
+      age: 19 + Math.floor(rnd() * 50), drinks: sub === "alcohol" ? Math.floor(rnd() * 18) : 0, lastuse: Math.floor(rnd() * 96),
+      state: "PA", seizure: rnd() < .06, opioidnow: rnd() < .08, liver: rnd() < .1, pregnant: rnd() < .04, psych: rnd() < .04, tapered: rnd() < .1 };
+  });
+  renderQueue();
+}
+function renderQueue() {
+  const cfg = { thr: parseInt($("thr").value, 10) || 10 };
+  const rows = patients.map(p => { const r = screen(p, cfg); return { ...p, route: r.route, urgency: r.urgency, why: r.trace.filter(t => t.hit).map(t => t.id).join(", ") || "-", hours: p.lastuse }; });
+  // Which rules fire most often across the queue (helps spot a rule that is too strict).
+  const fires = {};
+  patients.forEach(p => screen(p, cfg).trace.forEach(t => { if (t.hit) fires[t.id] = (fires[t.id] || 0) + 1; }));
+  const maxFire = Math.max(1, ...Object.values(fires));
+  $("firing").innerHTML = RULES.map(r => {
+    const n = fires[r.id] || 0;
+    return `<div class="bar"><span>${r.id} ${esc(r.label)}</span><i style="width:${Math.round(100 * n / maxFire)}%"></i><b>${n}</b></div>`;
+  }).join("");
+  rows.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : a[sortKey] < b[sortKey] ? -1 : 0) * sortDir);
+  const count = k => rows.filter(r => r.route === k).length;
+  $("stats").innerHTML = [["Patients", rows.length], ["Eligible", count("eligible")], ["Review", count("review")], ["Refer out", count("refer")],
+    ["Auto-cleared share", Math.round(100 * count("eligible") / rows.length) + "%"]].map(([a, b]) => `<div class="stat"><b>${b}</b><span class="muted">${a}</span></div>`).join("");
+  $("rows").innerHTML = rows.map(r => { const c = ROUTE_TEXT[r.route][0];
+    return `<tr><td>${esc(r.name)}</td><td>${r.sub}</td><td>${r.hours}</td><td>${r.urgency}</td><td><span class="pill ${c}">${r.route}</span></td><td class="muted">${r.why}</td></tr>`; }).join("");
+}
+document.querySelectorAll("th[data-k]").forEach(th => th.addEventListener("click", () => {
+  const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : 1; sortKey = k; renderQueue(); }));
+$("thr").addEventListener("input", renderQueue);
+$("regen").addEventListener("click", () => { seed = Math.floor(Math.random() * 1e6); gen(); });
+
+// ---------- Tabs ----------
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+  $("screen").hidden = t.dataset.tab !== "screen"; $("queue").hidden = t.dataset.tab !== "queue"; }));
+
+gen();
+loadSample(SAMPLES["Heavy, drank today"]);
+</script>
+</body>
+</html>

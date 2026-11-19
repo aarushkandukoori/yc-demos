@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Van Loadout - toy pre-visit appliance diagnosis</title>
+<style>
+:root{--bg:#f4efe6;--ink:#1d2a2f;--mute:#667379;--card:#fffdf8;--line:#ddd5c5;--acc:#0f6b62;--acc2:#c4511f;--ok:#2f7d3b;--r:12px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 24px 8px;max-width:1080px;margin:0 auto}
+h1{margin:0 0 4px;font:700 26px/1.2 ui-serif,Georgia,serif;letter-spacing:-.01em}
+header p{margin:0;color:var(--mute);max-width:720px}
+main{max-width:1080px;margin:0 auto;padding:16px 24px 40px;display:grid;grid-template-columns:340px 1fr;gap:20px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute)}
+.stack{display:flex;flex-direction:column;gap:16px}
+label.f{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink)}
+.chip:hover{border-color:var(--acc)}
+.chip.yes{background:var(--acc);border-color:var(--acc);color:#fff}
+.chip.no{background:#efe9dc;color:var(--mute);text-decoration:line-through}
+.hint{font-size:12px;color:var(--mute);margin-top:8px}
+.row{display:flex;align-items:center;gap:10px;margin:7px 0}
+.row .name{flex:0 0 190px;font-size:14px}
+.row .name small{display:block;color:var(--mute);font-size:11px}
+.bar{flex:1;height:14px;background:#ece5d6;border-radius:7px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--acc);width:0;transition:width .35s ease}
+.bar.part>i{background:var(--acc2)}
+.pct{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.q{border:1px dashed var(--acc);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.q b{font-weight:600}
+.q small{display:block;color:var(--mute);font-size:12px}
+.btn{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:8px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer}
+.btn.alt{background:#fff;color:var(--ink)}
+.btn:hover{opacity:.85}
+.van{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.big{border-radius:10px;padding:12px;background:#f3ede0}
+.big.good{background:#e4f0e3}
+.big .n{font:700 30px/1.1 ui-serif,Georgia,serif}
+.big .l{font-size:12px;color:var(--mute)}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.slot{display:inline-block;margin:3px 4px 0 0;padding:3px 9px;border-radius:6px;background:#e2efec;color:#0b4d46;font-size:12px}
+.slot.miss{background:#f1e7df;color:#8a3b17}
+textarea{width:100%;min-height:150px;border:1px solid var(--line);border-radius:8px;padding:10px;font:12.5px/1.5 ui-monospace,Menlo,monospace;background:#fff;color:var(--ink);resize:vertical}
+.empty{color:var(--mute);font-size:14px;padding:6px 0}
+.log{font:12px/1.6 ui-monospace,Menlo,monospace;color:var(--mute);max-height:120px;overflow:auto;margin-top:8px}
+footer{max-width:1080px;margin:0 auto;padding:0 24px 36px;color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Van Loadout</h1>
+  <p>A toy of one idea: before the truck rolls, turn "my washer is making a noise" into a ranked diagnosis, ranked parts, and the one next question that teaches the most. All data below is synthetic.</p>
+</header>
+<main>
+  <div class="stack">
+    <section class="card">
+      <h2>1. Incoming job</h2>
+      <label class="f" for="app">Appliance</label>
+      <select id="app"></select>
+      <label class="f" for="age">Age of unit</label>
+      <select id="age">
+        <option value="1">0 to 5 years</option>
+        <option value="1.3">6 to 10 years</option>
+        <option value="1.8">11+ years</option>
+      </select>
+      <label class="f">Symptoms from the call (click: yes, again: ruled out, again: unknown)</label>
+      <div class="chips" id="chips"></div>
+      <div class="hint">Try the presets to see the ranking move.</div>
+      <div class="chips" id="presets" style="margin-top:8px"></div>
+    </section>
+    <section class="card">
+      <h2>Engine log</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <h2>2. Most likely faults</h2>
+      <div id="faults"></div>
+    </section>
+    <section class="card">
+      <h2>3. Best next question (max information gain)</h2>
+      <div id="questions"></div>
+    </section>
+    <section class="card">
+      <h2>4. Ranked parts and van loadout</h2>
+      <div id="parts"></div>
+      <label class="f" for="slots">Parts slots on the truck for this job: <b id="slotv">2</b></label>
+      <input type="range" id="slots" min="1" max="5" value="2">
+      <div class="van">
+        <div class="big"><div class="n" id="blind">0%</div><div class="l">first-visit fix if the van carries the generic top sellers</div></div>
+        <div class="big good"><div class="n" id="smart">0%</div><div class="l">first-visit fix when loaded from this diagnosis</div></div>
+      </div>
+      <div id="load" style="margin-top:10px"></div>
+    </section>
+    <section class="card">
+      <h2>5. Technician handoff</h2>
+      <textarea id="brief" readonly></textarea>
+      <div style="margin-top:8px"><button class="btn" id="copy">Copy brief</button> <span class="hint" id="copied"></span></div>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Bernard (YC S26). Not affiliated with Bernard.</footer>
+
+<script>
+"use strict";
+// ---- Synthetic knowledge base. Likelihoods are made up for illustration. ----
+// sym: symptom list. fault: prior, wear (aging boosts it), parts (first = the fixing part), lik = P(symptom | fault).
+const KB = {
+  washer: {
+    label: "Front-load washer",
+    sym: {
+      noDrain: "water stays in the drum", loud: "loud grinding when spinning", leak: "leaks at the front door",
+      noSpin: "drum does not spin", noStart: "will not start the cycle", noFill: "no water enters", shake: "violent shaking",
+      wet: "clothes soaking wet after cycle", code: "shows a drain error code"
+    },
+    fault: [
+      {id:"pump", name:"Drain pump clogged or failed", prior:.22, wear:1, parts:["Drain pump","Pump filter"], lik:{noDrain:.9,code:.8,wet:.6,loud:.3,leak:.1}},
+      {id:"bearing", name:"Drum bearing worn", prior:.12, wear:1, parts:["Drum bearing kit","Drum seal"], lik:{loud:.9,shake:.7,noSpin:.2,leak:.2}},
+      {id:"boot", name:"Door boot torn", prior:.16, wear:0, parts:["Door boot gasket"], lik:{leak:.92,wet:.1}},
+      {id:"latch", name:"Door lock assembly", prior:.18, wear:0, parts:["Door lock assembly"], lik:{noStart:.65,noSpin:.5,noFill:.15}},
+      {id:"coupler", name:"Motor coupling snapped", prior:.08, wear:1, parts:["Motor coupling"], lik:{noSpin:.85,wet:.5,noStart:.1}},
+      {id:"valve", name:"Water inlet valve", prior:.14, wear:1, parts:["Inlet valve"], lik:{noFill:.92,noStart:.25}},
+      {id:"rods", name:"Suspension rods tired", prior:.10, wear:1, parts:["Suspension rod set"], lik:{shake:.88,loud:.3}}
+    ],
+    presets: {"Won't drain":["noDrain","code"], "Grinding + shaking":["loud","shake"], "Dead, no spin":["noSpin","noStart"]}
+  },
+  dryer: {
+    label: "Electric dryer",
+    sym: {noHeat:"tumbles but no heat", slow:"takes several cycles to dry", squeal:"squealing noise", noStart:"will not start", noTumble:"drum does not turn", smell:"hot or burning smell"},
+    fault: [
+      {id:"elem", name:"Heating element open", prior:.28, wear:1, parts:["Heating element","Thermal fuse"], lik:{noHeat:.9,slow:.6}},
+      {id:"fuse", name:"Thermal fuse blown", prior:.18, wear:0, parts:["Thermal fuse"], lik:{noHeat:.7,noStart:.6,smell:.2}},
+      {id:"roller", name:"Drum roller worn", prior:.15, wear:1, parts:["Drum roller kit"], lik:{squeal:.9,noTumble:.15}},
+      {id:"belt", name:"Drive belt broken", prior:.17, wear:1, parts:["Drive belt","Idler pulley"], lik:{noTumble:.92,noStart:.3,squeal:.35}},
+      {id:"vent", name:"Vent restricted", prior:.22, wear:0, parts:["Vent cleaning kit"], lik:{slow:.9,smell:.5,noHeat:.2}}
+    ],
+    presets: {"Runs, no heat":["noHeat"], "Slow + hot smell":["slow","smell"], "Squeals":["squeal"]}
+  },
+  fridge: {
+    label: "Refrigerator",
+    sym: {warm:"fresh-food section warm", freezerOk:"freezer still cold", frost:"frost wall in the freezer", click:"clicking sound that repeats", noIce:"no ice", leak:"water pooling inside or below", buzz:"loud fan noise"},
+    fault: [
+      {id:"fan", name:"Evaporator fan motor", prior:.2, wear:1, parts:["Evaporator fan motor"], lik:{warm:.7,freezerOk:.65,buzz:.6,frost:.4}},
+      {id:"defrost", name:"Defrost heater or sensor", prior:.2, wear:1, parts:["Defrost heater","Defrost sensor"], lik:{frost:.92,warm:.6,freezerOk:.5}},
+      {id:"relay", name:"Start relay failing", prior:.18, wear:1, parts:["Start relay"], lik:{click:.9,warm:.5,freezerOk:.1}},
+      {id:"valve", name:"Ice-maker water valve", prior:.17, wear:0, parts:["Water inlet valve"], lik:{noIce:.85,leak:.3}},
+      {id:"drain", name:"Defrost drain frozen", prior:.25, wear:0, parts:["Drain tube kit"], lik:{leak:.9,frost:.35}}
+    ],
+    presets: {"Warm, freezer fine":["warm","freezerOk"], "Frost + leak":["frost","leak"], "Clicks":["click"]}
+  },
+  dish: {
+    label: "Dishwasher",
+    sym: {pool:"standing water at the bottom", dirty:"dishes come out dirty", leak:"leaks at the door", noStart:"will not start", loud:"loud humming or grinding", detg:"detergent left in the cup"},
+    fault: [
+      {id:"pump", name:"Drain pump jammed", prior:.25, wear:1, parts:["Drain pump","Check valve"], lik:{pool:.88,loud:.4,dirty:.4}},
+      {id:"circ", name:"Wash motor weak", prior:.15, wear:1, parts:["Wash motor"], lik:{dirty:.7,loud:.6,pool:.15}},
+      {id:"latch", name:"Door latch switch", prior:.2, wear:0, parts:["Door latch"], lik:{noStart:.82,detg:.2}},
+      {id:"gasket", name:"Door gasket hardened", prior:.2, wear:1, parts:["Door gasket"], lik:{leak:.88}},
+      {id:"disp", name:"Detergent dispenser stuck", prior:.2, wear:0, parts:["Dispenser assembly"], lik:{detg:.92,dirty:.5}}
+    ],
+    presets: {"Won't drain":["pool"], "Dirty, dispenser shut":["dirty","detg"], "Dead":["noStart"]}
+  },
+  oven: {
+    label: "Electric range oven",
+    sym: {cold:"oven will not heat", uneven:"cooks unevenly", click:"clicking, no heat", err:"displays an error code", dark:"display or clock dead"},
+    fault: [
+      {id:"bake", name:"Bake element burned out", prior:.32, wear:1, parts:["Bake element"], lik:{cold:.85,uneven:.6}},
+      {id:"sensor", name:"Temperature sensor drift", prior:.22, wear:1, parts:["Oven sensor"], lik:{uneven:.75,err:.55,cold:.2}},
+      {id:"board", name:"Control board", prior:.2, wear:1, parts:["Control board"], lik:{err:.8,dark:.85,cold:.3,click:.1}},
+      {id:"relay", name:"Relay on control board", prior:.12, wear:1, parts:["Relay board"], lik:{click:.85,cold:.7}},
+      {id:"thermo", name:"Safety thermostat", prior:.14, wear:0, parts:["Safety thermostat"], lik:{cold:.55,err:.3}}
+    ],
+    presets: {"Won't heat":["cold"], "Error code":["err"], "Clicks only":["click","cold"]}
+  }
+};
+// Generic "top sellers" the van carries when nobody has diagnosed the job (what a dispatcher guesses).
+const GENERIC = {
+  washer:["Drain pump","Inlet valve","Door lock assembly","Door boot gasket","Motor coupling"],
+  dryer:["Heating element","Thermal fuse","Drive belt","Drum roller kit","Vent cleaning kit"],
+  fridge:["Evaporator fan motor","Start relay","Water inlet valve","Defrost heater","Drain tube kit"],
+  dish:["Drain pump","Door latch","Door gasket","Wash motor","Dispenser assembly"],
+  oven:["Bake element","Oven sensor","Control board","Relay board","Safety thermostat"]
+};
+const FLOOR = 0.04; // P(symptom | fault) when the fault does not list it
+
+// ---- State ----
+const S = {app:"washer", age:1, obs:{}, asked:[]};
+const $ = id => document.getElementById(id);
+const lik = (f, s) => f.lik[s] ?? FLOOR;
+
+// ---- Engine ----
+function posterior(app, obs, age, usePriorOnly) {
+  const fs = KB[app].fault;
+  const w = fs.map(f => {
+    let p = f.prior * (f.wear ? age : 1);
+    if (!usePriorOnly) for (const [s, v] of Object.entries(obs)) p *= v ? lik(f, s) : 1 - lik(f, s);
+    return p;
+  });
+  const z = w.reduce((a, b) => a + b, 0) || 1;
+  return w.map(x => x / z);
+}
+const entropy = p => -p.reduce((a, x) => a + (x > 0 ? x * Math.log2(x) : 0), 0);
+
+// Pick the unanswered symptom whose answer is expected to shrink uncertainty the most.
+function nextQuestions(app, obs, age, n) {
+  const kb = KB[app], post = posterior(app, obs, age), h0 = entropy(post), out = [];
+  for (const s of Object.keys(kb.sym)) {
+    if (s in obs) continue;
+    const py = post.reduce((a, p, i) => a + p * lik(kb.fault[i], s), 0);
+    const yes = post.map((p, i) => p * lik(kb.fault[i], s) / (py || 1));
+    const no = post.map((p, i) => p * (1 - lik(kb.fault[i], s)) / ((1 - py) || 1));
+    const eh = py * entropy(yes) + (1 - py) * entropy(no);
+    out.push({s, gain: h0 - eh, py});
+  }
+  return out.sort((a, b) => b.gain - a.gain).slice(0, n);
+}
+
+function partRank(app, post) {
+  const m = {};
+  KB[app].fault.forEach((f, i) => f.parts.forEach((p, j) => {
+    // The first part fixes the fault; accessory parts count for less.
+    m[p] = (m[p] || 0) + post[i] * (j === 0 ? 1 : 0.35);
+  }));
+  return Object.entries(m).sort((a, b) => b[1] - a[1]);
+}
+
+// Probability the job is finished on visit one: the fixing part of the true fault is on the van.
+function coverage(app, post, loaded) {
+  return KB[app].fault.reduce((a, f, i) => a + (loaded.includes(f.parts[0]) ? post[i] : 0), 0);
+}
+
+// ---- Rendering ----
+const pct = x => Math.round(x * 100) + "%";
+function log(msg) {
+  const d = document.createElement("div");
+  d.textContent = msg;
+  $("log").prepend(d);
+}
+
+function renderChips() {
+  const kb = KB[S.app];
+  $("chips").innerHTML = "";
+  for (const [k, label] of Object.entries(kb.sym)) {
+    const b = document.createElement("button");
+    b.className = "chip" + (k in S.obs ? (S.obs[k] ? " yes" : " no") : "");
+    b.textContent = label;
+    b.onclick = () => {
+      if (!(k in S.obs)) setObs(k, true); else if (S.obs[k]) setObs(k, false); else clearObs(k);
+    };
+    $("chips").append(b);
+  }
+  $("presets").innerHTML = "";
+  for (const [name, list] of Object.entries(kb.presets)) {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.textContent = name;
+    b.onclick = () => { S.obs = {}; list.forEach(s => S.obs[s] = true); log("preset: " + name); update(); };
+    $("presets").append(b);
+  }
+}
+
+function update() {
+  const kb = KB[S.app], post = posterior(S.app, S.obs, S.age), prior = posterior(S.app, {}, S.age, true);
+  renderChips();
+
+  // Faults
+  const order = post.map((p, i) => i).sort((a, b) => post[b] - post[a]);
+  $("faults").innerHTML = order.slice(0, 5).map(i => `
+    <div class="row"><div class="name">${kb.fault[i].name}<small>fixes with: ${kb.fault[i].parts[0]}</small></div>
+    <div class="bar"><i style="width:${post[i] * 100}%"></i></div><div class="pct">${pct(post[i])}</div></div>`).join("");
+
+  // Questions
+  const qs = nextQuestions(S.app, S.obs, S.age, 2);
+  $("questions").innerHTML = qs.length && entropy(post) > 0.3 ? qs.map(q => `
+    <div class="q"><div><b>Does it have: ${kb.sym[q.s]}?</b>
+    <small>expected gain ${q.gain.toFixed(2)} bits, ${pct(q.py)} chance of yes right now</small></div>
+    <div><button class="btn" data-s="${q.s}" data-v="1">Yes</button> <button class="btn alt" data-s="${q.s}" data-v="0">No</button></div></div>`).join("")
+    : `<div class="empty">${qs.length ? "Confident enough. Dispatch." : "No questions left."}</div>`;
+  $("questions").querySelectorAll("button").forEach(b => b.onclick = () => setObs(b.dataset.s, b.dataset.v === "1"));
+
+  // Parts
+  const ranked = partRank(S.app, post), n = +$("slots").value;
+  $("slotv").textContent = n;
+  const maxp = ranked.length ? ranked[0][1] : 1;
+  $("parts").innerHTML = ranked.slice(0, 5).map(([p, v], i) => `
+    <div class="row"><div class="name">${i + 1}. ${p}</div><div class="bar part"><i style="width:${v / maxp * 100}%"></i></div><div class="pct">${pct(Math.min(v, 1))}</div></div>`).join("");
+
+  const smartLoad = ranked.map(r => r[0]).slice(0, n);
+  const fixers = kb.fault.map(f => f.parts[0]);
+  const smartFix = ranked.map(r => r[0]).filter(p => fixers.includes(p)).slice(0, n);
+  const blindLoad = GENERIC[S.app].slice(0, n);
+  $("smart").textContent = pct(coverage(S.app, post, smartFix.length ? smartFix : smartLoad));
+  $("blind").textContent = pct(coverage(S.app, post, blindLoad));
+  $("load").innerHTML = "Load: " + smartLoad.map(p => `<span class="slot">${p}</span>`).join("") +
+    "<br><small class='hint'>Generic van: </small>" + blindLoad.map(p => `<span class="slot${smartLoad.includes(p) ? "" : " miss"}">${p}</span>`).join("");
+
+  // Brief
+  const yes = Object.keys(S.obs).filter(k => S.obs[k]).map(k => kb.sym[k]);
+  const no = Object.keys(S.obs).filter(k => !S.obs[k]).map(k => kb.sym[k]);
+  const top = order[0], conf = post[top];
+  const flag = conf < 0.5 ? "LOW CONFIDENCE: tech should expect to diagnose on site; ask the customer more first." : "Confidence OK: go straight to the fix.";
+  $("brief").value =
+`JOB BRIEF (synthetic)
+Unit: ${kb.label}, age factor x${S.age}
+Reported: ${yes.join("; ") || "nothing yet"}
+Ruled out: ${no.join("; ") || "nothing"}
+
+Top hypothesis: ${kb.fault[top].name} (${pct(conf)})
+Runner up: ${kb.fault[order[1]].name} (${pct(post[order[1]])})
+Bring: ${smartLoad.join(", ")}
+Uncertainty left: ${entropy(post).toFixed(2)} bits (prior was ${entropy(prior).toFixed(2)})
+${flag}`;
+}
+
+function setObs(k, v) { S.obs[k] = v; log(`observed "${KB[S.app].sym[k]}" = ${v ? "yes" : "no"}`); update(); }
+function clearObs(k) { delete S.obs[k]; log(`cleared "${KB[S.app].sym[k]}"`); update(); }
+
+// ---- Wire up ----
+for (const [k, v] of Object.entries(KB)) $("app").add(new Option(v.label, k));
+$("app").onchange = e => { S.app = e.target.value; S.obs = {}; log("new job: " + KB[S.app].label); update(); };
+$("age").onchange = e => { S.age = +e.target.value; log("age factor x" + S.age); update(); };
+$("slots").oninput = update;
+$("copy").onclick = () => {
+  $("brief").select();
+  try { document.execCommand("copy"); $("copied").textContent = "Copied."; } catch (e) { $("copied").textContent = "Select and copy manually."; }
+  setTimeout(() => $("copied").textContent = "", 1500);
+};
+S.obs = {noDrain: true};
+log("new job: " + KB[S.app].label);
+update();
+</script>
+</body>
+</html>

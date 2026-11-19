@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cell Foundry - a toy sovereign production line</title>
+<style>
+:root{
+  --bg:#f3efe6; --panel:#fbf9f3; --ink:#1f2a2e; --mute:#66726f; --line:#d9d2c2;
+  --ok:#2f7d6b; --busy:#d9a441; --down:#b4472f; --block:#7b6fa8; --idle:#cfc8b6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:0 auto}
+h1{margin:0;font-size:26px;letter-spacing:-.02em}
+header p{margin:6px 0 0;color:var(--mute);max-width:720px}
+main{max-width:1100px;margin:0 auto;padding:12px 24px 40px;display:grid;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font:inherit;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button:hover{opacity:.85}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+.spacer{flex:1}
+label{color:var(--mute);font-size:13px}
+.line{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.st{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;position:relative}
+.st.bn{border-color:var(--down);box-shadow:0 0 0 2px rgba(180,71,47,.18)}
+.st h3{margin:0;font-size:14px}
+.st small{color:var(--mute);display:block;margin-bottom:8px}
+.mach{display:flex;flex-wrap:wrap;gap:4px;min-height:22px;margin-bottom:8px}
+.m{width:18px;height:18px;border-radius:4px;background:var(--idle)}
+.m.busy{background:var(--busy)}.m.down{background:var(--down)}.m.block{background:var(--block)}
+.buf{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.buf i{display:block;height:100%;background:var(--ok);width:0}
+.ctl{display:flex;gap:6px;align-items:center;margin-top:8px;font-size:13px}
+.ctl button{padding:0 8px;line-height:22px}
+.tag{position:absolute;top:8px;right:8px;font-size:11px;color:var(--down);display:none}
+.st.bn .tag{display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}
+.stat b{display:block;font-size:24px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--mute)}
+.bar{height:10px;background:var(--line);border-radius:5px;position:relative;margin-top:6px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--ok)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mute)}
+.legend span:before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;background:var(--c)}
+canvas{width:100%;height:120px;display:block}
+input[type=range]{accent-color:var(--ok);vertical-align:middle}
+#log{font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mute);max-height:90px;overflow:auto;margin-top:8px}
+footer{max-width:1100px;margin:0 auto;padding:0 24px 32px;color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+@media(max-width:820px){.line{grid-template-columns:1fr 1fr}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cell Foundry</h1>
+  <p>A toy factory-cell simulator. Five stations, a finite budget, random breakdowns. Find the bottleneck, add machines where the queue builds, and watch cost per unit fall as throughput rises. All numbers are synthetic and abstract.</p>
+</header>
+<main>
+  <section class="card">
+    <div class="row">
+      <button id="play">Pause</button>
+      <button id="step" class="ghost">Step 1 day</button>
+      <button id="balance" class="ghost">Auto-balance</button>
+      <button id="reset" class="ghost">Reset</button>
+      <span class="spacer"></span>
+      <label>Preset
+        <select id="preset" aria-label="Preset layout">
+          <option value="lean">Lean cell (1 each)</option>
+          <option value="naive">Naive (3 each)</option>
+          <option value="tuned">Tuned cell</option>
+        </select>
+      </label>
+      <label>Speed <input id="speed" type="range" min="1" max="12" value="4"></label>
+      <label>Reliability <input id="rel" type="range" min="0" max="100" value="80"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="line" id="line"></div>
+    <div class="row legend" style="margin-top:12px">
+      <span style="--c:var(--idle)">idle</span><span style="--c:var(--busy)">working</span>
+      <span style="--c:var(--down)">broken</span><span style="--c:var(--block)">blocked (output full)</span>
+      <span>Bar under each station = input queue</span>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><b id="sRate">0</b><span>finished units / month (rolling)</span></div>
+    <div class="stat"><b id="sCost">-</b><span>cost per unit, toy $k</span></div>
+    <div class="stat"><b id="sIdx">-</b><span>vs incumbent benchmark (100 = incumbent)<div class="bar"><i id="idxBar" style="width:0"></i></div></span></div>
+    <div class="stat"><b id="sCap">0</b><span>toy $k spent on machines</span></div>
+    <div class="stat"><b id="sBn">-</b><span>current bottleneck</span></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><b>Output per day</b><span class="spacer"></span><label>last 90 days</label></div>
+    <canvas id="chart" width="1000" height="120" aria-label="Daily output chart"></canvas>
+    <div id="log" aria-live="polite"></div>
+  </section>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Isengard Industries Inc (YC S26). Not affiliated with Isengard Industries Inc.</footer>
+
+<script>
+(function(){
+"use strict";
+// ---- Model: abstract production line (synthetic numbers) ----
+var STATIONS=[
+  {name:"Airframe",  note:"cycle 6 h",  cycle:6,  cost:120},
+  {name:"Propulsion",note:"cycle 10 h", cycle:10, cost:260},
+  {name:"Avionics",  note:"cycle 8 h",  cycle:8,  cost:180},
+  {name:"Integration",note:"cycle 5 h", cycle:5,  cost:90},
+  {name:"Final test",note:"cycle 4 h",  cycle:4,  cost:60}
+];
+var BUF_CAP=8, REPAIR=6, LABOR_PER_MACHINE_MONTH=9, MATERIAL_PER_UNIT=38, AMORT_MONTHS=24;
+var INCUMBENT_UNIT_COST=260; // synthetic benchmark, toy $k
+var PRESETS={lean:[1,1,1,1,1],naive:[3,3,3,3,3],tuned:[2,3,3,2,1]};
+
+var S; // state
+function fresh(counts){
+  S={hour:0,done:0,hist:[],dayOut:[],buf:[Infinity,0,0,0,0],
+     stations:STATIONS.map(function(st,i){return{n:counts[i],m:mk(counts[i]),busyHrs:0,hrs:0}}),
+     rng:seed(7)};
+}
+function mk(n){var a=[];for(var i=0;i<n;i++)a.push({rem:0,hold:false,down:0});return a}
+function seed(s){return function(){s|=0;s=s+0x6D2B79F5|0;var t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+function tickHour(){
+  var fail=(1-Number(rel.value)/100)*0.02+0.0005;
+  for(var i=STATIONS.length-1;i>=0;i--){
+    var st=S.stations[i],c=STATIONS[i].cycle;
+    st.m.forEach(function(m){
+      st.hrs++;
+      if(m.down>0){m.down--;return}
+      if(m.rem>0){
+        st.busyHrs++;
+        if(S.rng()<fail){m.down=REPAIR;return}
+        m.rem--;
+        if(m.rem===0)m.hold=true;
+      }
+      if(m.hold){
+        if(i===STATIONS.length-1){S.done++;S.dayOut[S.dayOut.length-1]++;m.hold=false}
+        else if(S.buf[i+1]<BUF_CAP){S.buf[i+1]++;m.hold=false}
+      }
+      if(!m.hold&&m.rem===0&&S.buf[i]>0){
+        if(S.buf[i]!==Infinity)S.buf[i]--;
+        m.rem=c;
+      }
+    });
+  }
+  S.hour++;
+}
+function tickDay(){
+  S.dayOut.push(0);
+  for(var h=0;h<24;h++)tickHour();
+  S.hist.push(S.dayOut[S.dayOut.length-1]);
+  if(S.hist.length>90)S.hist.shift();
+}
+
+// ---- Derived metrics ----
+function rate(){ // finished units per 30 days, from last up to 30 days
+  var w=S.hist.slice(-30);if(!w.length)return 0;
+  var sum=w.reduce(function(a,b){return a+b},0);
+  return sum/w.length*30;
+}
+function capex(){return S.stations.reduce(function(a,st,i){return a+st.n*STATIONS[i].cost},0)}
+function machines(){return S.stations.reduce(function(a,st){return a+st.n},0)}
+function bottleneck(){
+  var best=-1,score=-1;
+  for(var i=1;i<STATIONS.length;i++){
+    var s=S.buf[i]+ (S.stations[i].hrs? S.stations[i].busyHrs/S.stations[i].hrs:0);
+    if(S.buf[i]>=2&&s>score){score=s;best=i}
+  }
+  if(best<0){ // queue-free: pick highest utilization
+    var u=-1;S.stations.forEach(function(st,i){var x=st.hrs?st.busyHrs/st.hrs:0;if(x>u){u=x;best=i}});
+  }
+  return best;
+}
+
+// ---- UI ----
+var $=function(id){return document.getElementById(id)};
+var rel=$("rel"),lineEl=$("line"),playing=true,acc=0,last=performance.now();
+function logMsg(t){var l=$("log");l.textContent="day "+Math.floor(S.hour/24)+": "+t+"\n"+l.textContent;l.textContent=l.textContent.split("\n").slice(0,40).join("\n")}
+
+function buildLine(){
+  lineEl.innerHTML="";
+  STATIONS.forEach(function(st,i){
+    var d=document.createElement("div");d.className="st";d.id="st"+i;
+    d.innerHTML='<span class="tag">bottleneck</span><h3>'+st.name+'</h3><small>'+st.note+' · '+st.cost+'k each</small>'+
+      '<div class="mach" id="m'+i+'"></div><div class="buf" title="input queue"><i id="b'+i+'"></i></div>'+
+      '<div class="ctl"><button class="ghost" data-i="'+i+'" data-d="-1" aria-label="Remove machine at '+st.name+'">-</button>'+
+      '<span id="n'+i+'"></span><button class="ghost" data-i="'+i+'" data-d="1" aria-label="Add machine at '+st.name+'">+</button>'+
+      '<span class="spacer"></span><span id="u'+i+'" style="color:var(--mute)"></span></div>';
+    lineEl.appendChild(d);
+  });
+}
+lineEl.addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;
+  setCount(+b.dataset.i,+b.dataset.d);
+});
+function setCount(i,d){
+  var st=S.stations[i],n=Math.max(1,Math.min(8,st.n+d));
+  if(n===st.n)return;
+  if(n>st.n)st.m.push({rem:0,hold:false,down:0});
+  else{ // drop an idle machine first so no unit is destroyed
+    var k=st.m.findIndex(function(m){return m.rem===0&&!m.hold&&!m.down});
+    if(k<0)k=st.m.length-1;
+    var m=st.m[k];if(m.hold||m.rem>0){if(i>0)S.buf[i]++}
+    st.m.splice(k,1);
+  }
+  st.n=n;render();
+}
+function render(){
+  var bn=bottleneck();
+  S.stations.forEach(function(st,i){
+    var host=$("m"+i),html="";
+    st.m.forEach(function(m){
+      var c=m.down>0?"down":m.hold?"block":m.rem>0?"busy":"";
+      html+='<div class="m '+c+'"></div>';
+    });
+    host.innerHTML=html;
+    $("n"+i).textContent=st.n+" machine"+(st.n>1?"s":"");
+    $("b"+i).style.width=(i===0?100:Math.min(100,S.buf[i]/BUF_CAP*100))+"%";
+    $("u"+i).textContent=st.hrs?Math.round(st.busyHrs/st.hrs*100)+"% busy":"";
+    $("st"+i).classList.toggle("bn",i===bn&&S.hour>24*3);
+  });
+  var r=rate(),cx=capex();
+  var monthly=cx/AMORT_MONTHS+machines()*LABOR_PER_MACHINE_MONTH+r*MATERIAL_PER_UNIT;
+  var cpu=r>0?monthly/r:null;
+  $("sRate").textContent=Math.round(r);
+  $("sCap").textContent=cx.toLocaleString();
+  $("sCost").textContent=cpu?cpu.toFixed(0):"-";
+  var idx=cpu?Math.round(cpu/INCUMBENT_UNIT_COST*100):null;
+  $("sIdx").firstChild.textContent=idx===null?"-":idx;
+  $("idxBar").style.width=idx===null?"0":Math.min(100,idx)+"%";
+  $("idxBar").style.background=idx!==null&&idx>100?"var(--down)":"var(--ok)";
+  $("sBn").textContent=S.hour>24*3?STATIONS[bn].name:"warming up";
+  drawChart();
+}
+function drawChart(){
+  var cv=$("chart"),g=cv.getContext("2d"),w=cv.width,h=cv.height;
+  g.clearRect(0,0,w,h);
+  var d=S.hist,mx=Math.max(4,Math.max.apply(null,d.concat([1])));
+  g.strokeStyle="#d9d2c2";g.lineWidth=1;
+  for(var k=0;k<=2;k++){var y=h-10-(h-20)*k/2;g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke()}
+  g.fillStyle="#66726f";g.font="12px sans-serif";g.fillText("max "+mx+"/day",6,12);
+  var bw=w/90;
+  d.forEach(function(v,i){
+    g.fillStyle="#2f7d6b";
+    var bh=(h-20)*v/mx;g.fillRect(i*bw+1,h-10-bh,bw-2,bh);
+  });
+}
+
+// ---- Auto-balance: greedy, add where the constraint is ----
+function balance(){
+  var steps=0,counts=S.stations.map(function(s){return s.n});
+  // theoretical capacity per day for each station = n*24/cycle ; add to the lowest until budget cap
+  var budget=1900;
+  function spent(c){return c.reduce(function(a,n,i){return a+n*STATIONS[i].cost},0)}
+  while(steps<40){
+    var cap=counts.map(function(n,i){return n*24/STATIONS[i].cycle});
+    var lo=cap.indexOf(Math.min.apply(null,cap));
+    if(counts[lo]>=8||spent(counts)+STATIONS[lo].cost>budget)break;
+    counts[lo]++;steps++;
+  }
+  counts.forEach(function(n,i){while(S.stations[i].n<n)setCount(i,1);while(S.stations[i].n>n)setCount(i,-1)});
+  logMsg("auto-balance spent "+spent(counts)+"k (budget "+budget+"k), layout "+counts.join("/"));
+}
+
+// ---- Controls ----
+$("play").onclick=function(){playing=!playing;this.textContent=playing?"Pause":"Play"};
+$("step").onclick=function(){tickDay();render()};
+$("balance").onclick=balance;
+$("reset").onclick=function(){applyPreset($("preset").value)};
+$("preset").onchange=function(){applyPreset(this.value)};
+function applyPreset(k){
+  fresh(PRESETS[k]);buildLine();$("log").textContent="";
+  for(var i=0;i<30;i++)tickDay(); // pre-warm a month
+  logMsg("preset '"+k+"' loaded: "+PRESETS[k].join("/"));render();
+}
+
+function loop(now){
+  var dt=now-last;last=now;
+  if(playing){
+    acc+=dt*Number($("speed").value)/1000; // days per second = speed
+    var n=Math.min(10,Math.floor(acc));
+    if(n>0){acc-=n;for(var i=0;i<n;i++)tickDay();acc=Math.min(acc,1);render()}
+  }
+  requestAnimationFrame(loop);
+}
+applyPreset("lean");
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
