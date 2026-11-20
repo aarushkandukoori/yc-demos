@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Approval-gated bench agent - toy demo</title>
+<style>
+:root {
+  --bg: #10130f;
+  --panel: #171c15;
+  --line: #2a3326;
+  --ink: #e6eadf;
+  --dim: #8d9a84;
+  --acc: #d9b44a;
+  --ok: #7fc98a;
+  --bad: #e5806b;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif;
+}
+header { padding: 28px 24px 10px; max-width: 1100px; margin: auto; }
+h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .2px; }
+header p { margin: 0; color: var(--dim); max-width: 760px; }
+main {
+  max-width: 1100px;
+  margin: auto;
+  padding: 12px 24px 30px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--acc);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.step {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--acc);
+  color: #10130f;
+  text-align: center;
+  font-size: 12px;
+  line-height: 20px;
+  margin-right: 6px;
+  font-weight: 700;
+}
+.row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+label { color: var(--dim); font-size: 13px; }
+select, input[type=number] {
+  background: #0d100c;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 7px;
+  font: 13px var(--mono);
+  width: 84px;
+}
+select { width: auto; max-width: 100%; }
+button {
+  background: var(--acc);
+  color: #10130f;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 13px;
+}
+button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+button:disabled { opacity: .35; cursor: not-allowed; }
+.chk { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 8px 0; background: #12170f; }
+.chk.appr { border-color: #4d6b3f; }
+.chk .t { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.chk .why { color: var(--dim); font-size: 12.5px; margin: 2px 0 6px; }
+.tag { font: 11px var(--mono); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+.tag.ok { color: var(--ok); border-color: #3d6b46; }
+.tag.bad { color: var(--bad); border-color: #7a3f33; }
+.tag.run { color: var(--acc); border-color: #7a6528; }
+canvas {
+  width: 100%;
+  height: 170px;
+  background: #0b0e0a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+}
+.log {
+  font: 12px/1.55 var(--mono);
+  background: #0b0e0a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  height: 190px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.log .e { color: var(--bad); }
+.log .g { color: var(--ok); }
+.log .a { color: var(--acc); }
+.sum { margin-top: 10px; font-size: 14px; }
+.sum .f { border-left: 3px solid var(--bad); padding: 6px 10px; margin: 6px 0; background: #1d1513; border-radius: 0 6px 6px 0; }
+.sum .p { border-left: 3px solid var(--ok); padding: 6px 10px; margin: 6px 0; background: #121a14; border-radius: 0 6px 6px 0; }
+.note { color: var(--dim); font-size: 12.5px; }
+footer {
+  max-width: 1100px;
+  margin: auto;
+  padding: 10px 24px 34px;
+  color: var(--dim);
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+.wide { grid-column: 1 / -1; }
+.meter { display: flex; gap: 18px; font: 13px var(--mono); margin-top: 8px; color: var(--dim); flex-wrap: wrap; }
+.meter b { color: var(--ink); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bench agent with a human approval gate</h1>
+  <p>A toy simulation. An agent reads a board spec, proposes test limits, and cannot touch the (virtual) hardware until you approve every limit and the first power-on. If a measurement crosses the approved supply ceiling, the run aborts on the spot.</p>
+</header>
+
+<main>
+  <section>
+    <h2><span class="step">1</span>Board under test (virtual)</h2>
+    <div class="row">
+      <label>Board</label>
+      <select id="board"><option value="motor">Motor controller rev B</option></select>
+    </div>
+    <div class="row">
+      <label>Inject a fault</label>
+      <select id="fault">
+        <option value="none">None (healthy board)</option>
+        <option value="cap">Missing 3V3 bulk capacitor</option>
+        <option value="short">Gate driver partially shorted</option>
+        <option value="term">CAN termination resistor not fitted</option>
+        <option value="all">All three at once</option>
+      </select>
+    </div>
+    <p class="note">Spec the agent reads: input 12 V, 3V3 logic rail, brushed motor driver (stall rated 2.2 A), CAN bus at 500 kbit/s with 120 ohm termination at each end. The agent never sees which fault you injected, only measurements.</p>
+    <div class="row">
+      <button id="propose">Agent: propose test plan</button>
+      <button class="ghost" id="reset">Reset</button>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span>Approve limits</h2>
+    <div id="plan"><p class="note">No plan yet. Click "propose test plan".</p></div>
+    <div class="row" id="supplyRow" hidden>
+      <label>Supply compliance (A)</label>
+      <input type="number" id="comp" value="2.0" step="0.1" min="0.1" max="3">
+      <label>at</label>
+      <input type="number" id="vin" value="12" step="1" min="5" max="24">
+      <label>V</label>
+    </div>
+    <div class="row">
+      <button id="power" disabled>Approve first power-on</button>
+      <button id="run" disabled>Run approved plan</button>
+    </div>
+    <p class="note" id="gatemsg">Run unlocks after every limit is approved and power-on is approved.</p>
+  </section>
+
+  <section class="wide">
+    <h2><span class="step">3</span>Live trace</h2>
+    <canvas id="scope" width="1000" height="200"></canvas>
+    <div class="meter">
+      <span>V: <b id="mv">0.00</b> V</span>
+      <span>I: <b id="mi">0.000</b> A</span>
+      <span>step: <b id="ms">idle</b></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Agent log</h2>
+    <div class="log" id="log"></div>
+  </section>
+  <section>
+    <h2>Result</h2>
+    <div class="sum" id="sum"><p class="note">Nothing run yet.</p></div>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Hilstart (YC S26). Not affiliated with Hilstart. All data here is synthetic and generated in your browser; nothing is sent anywhere.</footer>
+
+<script>
+(function () {
+"use strict";
+const $ = id => document.getElementById(id);
+
+// Seeded noise so every run is repeatable.
+let seed = 7;
+function rnd() {
+  seed = (seed * 1664525 + 1013904223) >>> 0;
+  return seed / 4294967296 - 0.5;
+}
+
+// ---- The virtual board: returns sampled volts/amps for a named probe ----
+function hasFault(k) {
+  const f = $("fault").value;
+  return f === k || f === "all";
+}
+
+function simulate(id, vin) {
+  const N = 120, v = [], i = [];
+  for (let n = 0; n < N; n++) {
+    const t = n / N;
+    let V = 0, I = 0;
+    if (id === "powerup") {
+      // 3V3 rail ramp after input is applied
+      V = 3.3 * (1 - Math.exp(-t / 0.12)) + rnd() * 0.01;
+      I = 0.02 + 0.03 * Math.exp(-t / 0.2) + rnd() * 0.002;
+    } else if (id === "idle") {
+      V = 3.3 + rnd() * 0.01;
+      I = (hasFault("short") ? 0.31 : 0.058) + rnd() * 0.004;
+    } else if (id === "ripple") {
+      const load = t > 0.3 && t < 0.8; // motor PWM turns on mid-capture
+      const amp = load ? (hasFault("cap") ? 0.34 : 0.045) : 0.008;
+      V = 3.3 + amp * Math.sin(n * 1.7) * (0.6 + rnd()) + rnd() * 0.004;
+      I = load ? 0.9 : 0.06;
+      if (load && hasFault("short")) I += 0.4;
+    } else if (id === "stall") {
+      const ramp = Math.min(1, t / 0.25);
+      I = (hasFault("short") ? 2.9 : 1.7) * ramp + rnd() * 0.03;
+      V = vin - 0.18 * I + rnd() * 0.01;
+    } else if (id === "can") {
+      V = hasFault("term") ? 3.3 + rnd() * 0.02 : 1.65 + rnd() * 0.02;
+      I = 0.01;
+    }
+    v.push(V);
+    i.push(I);
+  }
+  return { v, i };
+}
+
+function measure(id, s) {
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  if (id === "powerup") {
+    const f = s.v[s.v.length - 1];
+    const k = s.v.findIndex(x => x >= 0.95 * f);
+    return { val: k / s.v.length * 40, unit: "ms" };
+  }
+  if (id === "idle") return { val: mean(s.i), unit: "A" };
+  if (id === "ripple") {
+    const m = s.v.slice(40, 95);
+    return { val: (Math.max(...m) - Math.min(...m)) * 1000, unit: "mV p-p" };
+  }
+  if (id === "stall") return { val: Math.max(...s.i), unit: "A" };
+  if (id === "can") return { val: hasFault("term") ? 120 : 60, unit: "ohm" };
+}
+
+// ---- Test definitions: the agent proposes, the human approves ----
+const TESTS = [
+  { id: "powerup", name: "3V3 rail power-up time", why: "Spec: logic must be valid before the MCU boots (40 ms budget).", hi: 25, lo: null, unit: "ms" },
+  { id: "idle", name: "Idle current draw", why: "Spec: standby draw under 100 mA with motor disabled.", hi: 0.10, lo: null, unit: "A" },
+  { id: "ripple", name: "3V3 ripple under motor PWM", why: "Spec: logic rail within +/-3% (about 200 mV p-p) while the motor driver switches.", hi: 200, lo: null, unit: "mV p-p" },
+  { id: "stall", name: "Motor stall current", why: "Stall is rated 2.2 A. Held briefly; must stay under the supply compliance.", hi: 2.2, lo: null, unit: "A" },
+  { id: "can", name: "CAN loop resistance", why: "Two 120 ohm terminators in parallel should read about 60 ohm.", hi: 66, lo: 54, unit: "ohm" }
+];
+
+const state = { plan: [], powerOK: false, running: false };
+
+function log(msg, c) {
+  const l = $("log"), d = document.createElement("div");
+  if (c) d.className = c;
+  d.textContent = msg;
+  l.appendChild(d);
+  l.scrollTop = l.scrollHeight;
+}
+
+function tagText(t) {
+  if (t.status === "ok") return "PASS";
+  if (t.status === "bad") return "FAIL";
+  if (t.status === "run") return "RUNNING";
+  return t.approved ? "APPROVED" : "NEEDS APPROVAL";
+}
+
+function renderPlan() {
+  const box = $("plan");
+  box.innerHTML = "";
+  state.plan.forEach((t, ix) => {
+    const d = document.createElement("div");
+    d.className = "chk" + (t.approved ? " appr" : "");
+    const lim = t.lo !== null
+      ? `min <input type="number" step="any" data-k="lo" data-i="${ix}" value="${t.lo}"> max <input type="number" step="any" data-k="hi" data-i="${ix}" value="${t.hi}">`
+      : `max <input type="number" step="any" data-k="hi" data-i="${ix}" value="${t.hi}">`;
+    d.innerHTML =
+      `<div class="t"><span>${t.name}</span><span class="tag ${t.status || ""}">${tagText(t)}</span></div>` +
+      `<div class="why">${t.why}</div>` +
+      `<div class="row">${lim}<label>${t.unit}</label>` +
+      `<button class="ghost" data-a="${ix}">${t.approved ? "Revoke" : "Approve limit"}</button></div>`;
+    box.appendChild(d);
+  });
+  // Editing a limit invalidates every approval made on top of it.
+  box.querySelectorAll("input").forEach(el => el.onchange = () => {
+    const t = state.plan[el.dataset.i];
+    t[el.dataset.k] = parseFloat(el.value);
+    t.approved = false;
+    state.powerOK = false;
+    log("Limit edited on '" + t.name + "': approval cleared.", "a");
+    renderPlan();
+    gate();
+  });
+  box.querySelectorAll("button").forEach(b => b.onclick = () => {
+    const t = state.plan[b.dataset.a];
+    t.approved = !t.approved;
+    if (!t.approved) state.powerOK = false;
+    log((t.approved ? "Human approved: " : "Human revoked: ") + t.name, t.approved ? "g" : "a");
+    renderPlan();
+    gate();
+  });
+  $("supplyRow").hidden = !state.plan.length;
+}
+
+function gate() {
+  const all = state.plan.length > 0 && state.plan.every(t => t.approved);
+  $("power").disabled = !all || state.running;
+  $("power").textContent = state.powerOK ? "First power-on approved" : "Approve first power-on";
+  $("run").disabled = !(all && state.powerOK) || state.running;
+  const pending = state.plan.filter(t => !t.approved).length;
+  $("gatemsg").textContent =
+    !state.plan.length ? "Run unlocks after every limit is approved and power-on is approved."
+    : !all ? "Blocked: " + pending + " limit(s) still need your approval."
+    : !state.powerOK ? "Limits approved. Approve first power-on to unlock the run."
+    : "Unlocked. Supply will trip at " + $("comp").value + " A.";
+}
+
+$("comp").onchange = $("vin").onchange = () => {
+  state.powerOK = false;
+  log("Supply settings changed: power-on approval cleared.", "a");
+  gate();
+};
+
+$("propose").onclick = () => {
+  state.plan = TESTS.map(t => Object.assign({}, t, { approved: false, status: "" }));
+  state.powerOK = false;
+  $("sum").innerHTML = '<p class="note">Nothing run yet.</p>';
+  log("Agent: read spec (12 V in, 3V3 rail, motor driver, CAN 500k). Proposed 5 checks with limits derived from the spec.");
+  log("Agent: I will not energize the board until each limit and first power-on are approved.", "a");
+  renderPlan();
+  gate();
+  draw([], [], "");
+};
+
+$("reset").onclick = () => {
+  state.plan = [];
+  state.powerOK = false;
+  state.running = false;
+  $("plan").innerHTML = '<p class="note">No plan yet. Click "propose test plan".</p>';
+  $("supplyRow").hidden = true;
+  $("log").innerHTML = "";
+  $("sum").innerHTML = '<p class="note">Nothing run yet.</p>';
+  draw([], [], "");
+  gate();
+};
+
+$("power").onclick = () => {
+  state.powerOK = true;
+  log("Human approved first power-on: " + $("vin").value + " V, compliance " + $("comp").value + " A.", "g");
+  gate();
+};
+
+// ---- Scope drawing ----
+function draw(v, i, label, upto) {
+  const c = $("scope"), g = c.getContext("2d"), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  g.strokeStyle = "#1f281c";
+  g.lineWidth = 1;
+  for (let x = 0; x <= 10; x++) { g.beginPath(); g.moveTo(x * W / 10, 0); g.lineTo(x * W / 10, H); g.stroke(); }
+  for (let y = 0; y <= 4; y++) { g.beginPath(); g.moveTo(0, y * H / 4); g.lineTo(W, y * H / 4); g.stroke(); }
+  if (!v.length) return;
+  const n = upto == null ? v.length : upto;
+  const trace = (a, col) => {
+    const lo = Math.min(...a), hi = Math.max(...a), sp = (hi - lo) || 1;
+    g.strokeStyle = col;
+    g.lineWidth = 2;
+    g.beginPath();
+    for (let k = 0; k < n; k++) {
+      const x = k / (a.length - 1) * W;
+      const y = H - 10 - (a[k] - lo) / sp * (H - 30);
+      if (k) g.lineTo(x, y); else g.moveTo(x, y);
+    }
+    g.stroke();
+  };
+  trace(v, "#7fc98a");
+  trace(i, "#d9b44a");
+  g.fillStyle = "#8d9a84";
+  g.font = "12px ui-monospace,monospace";
+  g.fillText(label + "   green=volts  amber=amps (each auto-scaled)", 8, 14);
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ---- The run: the gate is enforced here, not only in the UI ----
+$("run").onclick = async () => {
+  if (state.running || !state.powerOK || !state.plan.every(t => t.approved)) return;
+  state.running = true;
+  gate();
+  seed = 7;
+  const comp = parseFloat($("comp").value), vin = parseFloat($("vin").value);
+  state.plan.forEach(t => t.status = "");
+  renderPlan();
+  log("--- run start: " + vin + " V, trip at " + comp + " A ---", "a");
+  const results = [];
+  let tripped = false;
+  for (const t of state.plan) {
+    t.status = "run";
+    renderPlan();
+    $("ms").textContent = t.name;
+    const s = simulate(t.id, vin);
+    let trip = -1;
+    for (let k = 0; k < s.v.length; k += 4) {
+      draw(s.v, s.i, t.name, k);
+      $("mv").textContent = s.v[k].toFixed(2);
+      $("mi").textContent = s.i[k].toFixed(3);
+      if (s.i[k] > comp) { trip = k; break; }
+      await sleep(16);
+    }
+    if (trip >= 0) {
+      draw(s.v, s.i, t.name + "  [SUPPLY TRIP]", trip);
+      t.status = "bad";
+      tripped = true;
+      log("SUPPLY TRIP during '" + t.name + "': " + s.i[trip].toFixed(2) + " A exceeded the approved " + comp + " A ceiling. Output off.", "e");
+      results.push({ t, trip: true, val: s.i[trip], unit: "A" });
+      break;
+    }
+    draw(s.v, s.i, t.name);
+    const m = measure(t.id, s);
+    const ok = m.val <= t.hi && (t.lo === null || m.val >= t.lo);
+    t.status = ok ? "ok" : "bad";
+    log((ok ? "PASS " : "FAIL ") + t.name + ": " + m.val.toFixed(m.val < 1 ? 3 : 1) + " " + m.unit +
+        " (limit " + (t.lo !== null ? t.lo + " to " : "max ") + t.hi + ")", ok ? "g" : "e");
+    results.push({ t, ok, val: m.val, unit: m.unit });
+    await sleep(250);
+  }
+  $("ms").textContent = "done";
+  state.running = false;
+  renderPlan();
+  gate();
+  summarize(results, tripped);
+};
+
+const DIAG = {
+  idle: "Idle draw is several times the expected 58 mA. Something conducts with the motor off: check the gate driver output stage and any solder bridge near the half-bridge.",
+  ripple: "Rail ripple under PWM is far outside spec. Likely no bulk capacitance near the regulator output: check the 3V3 bulk capacitor footprint for a missing part.",
+  stall: "Stall current is above the rating. Combined with high idle draw, suspect a partial short in the driver rather than the motor.",
+  can: "Loop reads 120 ohm, so only one terminator is present. Fit the second 120 ohm resistor at the far end of the bus.",
+  powerup: "Rail came up too slowly. Check the regulator enable and soft-start settings."
+};
+
+function summarize(res, tripped) {
+  const box = $("sum");
+  box.innerHTML = "";
+  const fails = res.filter(r => !r.ok);
+  if (!fails.length) {
+    box.innerHTML = '<div class="p"><b>All 5 checks passed.</b> Traces and measurements are stored with this run.</div>';
+    return;
+  }
+  res.forEach(r => {
+    const d = document.createElement("div");
+    if (r.ok) {
+      d.className = "p";
+      d.textContent = "PASS - " + r.t.name + " (" + r.val.toFixed(r.val < 1 ? 3 : 1) + " " + r.unit + ")";
+    } else {
+      d.className = "f";
+      d.innerHTML = "<b>" + (r.trip ? "TRIPPED" : "FAIL") + " - " + r.t.name + "</b><br>" +
+        (r.trip ? "Current crossed your approved supply ceiling, so the agent cut power before any more damage. " : "") +
+        DIAG[r.t.id];
+    }
+    box.appendChild(d);
+  });
+  if (tripped) {
+    const d = document.createElement("div");
+    d.className = "note";
+    d.textContent = "Remaining checks were not run. Raise the compliance only if you decide the board can take it, then re-approve power-on.";
+    box.appendChild(d);
+  }
+  log("Agent: " + fails.length + " failing check(s). Diagnosis written to Result.", "a");
+}
+
+draw([], [], "");
+log("Ready. Pick a fault (or none), then ask the agent for a plan.");
+})();
+</script>
+</body>
+</html>

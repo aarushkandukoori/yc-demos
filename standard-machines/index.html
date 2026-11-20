@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Placement Gym - a toy chip-design environment</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--line:#2a2f3a;--tx:#e6e8ee;--mute:#8b93a5;--a:#7dd3a8;--b:#f2b36b;--c:#6aa9ff;--bad:#ef6b73}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:22px 28px 6px;max-width:1100px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:.2px}
+header p{margin:0;color:var(--mute);max-width:760px}
+main{max-width:1100px;margin:14px auto;padding:0 28px;display:grid;grid-template-columns:minmax(300px,560px) 1fr;gap:20px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute);margin:0 0 10px;font-weight:600}
+canvas{display:block;width:100%;border-radius:6px;background:#0b0d11;touch-action:none}
+#board{cursor:grab;aspect-ratio:1/1}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 0}
+button,select{background:#222733;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--a)}
+button.primary{background:var(--a);color:#0c1a13;border-color:var(--a);font-weight:600}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+label{color:var(--mute);font-size:13px}
+input[type=range]{accent-color:var(--a);vertical-align:middle}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:#0f1218;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.8px}
+.good{color:var(--a)}.warn{color:var(--b)}
+#log{height:150px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mute);background:#0b0d11;border-radius:6px;padding:8px}
+#log div b{color:var(--tx);font-weight:500}
+.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--mute);font-size:12px;margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.side{display:flex;flex-direction:column;gap:20px}
+footer{max-width:1100px;margin:10px auto 30px;padding:14px 28px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Placement Gym</h1>
+  <p>A toy chip-design environment. Standard cells sit on a grid, wires connect them, and a reward says how good the layout is. Drag cells by hand, or let an agent search. Every number below is computed live in your browser.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Floorplan (16 x 16 sites)</h2>
+    <canvas id="board" width="640" height="640" aria-label="Chip floorplan: drag cells to move them"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--c)"></i>movable cell</span>
+      <span><i style="background:var(--b)"></i>fixed I/O pin</span>
+      <span><i style="background:rgba(239,107,115,.55)"></i>congested region</span>
+      <span>drag a cell to an empty site (swap if occupied)</span>
+    </div>
+    <div class="row">
+      <button class="primary" id="run">Run agent</button>
+      <button id="step">Step x200</button>
+      <button id="scramble">Scramble</button>
+      <button id="newnl">New netlist</button>
+    </div>
+    <div class="row">
+      <label>Policy
+        <select id="policy">
+          <option value="anneal">Simulated annealing</option>
+          <option value="greedy">Greedy hill-climb</option>
+          <option value="random">Random moves</option>
+        </select>
+      </label>
+      <label>Congestion weight <input id="cw" type="range" min="0" max="10" value="3"> <span id="cwv">3</span></label>
+    </div>
+  </section>
+
+  <div class="side">
+    <section class="card">
+      <h2>Environment readout</h2>
+      <div class="stats">
+        <div class="stat"><b id="sWL">-</b><span>Wirelength</span></div>
+        <div class="stat"><b id="sCG">-</b><span>Congestion</span></div>
+        <div class="stat"><b id="sRW">-</b><span>Reward</span></div>
+        <div class="stat"><b id="sBest">-</b><span>Best reward</span></div>
+      </div>
+      <div class="row" style="margin-top:10px"><span id="sMeta" style="color:var(--mute);font-size:12.5px"></span></div>
+    </section>
+    <section class="card">
+      <h2>Reward over steps</h2>
+      <canvas id="plot" width="640" height="220" style="aspect-ratio:640/220"></canvas>
+    </section>
+    <section class="card">
+      <h2>Episode log</h2>
+      <div id="log"></div>
+    </section>
+    <section class="card">
+      <h2>How it works</h2>
+      <p style="margin:0;color:var(--mute);font-size:13px">State is the cell positions. An action moves one cell (or swaps two). Wirelength is half-perimeter of each net's bounding box. Congestion counts how many net boxes overlap each 4x4 region beyond a capacity of 6. Reward = -(wirelength + weight x congestion). Annealing accepts worse moves with probability exp(delta / T) while T cools, so it can escape local minima that greedy gets stuck in. Try the three policies from the same scramble.</p>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Standard Machines (YC S26). Not affiliated with Standard Machines.</footer>
+
+<script>
+(function(){
+"use strict";
+const N=16, CELL=40, NCELLS=40, NPINS=8, NNETS=46, BIN=4, CAP=6;
+const $=id=>document.getElementById(id);
+const board=$("board"), bx=board.getContext("2d");
+const plot=$("plot"), px=plot.getContext("2d");
+
+// seeded PRNG so netlists are reproducible
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let seed=7, rnd=mulberry(seed);
+
+let cells=[], nets=[], grid=[], running=false, step=0, hist=[], best=-Infinity, bestPos=null, T=1.0, dragging=-1, raf=0;
+
+function makeNetlist(){
+  rnd=mulberry(seed);
+  cells=[]; nets=[];
+  // fixed pins on the border
+  for(let i=0;i<NPINS;i++){
+    const side=i%4, t=Math.floor(1+rnd()*(N-2));
+    const p=[[t,0],[N-1,t],[t,N-1],[0,t]][side];
+    cells.push({x:p[0],y:p[1],fixed:true});
+  }
+  for(let i=0;i<NCELLS;i++)cells.push({x:0,y:0,fixed:false});
+  // nets with locality: pick an anchor id and neighbours by index (like a real design's hierarchy)
+  const total=cells.length;
+  for(let n=0;n<NNETS;n++){
+    const k=2+Math.floor(rnd()*3), a=Math.floor(rnd()*total), pins=new Set([a]);
+    while(pins.size<k){pins.add((a+1+Math.floor(rnd()*7))%total)}
+    nets.push([...pins]);
+  }
+  // keep pin positions unique, then scatter movable cells
+  scramble();
+}
+function scramble(){
+  grid=Array.from({length:N},()=>Array(N).fill(-1));
+  cells.forEach((c,i)=>{if(c.fixed){while(grid[c.y][c.x]>=0){c.x=(c.x+1)%N}grid[c.y][c.x]=i}});
+  cells.forEach((c,i)=>{if(!c.fixed){let x,y;do{x=1+Math.floor(rnd()*(N-2));y=1+Math.floor(rnd()*(N-2))}while(grid[y][x]>=0);c.x=x;c.y=y;grid[y][x]=i}});
+  resetEpisode();
+}
+function resetEpisode(){
+  step=0;hist=[];best=-Infinity;T=1.0;
+  const r=evaluate();record(r);
+  log("episode reset. initial reward <b>"+r.reward.toFixed(1)+"</b>");
+  draw();
+}
+
+// ---- environment: cost model ----
+function evaluate(){
+  const w=+$("cw").value, nb=N/BIN, bins=new Float32Array(nb*nb);
+  let wl=0;
+  for(const net of nets){
+    let x0=99,x1=-1,y0=99,y1=-1;
+    for(const id of net){const c=cells[id];if(c.x<x0)x0=c.x;if(c.x>x1)x1=c.x;if(c.y<y0)y0=c.y;if(c.y>y1)y1=c.y}
+    wl+=(x1-x0)+(y1-y0);
+    const w2=Math.max(1,x1-x0+1), h2=Math.max(1,y1-y0+1);
+    // spread each net's demand evenly across the bins its box covers
+    const bx0=Math.floor(x0/BIN),bx1=Math.floor(x1/BIN),by0=Math.floor(y0/BIN),by1=Math.floor(y1/BIN);
+    const cnt=(bx1-bx0+1)*(by1-by0+1);
+    for(let by=by0;by<=by1;by++)for(let bxx=bx0;bxx<=bx1;bxx++)bins[by*nb+bxx]+=1;
+  }
+  let cg=0;for(let i=0;i<bins.length;i++)cg+=Math.max(0,bins[i]-CAP);
+  return {wl,cg,bins,reward:-(wl+w*cg)};
+}
+function record(r){
+  if(r.reward>best){best=r.reward;bestPos=cells.map(c=>[c.x,c.y])}
+  hist.push(r.reward);
+  if(hist.length>600)hist.shift();
+  $("sWL").textContent=r.wl;
+  $("sCG").textContent=r.cg;
+  $("sRW").textContent=r.reward.toFixed(1);
+  $("sBest").textContent=best.toFixed(1);
+  $("sBest").className=r.reward>=best?"good":"";
+  $("sMeta").textContent="step "+step+"  |  temperature "+T.toFixed(3)+"  |  "+cells.length+" cells, "+nets.length+" nets";
+}
+
+// ---- agent ----
+function propose(){
+  // pick movable cell, target site; swap if occupied (fixed pins can't move)
+  const mv=[];for(let i=NPINS;i<cells.length;i++)mv.push(i);
+  const a=mv[Math.floor(Math.random()*mv.length)], c=cells[a];
+  let tx,ty;
+  const local=Math.random()<0.7;
+  if(local){tx=c.x+Math.floor(Math.random()*5)-2;ty=c.y+Math.floor(Math.random()*5)-2}
+  else{tx=Math.floor(Math.random()*N);ty=Math.floor(Math.random()*N)}
+  tx=Math.max(0,Math.min(N-1,tx));ty=Math.max(0,Math.min(N-1,ty));
+  const o=grid[ty][tx];
+  if(o>=0&&cells[o].fixed)return null;
+  if(o===a)return null;
+  return {a,o,fx:c.x,fy:c.y,tx,ty};
+}
+function apply(m){
+  const c=cells[m.a];grid[m.fy][m.fx]=-1;
+  if(m.o>=0){const d=cells[m.o];d.x=m.fx;d.y=m.fy;grid[m.fy][m.fx]=m.o}
+  c.x=m.tx;c.y=m.ty;grid[m.ty][m.tx]=m.a;
+}
+function undo(m){
+  const c=cells[m.a];grid[m.ty][m.tx]=-1;
+  if(m.o>=0){const d=cells[m.o];d.x=m.tx;d.y=m.ty;grid[m.ty][m.tx]=m.o}
+  c.x=m.fx;c.y=m.fy;grid[m.fy][m.fx]=m.a;
+}
+let cur=null;
+function agentSteps(k){
+  const pol=$("policy").value;
+  if(!cur)cur=evaluate();
+  for(let i=0;i<k;i++){
+    const m=propose();if(!m)continue;
+    apply(m);
+    const r=evaluate(), d=r.reward-cur.reward;
+    let ok=d>=0;
+    if(pol==="random")ok=true;
+    else if(pol==="anneal")ok=d>=0||Math.random()<Math.exp(d/Math.max(T,1e-4)*1.0);
+    if(ok)cur=r;else undo(m);
+    step++;
+    if(pol==="anneal")T=Math.max(0.02,T*0.9985);
+    if(cur.reward>best){best=cur.reward;bestPos=cells.map(c=>[c.x,c.y])}
+    if(step%5===0)hist.push(cur.reward);
+  }
+  if(hist.length>600)hist.splice(0,hist.length-600);
+  const r=cur;
+  $("sWL").textContent=r.wl;$("sCG").textContent=r.cg;$("sRW").textContent=r.reward.toFixed(1);
+  $("sBest").textContent=best.toFixed(1);$("sBest").className=r.reward>=best?"good":"";
+  $("sMeta").textContent="step "+step+"  |  temperature "+(pol==="anneal"?T.toFixed(3):"n/a")+"  |  "+cells.length+" cells, "+nets.length+" nets";
+}
+function loop(){
+  if(!running)return;
+  agentSteps(40);draw();
+  if(step%800<40)log("step "+step+": reward <b>"+cur.reward.toFixed(1)+"</b>, best "+best.toFixed(1));
+  if(step>=12000){stop();log("budget reached (12000 steps). final reward <b>"+cur.reward.toFixed(1)+"</b>, best <b>"+best.toFixed(1)+"</b>");return}
+  raf=requestAnimationFrame(loop);
+}
+function stop(){running=false;cancelAnimationFrame(raf);$("run").textContent="Run agent"}
+
+// ---- drawing ----
+function draw(){
+  const r=cur&&!dragging<0?cur:evaluate(), W=board.width, S=W/N;
+  const e=evaluate();
+  bx.clearRect(0,0,W,W);
+  // congestion bins
+  const nb=N/BIN;
+  for(let by=0;by<nb;by++)for(let x=0;x<nb;x++){
+    const over=Math.max(0,e.bins[by*nb+x]-CAP);
+    if(over>0){bx.fillStyle="rgba(239,107,115,"+Math.min(.5,.12+over*.06)+")";bx.fillRect(x*BIN*S,by*BIN*S,BIN*S,BIN*S)}
+  }
+  // grid
+  bx.strokeStyle="#181c24";bx.lineWidth=1;
+  for(let i=0;i<=N;i++){bx.beginPath();bx.moveTo(i*S,0);bx.lineTo(i*S,W);bx.moveTo(0,i*S);bx.lineTo(W,i*S);bx.stroke()}
+  bx.strokeStyle="#262c38";
+  for(let i=0;i<=nb;i++){bx.beginPath();bx.moveTo(i*BIN*S,0);bx.lineTo(i*BIN*S,W);bx.moveTo(0,i*BIN*S);bx.lineTo(W,i*BIN*S);bx.stroke()}
+  // nets as star wires to centroid
+  bx.lineWidth=1.2;
+  nets.forEach((net,ni)=>{
+    let cx=0,cy=0;for(const id of net){cx+=cells[id].x;cy+=cells[id].y}
+    cx=cx/net.length;cy=cy/net.length;
+    bx.strokeStyle="hsla("+((ni*47)%360)+",60%,62%,.38)";
+    bx.beginPath();
+    for(const id of net){const c=cells[id];bx.moveTo((c.x+.5)*S,(c.y+.5)*S);bx.lineTo((cx+.5)*S,(cy+.5)*S)}
+    bx.stroke();
+  });
+  // cells
+  cells.forEach((c,i)=>{
+    const x=c.x*S+4,y=c.y*S+4,s=S-8;
+    bx.fillStyle=c.fixed?"#f2b36b":"#6aa9ff";
+    bx.globalAlpha=i===dragging?.7:1;
+    bx.fillRect(x,y,s,s);bx.globalAlpha=1;
+    bx.fillStyle="#0b0d11";bx.font="bold 11px ui-monospace,Menlo,monospace";bx.textAlign="center";bx.textBaseline="middle";
+    bx.fillText(c.fixed?"IO":i-NPINS,x+s/2,y+s/2+1);
+  });
+  drawPlot();
+}
+function drawPlot(){
+  const W=plot.width,H=plot.height;px.clearRect(0,0,W,H);
+  px.strokeStyle="#262c38";px.lineWidth=1;
+  for(let i=1;i<4;i++){px.beginPath();px.moveTo(0,H*i/4);px.lineTo(W,H*i/4);px.stroke()}
+  if(hist.length<2)return;
+  let lo=Math.min(...hist),hi=Math.max(...hist);if(hi-lo<1){hi+=1;lo-=1}
+  px.strokeStyle="#7dd3a8";px.lineWidth=2;px.beginPath();
+  hist.forEach((v,i)=>{const x=i/(hist.length-1)*(W-10)+5,y=H-8-(v-lo)/(hi-lo)*(H-20);i?px.lineTo(x,y):px.moveTo(x,y)});
+  px.stroke();
+  px.fillStyle="#8b93a5";px.font="11px ui-monospace,Menlo,monospace";px.textAlign="left";px.textBaseline="top";
+  px.fillText(hi.toFixed(0),6,2);px.textBaseline="bottom";px.fillText(lo.toFixed(0),6,H-2);
+}
+function log(s){const l=$("log"),d=document.createElement("div");d.innerHTML=s;l.appendChild(d);l.scrollTop=l.scrollHeight;while(l.childNodes.length>60)l.removeChild(l.firstChild)}
+
+// ---- manual dragging ----
+function site(ev){
+  const r=board.getBoundingClientRect(),p=ev.touches?ev.touches[0]:ev;
+  return [Math.max(0,Math.min(N-1,Math.floor((p.clientX-r.left)/r.width*N))),Math.max(0,Math.min(N-1,Math.floor((p.clientY-r.top)/r.height*N)))];
+}
+board.addEventListener("pointerdown",e=>{
+  const [x,y]=site(e),id=grid[y][x];
+  if(id>=0&&!cells[id].fixed){dragging=id;board.setPointerCapture(e.pointerId);board.style.cursor="grabbing";if(running)stop()}
+});
+board.addEventListener("pointermove",e=>{
+  if(dragging<0)return;
+  const [x,y]=site(e),c=cells[dragging];
+  if(x===c.x&&y===c.y)return;
+  const o=grid[y][x];
+  if(o>=0&&cells[o].fixed)return;
+  apply({a:dragging,o:o,fx:c.x,fy:c.y,tx:x,ty:y});
+  cur=evaluate();draw();
+});
+board.addEventListener("pointerup",()=>{
+  if(dragging<0)return;
+  dragging=-1;board.style.cursor="grab";
+  step++;cur=evaluate();
+  if(cur.reward>best){best=cur.reward;bestPos=cells.map(c=>[c.x,c.y])}
+  hist.push(cur.reward);record(cur);
+  log("manual move. reward <b>"+cur.reward.toFixed(1)+"</b>");draw();
+});
+
+// ---- controls ----
+$("run").onclick=()=>{
+  if(running){stop();return}
+  running=true;$("run").textContent="Pause";
+  log("agent started: <b>"+$("policy").selectedOptions[0].text+"</b>");
+  loop();
+};
+$("step").onclick=()=>{agentSteps(200);record(cur);draw()};
+$("scramble").onclick=()=>{stop();rnd=mulberry(Date.now()&0xffff);scramble();cur=null;cur=evaluate()};
+$("newnl").onclick=()=>{stop();seed=Math.floor(Math.random()*1e6);makeNetlist();cur=evaluate();log("new netlist, seed "+seed)};
+$("policy").onchange=()=>{T=1.0;log("policy: <b>"+$("policy").selectedOptions[0].text+"</b>")};
+$("cw").oninput=()=>{$("cwv").textContent=$("cw").value;cur=evaluate();best=cur.reward;bestPos=cells.map(c=>[c.x,c.y]);hist=[cur.reward];record(cur);draw()};
+
+makeNetlist();cur=evaluate();draw();
+})();
+</script>
+</body>
+</html>
