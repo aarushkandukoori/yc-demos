@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etch-a-Model: fetch the weights vs. wire them in</title>
+<style>
+:root{--bg:#f4efe4;--ink:#1d2a24;--mut:#6d7468;--line:#d8d0bd;--card:#fbf8f1;--amber:#c8801a;--moss:#2f6b4f;--rust:#b4472b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:28px 24px 8px;max-width:1100px;margin:0 auto}
+h1{margin:0 0 4px;font-size:26px;letter-spacing:-.02em}
+h1 span{color:var(--amber)}
+header p{margin:0;color:var(--mut);max-width:760px}
+main{max-width:1100px;margin:0 auto;padding:12px 24px 24px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-bottom:4px}
+select,input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--amber)}
+button{font:inherit;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:9px 14px;border-radius:6px}
+button.alt{background:transparent;color:var(--ink)}
+button:hover{opacity:.88}
+button:disabled{opacity:.45;cursor:default}
+.engines{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.engines,.lower{grid-template-columns:1fr!important}}
+.eng h2{margin:0;font-size:16px;display:flex;justify-content:space-between;align-items:baseline}
+.tag{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
+.t-gen{color:var(--rust)}.t-hw{color:var(--moss)}
+canvas{width:100%;display:block;border-radius:6px;background:#f0e9d8;border:1px solid var(--line);margin:10px 0}
+.out{min-height:74px;font:14px/1.6 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid var(--line);border-radius:6px;padding:10px;word-wrap:break-word}
+.out .p{color:var(--mut)}
+.out .cur{display:inline-block;width:7px;height:14px;background:var(--amber);vertical-align:-2px;animation:b 1s steps(2) infinite}
+@keyframes b{50%{opacity:0}}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.stat{border-top:2px solid var(--line);padding-top:6px}
+.stat b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+.stat small{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.verdict{display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.big{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.pill{padding:4px 10px;border-radius:99px;font-size:13px;border:1px solid}
+.ok{color:var(--moss)}.bad{color:var(--rust)}
+.lower{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+pre{margin:0;max-height:260px;overflow:auto;background:#1d2a24;color:#e9e2cf;border-radius:6px;padding:12px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace}
+pre .k{color:#e9b866}pre .n{color:#9fd3b6}
+.bars div{display:grid;grid-template-columns:90px 1fr 50px;gap:8px;align-items:center;font-size:13px;margin:3px 0}
+.bars i{display:block;height:10px;background:var(--amber);border-radius:2px;transition:width .2s}
+.hint{color:var(--mut);font-size:13px;margin:6px 0 0}
+#toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .25s;font-size:14px;max-width:90vw}
+#toast.on{opacity:1}
+footer{max-width:1100px;margin:0 auto;padding:12px 24px 36px;color:var(--mut);font-size:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Etch-a-<span>Model</span></h1>
+  <p>A toy of one idea: a normal chip <em>fetches</em> a model's weights from memory for every token, a hardwired chip has them <em>etched into its wiring</em>. Both below run the same tiny language model. Generate some text and watch what each one has to move.</p>
+</header>
+
+<main>
+  <section class="card controls">
+    <div><label for="tape">Tape-out (which model gets etched)</label>
+      <select id="tape"></select></div>
+    <div><label for="prompt">Prompt (last word is the context)</label>
+      <input type="text" id="prompt" value="the" autocomplete="off"></div>
+    <div><label for="len">Tokens: <span id="lenv">24</span></label>
+      <input type="range" id="len" min="8" max="60" value="24"></div>
+    <div><label for="temp">Temperature: <span id="tempv">0.8</span></label>
+      <input type="range" id="temp" min="2" max="20" value="8"></div>
+    <div><label for="seed">Seed</label>
+      <input type="text" id="seed" value="7"></div>
+    <div style="display:flex;gap:8px"><button id="go">Generate</button><button id="reset" class="alt" title="Restore the weights in DRAM to the etched values">Reset DRAM</button></div>
+  </section>
+
+  <section class="engines">
+    <div class="card eng">
+      <h2>Programmable core <span class="tag t-gen">weights in DRAM</span></h2>
+      <canvas id="cg" width="520" height="150"></canvas>
+      <div class="out" id="og"></div>
+      <div class="stats">
+        <div class="stat"><b id="g-tps">-</b><small>tokens / s</small></div>
+        <div class="stat"><b id="g-bytes">-</b><small>bytes fetched / token</small></div>
+        <div class="stat"><b id="g-pj">-</b><small>nJ / token</small></div>
+      </div>
+    </div>
+    <div class="card eng">
+      <h2>Hardwired core <span class="tag t-hw">weights in the wiring</span></h2>
+      <canvas id="ch" width="520" height="150"></canvas>
+      <div class="out" id="oh"></div>
+      <div class="stats">
+        <div class="stat"><b id="h-tps">-</b><small>tokens / s</small></div>
+        <div class="stat"><b id="h-bytes">0</b><small>bytes fetched / token</small></div>
+        <div class="stat"><b id="h-pj">-</b><small>nJ / token</small></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card verdict">
+    <div><span class="big" id="spd">-</span> <span class="hint">faster</span> &nbsp; <span class="big" id="en">-</span> <span class="hint">less energy</span></div>
+    <div id="match" class="pill">press Generate</div>
+  </section>
+
+  <section class="lower">
+    <div class="card">
+      <h2 style="margin:0 0 6px;font-size:16px">Weight matrix (4-bit): click a cell to corrupt DRAM</h2>
+      <canvas id="hm" width="520" height="300" style="cursor:crosshair"></canvas>
+      <p class="hint" id="cell">Rows are the current word, columns the next word. Brighter means more likely. Click a cell: the programmable core's copy changes at once. The hardwired core cannot be edited, it needs a new tape-out.</p>
+      <div style="margin-top:8px"><button id="respin" class="alt">Re-spin the hardwired chip with current DRAM</button></div>
+      <p class="hint" id="respinmsg"></p>
+    </div>
+    <div class="card">
+      <h2 style="margin:0 0 6px;font-size:16px">Compiled "netlist" for the hardwired core</h2>
+      <pre id="code"></pre>
+      <h2 style="margin:14px 0 6px;font-size:16px">Next-word odds at the last step</h2>
+      <div class="bars" id="bars"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 style="margin:0 0 6px;font-size:16px">What is real here, what is made up</h2>
+    <p class="hint" style="margin:0">Real: both cores run the same 4-bit word-pair model built from a small made-up corpus in your browser, and with the same seed they produce identical text. The hardwired core is genuinely compiled from the weights into a function made only of constants. Made up: the energy and speed numbers come from a toy cost model (illustrative figures: a 32-byte DRAM burst costs 3.2 nJ and 8 cycles, a fixed constant multiply costs a tenth of a programmable one). The trade-off is real too: etched weights are fast and cheap but frozen.</p>
+  </section>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Lamb Labs (YC S26). Not affiliated with Lamb Labs.</footer>
+<div id="toast"></div>
+
+<script>
+"use strict";
+// ---------- synthetic corpora (one per "tape-out") ----------
+const CORPORA = {
+  "Harbor weather reports": "the morning fog sits low over the harbor . the wind turns north by noon . the tide comes in slow and the boats rock at the dock . the evening sky turns red over the water . the fog lifts by noon and the wind drops . the boats sail out with the tide . the harbor is calm at night . the wind brings rain from the north . the rain falls on the dock and the boats . the morning sky is clear over the water .",
+  "Soup recipes": "chop the onion and add it to the pot . add the salt and stir the soup slowly . the soup simmers for ten minutes . chop the carrot and add it to the soup . stir the pot and add the pepper . the onion turns soft and sweet . add the water and let the pot simmer . taste the soup and add the salt . the carrot turns soft in the pot . stir the soup and serve it hot .",
+  "Chip bring-up logs": "the board powers on and the clock locks . the test passes on the first run . the clock drifts and the test fails . the engineer checks the clock and the board powers off . the board runs hot under the test . the engineer adds a fan and the test passes . the clock locks and the board runs the test again . the test fails at the last step . the engineer reads the log and the board powers on ."
+};
+const DRAM_BURST = 32, E_BURST = 3.2, CYC_BURST = 8; // nJ, cycles (toy numbers)
+const E_MAC = 0.0010, E_CONST = 0.0001;             // nJ per multiply, programmable vs constant
+const CLOCK = 1e9;
+
+// ---------- model build: counts -> log-odds -> 4-bit ----------
+function buildModel(text) {
+  const toks = text.split(/\s+/);
+  const vocab = [...new Set(toks)];
+  const idx = Object.fromEntries(vocab.map((w, i) => [w, i]));
+  const V = vocab.length, cnt = new Float64Array(V * V);
+  for (let i = 0; i + 1 < toks.length; i++) cnt[idx[toks[i]] * V + idx[toks[i + 1]]]++;
+  let lo = Infinity, hi = -Infinity; const lg = new Float64Array(V * V);
+  for (let i = 0; i < V * V; i++) { lg[i] = Math.log(cnt[i] + 0.15); lo = Math.min(lo, lg[i]); hi = Math.max(hi, lg[i]); }
+  const q = new Uint8Array(V * V);
+  for (let i = 0; i < V * V; i++) q[i] = Math.round(15 * (lg[i] - lo) / (hi - lo));
+  return { vocab, idx, V, q, lo, step: (hi - lo) / 15 };
+}
+function packNibbles(q) { // what lives in DRAM: two weights per byte
+  const b = new Uint8Array(Math.ceil(q.length / 2));
+  for (let i = 0; i < q.length; i++) b[i >> 1] |= (q[i] & 15) << ((i & 1) * 4);
+  return b;
+}
+
+// ---------- engine A: programmable core, fetches weights every token ----------
+function makeProgrammable(M, dram) {
+  return {
+    name: "prog",
+    step(t) {
+      const logits = new Float64Array(M.V), start = t * M.V;
+      const firstByte = start >> 1, lastByte = (start + M.V - 1) >> 1;
+      const bursts = Math.floor(lastByte / DRAM_BURST) - Math.floor(firstByte / DRAM_BURST) + 1;
+      for (let j = 0; j < M.V; j++) {
+        const i = start + j, w = (dram[i >> 1] >> ((i & 1) * 4)) & 15; // fetch + unpack
+        logits[j] = M.lo + w * M.step;
+      }
+      return { logits, bytes: bursts * DRAM_BURST,
+               cycles: bursts * CYC_BURST + Math.ceil(M.V / 16),
+               nj: bursts * E_BURST + M.V * E_MAC };
+    }
+  };
+}
+
+// ---------- engine B: hardwired core, weights are literals in generated code ----------
+function compileHardwired(M, q) {
+  let src = "switch (t) {\n";
+  for (let r = 0; r < M.V; r++) {
+    src += "  case " + r + ": return [" + Array.from(q.subarray(r * M.V, (r + 1) * M.V)).join(",") + "];\n";
+  }
+  src += "}";
+  const rows = new Function("t", src); // weights become constants in the function body
+  const lo = M.lo, st = M.step, V = M.V;
+  return {
+    src,
+    engine: {
+      name: "hw",
+      step(t) {
+        const w = rows(t), logits = new Float64Array(V);
+        for (let j = 0; j < V; j++) logits[j] = lo + w[j] * st;
+        return { logits, bytes: 0, cycles: 1 + Math.ceil(V / 64), nj: V * E_CONST };
+      }
+    }
+  };
+}
+
+// ---------- sampling (shared, so both cores see the same dice) ----------
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function softmax(l, T) { let m = -Infinity; for (const x of l) m = Math.max(m, x); const e = Array.from(l, x => Math.exp((x - m) / T)); const s = e.reduce((a, b) => a + b, 0); return e.map(x => x / s); }
+function sample(p, r) { let c = 0; for (let i = 0; i < p.length; i++) { c += p[i]; if (r < c) return i; } return p.length - 1; }
+
+function run(engine, M, start, n, T, seed) {
+  const rnd = mulberry32(seed), out = [], tot = { bytes: 0, cycles: 0, nj: 0 };
+  let t = start, lastP = null;
+  for (let i = 0; i < n; i++) {
+    const s = engine.step(t);
+    tot.bytes += s.bytes; tot.cycles += s.cycles; tot.nj += s.nj;
+    lastP = softmax(s.logits, T);
+    t = sample(lastP, rnd()); out.push(t);
+  }
+  return { out, tot, n, lastP };
+}
+
+// ---------- app state ----------
+const $ = id => document.getElementById(id);
+let M, dram, hw, timers = [], particles = { g: [], h: [] }, lastRun = null;
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 2600); }
+
+function tapeOut(name) {
+  M = buildModel(CORPORA[name]);
+  dram = packNibbles(M.q);
+  hw = compileHardwired(M, M.q);
+  const lines = hw.src.split("\n").slice(0, 7).map(l => l.replace(/^(\s*)(case|switch|return)/, "$1<span class='k'>$2</span>").replace(/\b(\d+)\b/g, "<span class='n'>$1</span>"));
+  $("code").innerHTML = "<span class='k'>function</span> mpu_step(t) {\n" + lines.join("\n") + "\n  ... " + (M.V - 6) + " more rows of constants\n}\n\n// " + M.V * M.V + " weights x 4 bit = " + Math.ceil(M.V * M.V / 2) + " bytes,\n// now wire patterns instead of memory reads.";
+  drawHeat(); resetOutputs();
+}
+function resetOutputs() { $("og").textContent = $("oh").textContent = ""; for (const id of ["g-tps", "g-bytes", "g-pj", "h-tps", "h-pj"]) $(id).textContent = "-"; $("h-bytes").textContent = "0"; $("spd").textContent = $("en").textContent = "-"; setMatch(null); $("bars").innerHTML = ""; }
+function setMatch(same) { const m = $("match"); m.className = "pill " + (same === null ? "" : same ? "ok" : "bad"); m.textContent = same === null ? "press Generate" : same ? "identical text from both cores" : "texts differ: DRAM no longer matches the etched weights"; }
+
+// ---------- heatmap ----------
+function drawHeat() {
+  const c = $("hm"), x = c.getContext("2d"), V = M.V, s = Math.floor(Math.min(c.width, c.height) / V);
+  x.clearRect(0, 0, c.width, c.height);
+  for (let r = 0; r < V; r++) for (let j = 0; j < V; j++) {
+    const i = r * V + j, w = (dram[i >> 1] >> ((i & 1) * 4)) & 15, e = M.q[i];
+    x.fillStyle = `rgb(${244 - w * 10},${239 - w * 6},${228 - w * 12})`; x.fillRect(j * s, r * s, s - 1, s - 1);
+    if (w !== e) { x.strokeStyle = "#b4472b"; x.lineWidth = 2; x.strokeRect(j * s + 1, r * s + 1, s - 3, s - 3); }
+  }
+  c.dataset.s = s;
+}
+$("hm").addEventListener("click", ev => {
+  const c = $("hm"), b = c.getBoundingClientRect(), s = +c.dataset.s;
+  const j = Math.floor((ev.clientX - b.left) * (c.width / b.width) / s), r = Math.floor((ev.clientY - b.top) * (c.height / b.height) / s);
+  if (r < 0 || j < 0 || r >= M.V || j >= M.V) return;
+  const i = r * M.V + j, w = (dram[i >> 1] >> ((i & 1) * 4)) & 15, nw = (w + 6) & 15;
+  dram[i >> 1] = (dram[i >> 1] & ~(15 << ((i & 1) * 4))) | (nw << ((i & 1) * 4));
+  $("cell").textContent = `DRAM cell "${M.vocab[r]}" -> "${M.vocab[j]}": weight ${w} became ${nw}. The hardwired core still holds ${M.q[i]}, it is etched.`;
+  drawHeat(); toast("DRAM changed in one write. Etched weights cannot do that.");
+});
+$("reset").onclick = () => { dram = packNibbles(M.q); drawHeat(); toast("DRAM restored to the etched values"); };
+$("respin").onclick = () => {
+  const cur = new Uint8Array(M.V * M.V); let diff = 0;
+  for (let i = 0; i < cur.length; i++) { cur[i] = (dram[i >> 1] >> ((i & 1) * 4)) & 15; if (cur[i] !== M.q[i]) diff++; }
+  M.q = cur; hw = compileHardwired(M, cur);
+  $("respinmsg").textContent = diff ? `Re-spun with ${diff} changed weight${diff > 1 ? "s" : ""}. In real life that is a new mask set and months, here it took a few milliseconds.` : "Nothing differs from the etched chip, no re-spin needed.";
+  drawHeat();
+};
+
+// ---------- generate + animate ----------
+function emitInto(el, prompt, ids, interval) {
+  const sp = document.createElement("span"); sp.className = "p"; sp.textContent = prompt + " ";
+  const body = document.createElement("span"), cur = document.createElement("span"); cur.className = "cur";
+  el.textContent = ""; el.append(sp, body, cur);
+  let i = 0; const h = setInterval(() => {
+    if (i >= ids.length) { clearInterval(h); cur.remove(); return; }
+    body.textContent += M.vocab[ids[i++]] + " ";
+  }, interval);
+  timers.push(h);
+}
+function fmt(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : n.toFixed(0); }
+
+$("go").onclick = () => {
+  timers.forEach(clearInterval); timers = [];
+  const words = $("prompt").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const last = words.length ? words[words.length - 1] : ".";
+  const start = last in M.idx ? M.idx[last] : M.idx["."];
+  if (!(last in M.idx)) toast(`"${last}" is not in this chip's vocabulary, starting from a full stop`);
+  const n = +$("len").value, T = +$("temp").value / 10, seed = parseInt($("seed").value, 10) || 1;
+  const a = run(makeProgrammable(M, dram), M, start, n, T, seed), b = run(hw.engine, M, start, n, T, seed);
+  lastRun = { a, b };
+  const tpsA = CLOCK / (a.tot.cycles / n), tpsB = CLOCK / (b.tot.cycles / n);
+  $("g-tps").textContent = fmt(tpsA); $("h-tps").textContent = fmt(tpsB);
+  $("g-bytes").textContent = fmt(a.tot.bytes / n); $("h-bytes").textContent = "0";
+  $("g-pj").textContent = (a.tot.nj / n).toFixed(2); $("h-pj").textContent = (b.tot.nj / n).toFixed(3);
+  $("spd").textContent = (tpsB / tpsA).toFixed(1) + "x"; $("en").textContent = (a.tot.nj / b.tot.nj).toFixed(0) + "x";
+  setMatch(a.out.join() === b.out.join());
+  const pr = words.join(" ");
+  const slow = 260, fast = Math.max(6, slow * tpsA / tpsB); // race: display speed follows the modeled speed
+  emitInto($("og"), pr, a.out, slow); emitInto($("oh"), pr, b.out, fast);
+  const top = a.lastP.map((p, i) => [p, i]).sort((x, y) => y[0] - x[0]).slice(0, 5);
+  $("bars").innerHTML = top.map(([p, i]) => `<div><span>${M.vocab[i]}</span><i style="width:${(p * 100).toFixed(0)}%"></i><span>${(p * 100).toFixed(0)}%</span></div>`).join("");
+  burst("g", Math.min(40, n * 2));
+};
+
+// ---------- canvases: data moving vs. data standing still ----------
+function burst(k, n) { for (let i = 0; i < n; i++) particles[k].push({ x: 60 + Math.random() * 30, y: 20 + Math.random() * 110, v: 1.5 + Math.random() * 2.5 }); }
+function frame(t) {
+  const g = $("cg").getContext("2d"), h = $("ch").getContext("2d");
+  // programmable: DRAM block on the left, core on the right, bytes crossing the gap
+  g.clearRect(0, 0, 520, 150);
+  g.fillStyle = "#b4472b22"; g.fillRect(10, 15, 80, 120); g.fillRect(400, 15, 110, 120);
+  g.fillStyle = "#1d2a24"; g.font = "12px sans-serif"; g.fillText("DRAM", 34, 80); g.fillText("compute", 428, 80);
+  g.strokeStyle = "#b4472b"; g.strokeRect(10, 15, 80, 120); g.strokeRect(400, 15, 110, 120);
+  if (lastRun && Math.random() < 0.5) burst("g", 1);
+  g.fillStyle = "#b4472b";
+  particles.g = particles.g.filter(p => { p.x += p.v; g.fillRect(p.x, p.y, 5, 3); return p.x < 400; });
+  g.fillStyle = "#6d7468"; g.fillText("every token drags its weights across this gap", 105, 143);
+  // hardwired: fixed trace grid with a pulse sweeping through
+  h.clearRect(0, 0, 520, 150);
+  h.strokeStyle = "#2f6b4f55"; h.lineWidth = 1;
+  for (let y = 14; y < 140; y += 12) { h.beginPath(); h.moveTo(10, y); h.lineTo(510, y); h.stroke(); }
+  for (let x = 10; x < 510; x += 25) { h.beginPath(); h.moveTo(x, 8); h.lineTo(x, 142); h.stroke(); }
+  const px = ((t / (lastRun ? 5 : 22)) % 520);
+  const grd = h.createLinearGradient(px - 60, 0, px, 0); grd.addColorStop(0, "#2f6b4f00"); grd.addColorStop(1, "#2f6b4faa");
+  h.fillStyle = grd; h.fillRect(px - 60, 8, 60, 134);
+  h.fillStyle = "#6d7468"; h.font = "12px sans-serif"; h.fillText("weights are the wires: nothing to fetch", 140, 143);
+  requestAnimationFrame(frame);
+}
+
+// ---------- wiring ----------
+for (const name of Object.keys(CORPORA)) { const o = document.createElement("option"); o.textContent = name; $("tape").append(o); }
+$("tape").onchange = () => tapeOut($("tape").value);
+$("len").oninput = () => $("lenv").textContent = $("len").value;
+$("temp").oninput = () => $("tempv").textContent = ($("temp").value / 10).toFixed(1);
+$("prompt").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+tapeOut($("tape").value);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

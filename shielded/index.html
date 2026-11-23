@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ripple - shock-to-margin explorer (toy demo)</title>
+<style>
+:root{--bg:#f3f0e8;--card:#fbfaf6;--ink:#1c2420;--mute:#6b746f;--line:#d9d4c7;--teal:#0f6b5c;--rust:#c2410c;--gold:#b7791f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:22px 28px 10px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+h1{margin:0;font-size:22px;letter-spacing:-.01em}
+h1 span{color:var(--teal)}
+.sub{color:var(--mute);max-width:640px}
+.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+main{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:8px 28px 24px;max-width:1280px;margin:0 auto}
+@media(max-width:920px){main{grid-template-columns:1fr;padding:8px 14px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h2{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--mute)}
+.stack{display:flex;flex-direction:column;gap:16px}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;margin:8px 0}
+.row label{font-size:13px}
+.row output{font-size:12px;color:var(--ink);min-width:52px;text-align:right}
+.row input[type=range]{grid-column:1/3;width:100%;accent-color:var(--teal);margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+button{font:inherit;font-size:12.5px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;cursor:pointer;color:var(--ink)}
+button:hover{border-color:var(--teal)}
+button.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.sep{border:0;border-top:1px dashed var(--line);margin:12px 0}
+.headline{font-size:17px;line-height:1.35;margin:0 0 10px}
+.headline b.neg{color:var(--rust)}.headline b.pos{color:var(--teal)}
+svg text{font-family:inherit}
+.node{cursor:pointer;outline:none}
+.node rect{fill:#fff;stroke:var(--line);stroke-width:1}
+.node:hover rect,.node:focus rect,.node.sel rect{stroke:var(--ink);stroke-width:1.6}
+.node .t1{font-size:12px;font-weight:600;fill:var(--ink)}
+.node .t2{font-size:10.5px;fill:var(--mute)}
+.node .t3{font-size:11px;font-weight:600}
+.link{fill:none;transition:opacity .15s}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1100px){.cols{grid-template-columns:1fr}}
+.bar{display:grid;grid-template-columns:118px 1fr 62px;gap:8px;align-items:center;font-size:12.5px;margin:5px 0}
+.bar .track{height:12px;position:relative;background:#efebe0;border-radius:3px}
+.bar .fill{position:absolute;top:0;bottom:0;border-radius:3px}
+.bar .mid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--mute)}
+.hrow{display:grid;grid-template-columns:96px 1fr 44px 78px;gap:8px;align-items:center;margin:7px 0;font-size:12.5px}
+.hrow input{width:100%;accent-color:var(--teal);margin:0}
+.hrow small{color:var(--mute)}
+canvas{width:100%;height:210px;display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff}
+.stat small{display:block;color:var(--mute);font-size:11px}
+.stat b{font-size:15px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:6px}
+.legend i{display:inline-block;width:12px;height:10px;margin-right:5px;vertical-align:-1px}
+.note{font-size:12.5px;color:var(--mute);margin:8px 0 0}
+.why{font-size:12.5px;margin:6px 0 0;min-height:18px}
+footer{max-width:1280px;margin:0 auto;padding:6px 28px 28px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line)}
+@media(max-width:920px){footer{padding:6px 14px 24px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1><span>Ripple</span> - from shock to margin</h1>
+    <div class="sub">A toy model with synthetic data: push on markets and tariffs, watch the cost travel through suppliers into product margins, then size hedges against what is left.</div>
+  </div>
+  <div class="note num" id="seedNote"></div>
+</header>
+
+<main>
+  <aside class="stack">
+    <section class="card">
+      <h2>1 - Pick a shock</h2>
+      <div class="chips" id="presets"></div>
+      <div id="marketSliders"></div>
+      <hr class="sep">
+      <div id="tariffSliders"></div>
+      <hr class="sep">
+      <div id="ppSlider"></div>
+    </section>
+  </aside>
+
+  <div class="stack">
+    <section class="card">
+      <h2>2 - Where the shock lands</h2>
+      <p class="headline" id="headline"></p>
+      <svg id="graph" viewBox="0 0 820 372" width="100%" role="img" aria-label="Suppliers connected to products"></svg>
+      <p class="note">Click a supplier or product to isolate its links. Link width is annual spend; link color is how hard that supplier is hit.</p>
+    </section>
+
+    <div class="cols">
+      <section class="card">
+        <h2 id="bdTitle">Drivers</h2>
+        <div id="breakdown"></div>
+      </section>
+      <section class="card">
+        <h2>3 - Hedge desk</h2>
+        <div id="hedgeRows"></div>
+        <div class="row"><label>Risk appetite <small style="color:var(--mute)">(cautious to relaxed)</small></label><output id="gammaOut" class="num"></output>
+          <input type="range" id="gamma" min="1" max="10" step="1" value="4"></div>
+        <div class="chips" style="margin-top:8px">
+          <button class="primary" id="suggest">Suggest hedges</button>
+          <button id="clear">Clear</button>
+        </div>
+        <p class="why" id="why"></p>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>12-month margin outcomes, 4,000 simulated paths</h2>
+      <canvas id="hist"></canvas>
+      <div class="legend"><span><i style="background:#c9c3b2"></i>No hedge</span><span><i style="background:var(--teal)"></i>With your hedges</span></div>
+      <div class="stats" id="stats"></div>
+      <p class="note" id="tariffNote"></p>
+    </section>
+  </div>
+</main>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Shielded (YC S26). Not affiliated with Shielded. All companies, suppliers, prices and numbers on this page are invented for illustration.</footer>
+
+<script>
+"use strict";
+/* ---------- synthetic company ---------- */
+const FACTORS = [
+  {id:"wheat", name:"Wheat",        vol:.28, carry:.020, min:-30, max:60},
+  {id:"alum",  name:"Aluminum",     vol:.20, carry:.015, min:-30, max:60},
+  {id:"diesel",name:"Diesel",       vol:.30, carry:.022, min:-30, max:60},
+  {id:"mxn",   name:"Peso vs USD",  vol:.12, carry:.018, min:-20, max:30},
+  {id:"eur",   name:"Euro vs USD",  vol:.08, carry:.006, min:-20, max:30}
+];
+const COUNTRIES = [
+  {id:"MX", name:"Mexico"}, {id:"VN", name:"Vietnam"}, {id:"CN", name:"China"}, {id:"EU", name:"EU"}
+];
+// share of each supplier's invoice that moves 1:1 with a factor
+const SUPPLIERS = [
+  {id:"bajio",  name:"Bajio Flour Mills",   place:"Mexico",   ctry:"MX", load:{wheat:.55, mxn:.35}},
+  {id:"prairie",name:"Prairie Grain Co-op", place:"USA",      ctry:null, load:{wheat:.60}},
+  {id:"saigon", name:"Saigon Can Works",    place:"Vietnam",  ctry:"VN", load:{alum:.50, diesel:.10}},
+  {id:"rhein",  name:"Rhein Seals GmbH",    place:"Germany",  ctry:"EU", load:{eur:1.0, alum:.10}},
+  {id:"shenz",  name:"Shenzhen Closures",   place:"China",    ctry:"CN", load:{alum:.20, diesel:.10}},
+  {id:"gulf",   name:"Gulf Freight Lines",  place:"USA",      ctry:null, load:{diesel:.50}},
+  {id:"oaxaca", name:"Oaxaca Sweeteners",   place:"Mexico",   ctry:"MX", load:{mxn:.50}}
+];
+// annual spend in $M: product -> supplier
+const PRODUCTS = [
+  {id:"crack", name:"Hearth Crackers", rev:96,  other:30, spend:{bajio:20,prairie:14,shenz:4,gulf:8,oaxaca:3}},
+  {id:"bars",  name:"Orchard Bars",    rev:62,  other:15, spend:{bajio:8,prairie:6,shenz:5,gulf:6,oaxaca:8}},
+  {id:"soup",  name:"Tin Soup",        rev:110, other:32, spend:{bajio:6,prairie:10,saigon:18,rhein:10,shenz:6,gulf:8}},
+  {id:"tonic", name:"Bottled Tonic",   rev:80,  other:22, spend:{prairie:8,saigon:12,rhein:8,shenz:7,gulf:4,oaxaca:3}}
+];
+const PRESETS = {
+  "Calm":              {m:{}, t:{}},
+  "Tariff escalation": {m:{}, t:{MX:25, VN:20, CN:30, EU:10}},
+  "Dry summer":        {m:{wheat:35, diesel:12}, t:{}},
+  "Peso rally + fuel": {m:{mxn:14, diesel:25, alum:10}, t:{}}
+};
+const state = {m:{}, t:{}, pp:20, h:{}, gamma:4, sel:null};
+FACTORS.forEach(f => { state.m[f.id] = 0; state.h[f.id] = 0; });
+COUNTRIES.forEach(c => state.t[c.id] = 0);
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const sum = a => a.reduce((x,y) => x+y, 0);
+const fmt = (v,d=1) => (v<0?"-":"") + "$" + Math.abs(v).toFixed(d) + "M";
+const sfmt = (v,d=1) => (v<0?"-":v>0?"+":"") + "$" + Math.abs(v).toFixed(d) + "M";
+const supById = Object.fromEntries(SUPPLIERS.map(s => [s.id, s]));
+const supTotal = Object.fromEntries(SUPPLIERS.map(s => [s.id, sum(PRODUCTS.map(p => p.spend[s.id]||0))]));
+const prodCost = p => sum(Object.values(p.spend));
+const baseMargin = p => p.rev - p.other - prodCost(p);
+const DRIVERS = [...FACTORS.map(f => ({id:f.id, name:f.name, kind:"m"})),
+                 ...COUNTRIES.map(c => ({id:"t"+c.id, name:"Tariff - "+c.name, kind:"t", c:c.id}))];
+
+// cost increase ($M, before price pass-through) for one product-supplier cell, split by driver
+function cell(p, sid){
+  const sp = p.spend[sid] || 0, s = supById[sid], out = {};
+  if(!sp) return out;
+  FACTORS.forEach(f => { const l = s.load[f.id]; if(l) out[f.id] = sp * l * state.m[f.id]/100; });
+  if(s.ctry) out["t"+s.ctry] = sp * state.t[s.ctry]/100;
+  return out;
+}
+// aggregate drivers over a selection of products/suppliers
+function drivers(pf, sf){
+  const acc = {};
+  PRODUCTS.forEach(p => { if(pf && pf !== p.id) return;
+    SUPPLIERS.forEach(s => { if(sf && sf !== s.id) return;
+      const c = cell(p, s.id); for(const k in c) acc[k] = (acc[k]||0) + c[k]; }); });
+  return acc;
+}
+const keep = () => 1 - state.pp/100;
+
+/* ---------- controls ---------- */
+function slider(host, id, label, min, max, step, val, unit, onInput){
+  const d = document.createElement("div"); d.className = "row";
+  d.innerHTML = `<label for="${id}">${label}</label><output class="num" id="${id}_o"></output>
+    <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}">`;
+  host.appendChild(d);
+  const inp = d.querySelector("input"), o = d.querySelector("output");
+  const show = () => o.textContent = (inp.value > 0 && unit !== "%" ? "+" : "") + inp.value + (unit === "pts" ? " pts" : "%");
+  inp.addEventListener("input", () => { show(); onInput(+inp.value); });
+  show(); return inp;
+}
+const inputs = {};
+function buildControls(){
+  const pr = $("presets");
+  Object.keys(PRESETS).forEach(name => {
+    const b = document.createElement("button"); b.textContent = name;
+    b.onclick = () => applyPreset(name, b); pr.appendChild(b);
+  });
+  FACTORS.forEach(f => inputs[f.id] = slider($("marketSliders"), "m_"+f.id, f.name+" price", f.min, f.max, 1, 0, "", v => { state.m[f.id] = v; clearPreset(); render(); }));
+  COUNTRIES.forEach(c => inputs["t"+c.id] = slider($("tariffSliders"), "t_"+c.id, "Tariff on "+c.name+" imports", 0, 50, 1, 0, "pts", v => { state.t[c.id] = v; clearPreset(); render(); }));
+  slider($("ppSlider"), "pp", "Share passed on to customers in price", 0, 60, 5, state.pp, "%", v => { state.pp = v; render(); });
+  FACTORS.forEach(f => {
+    const r = document.createElement("div"); r.className = "hrow";
+    r.innerHTML = `<span>${f.name}</span><input type="range" id="h_${f.id}" min="0" max="100" step="5" value="0" aria-label="Hedge ratio ${f.name}"><span class="num" id="hv_${f.id}">0%</span><small class="num" id="hc_${f.id}"></small>`;
+    $("hedgeRows").appendChild(r);
+    r.querySelector("input").addEventListener("input", e => { state.h[f.id] = +e.target.value/100; render(); });
+  });
+  $("gamma").addEventListener("input", e => { state.gamma = +e.target.value; render(); });
+  $("suggest").onclick = suggest;
+  $("clear").onclick = () => { FACTORS.forEach(f => state.h[f.id] = 0); $("why").textContent = ""; render(); };
+}
+function clearPreset(){ document.querySelectorAll("#presets button").forEach(b => b.classList.remove("on")); }
+function applyPreset(name, btn){
+  const p = PRESETS[name];
+  FACTORS.forEach(f => { state.m[f.id] = p.m[f.id] || 0; setSlider("m_"+f.id, state.m[f.id]); });
+  COUNTRIES.forEach(c => { state.t[c.id] = p.t[c.id] || 0; setSlider("t_"+c.id, state.t[c.id]); });
+  clearPreset(); btn.classList.add("on"); render();
+}
+function setSlider(id, v){
+  const el = $(id); el.value = v; el.dispatchEvent(new Event("input"));
+}
+</script>
+<script>
+/* NOTE: setSlider fires "input", which re-renders; that is fine for a toy. */
+/* ---------- graph ---------- */
+const NS = ["http:", "", "www.w3.org", "2000", "svg"].join("/").replace("//www", "//www");
+const el = (n, a={}, p) => { const e = document.createElementNS(NS, n); for(const k in a) e.setAttribute(k, a[k]); if(p) p.appendChild(e); return e; };
+const SX = 0, SW = 250, PX = 570, PW = 250;
+function mix(a, b, t){ return a.map((v,i) => Math.round(v + (b[i]-v)*t)); }
+function hitColor(frac){
+  if(frac >= 0) { const c = mix([150,170,162],[194,65,12], Math.min(1, frac/.12)); return `rgb(${c})`; }
+  const c = mix([150,170,162],[15,107,92], Math.min(1, -frac/.12)); return `rgb(${c})`;
+}
+function drawGraph(){
+  const g = $("graph"); g.innerHTML = "";
+  const sH = 40, sGap = 11, pH = 74, pGap = 20;
+  const sY = {}, pY = {};
+  SUPPLIERS.forEach((s,i) => sY[s.id] = 4 + i*(sH+sGap));
+  const pOff = (372 - (PRODUCTS.length*pH + (PRODUCTS.length-1)*pGap))/2;
+  PRODUCTS.forEach((p,i) => pY[p.id] = pOff + i*(pH+pGap));
+  const links = el("g", {}, g), nodes = el("g", {}, g);
+  const sCum = {}, pCum = {};
+  const sel = state.sel;
+  PRODUCTS.forEach(p => {
+    SUPPLIERS.forEach(s => {
+      const sp = p.spend[s.id]; if(!sp) return;
+      const sw = sp/supTotal[s.id]*(sH-8), pw = sp/prodCost(p)*(pH-8);
+      const y1 = sY[s.id]+4 + (sCum[s.id]||0) + sw/2, y2 = pY[p.id]+4 + (pCum[p.id]||0) + pw/2;
+      sCum[s.id] = (sCum[s.id]||0) + sw; pCum[p.id] = (pCum[p.id]||0) + pw;
+      const dc = sum(Object.values(cell(p, s.id))), frac = dc/sp;
+      const on = !sel || (sel.type === "p" && sel.id === p.id) || (sel.type === "s" && sel.id === s.id);
+      el("path", {class:"link", d:`M${SX+SW},${y1} C${SX+SW+150},${y1} ${PX-150},${y2} ${PX},${y2}`,
+        stroke:hitColor(frac), "stroke-width":Math.max(1.2, (sw+pw)/2), opacity:on?.55:.07}, links);
+    });
+  });
+  SUPPLIERS.forEach(s => {
+    const dc = sum(Object.values(drivers(null, s.id))), frac = dc/supTotal[s.id];
+    const n = el("g", {class:"node"+(sel&&sel.type==="s"&&sel.id===s.id?" sel":""), tabindex:0, role:"button", "aria-label":s.name}, nodes);
+    el("rect", {x:SX, y:sY[s.id], width:SW, height:sH, rx:7}, n);
+    el("text", {class:"t1", x:SX+10, y:sY[s.id]+17}, n).textContent = s.name;
+    el("text", {class:"t2", x:SX+10, y:sY[s.id]+31}, n).textContent = `${s.place} - ${fmt(supTotal[s.id],0)} spend`;
+    const t = el("text", {class:"t3 num", x:SX+SW-10, y:sY[s.id]+24, "text-anchor":"end", fill:frac>0.0005?"#c2410c":frac<-0.0005?"#0f6b5c":"#6b746f"}, n);
+    t.textContent = Math.abs(dc) < 0.05 ? "flat" : (dc>0?"cost ":"cost ") + sfmt(dc);
+    pick(n, {type:"s", id:s.id});
+  });
+  PRODUCTS.forEach(p => {
+    const d = -keep()*sum(Object.values(drivers(p.id, null)));
+    const b = baseMargin(p), a = b + d;
+    const n = el("g", {class:"node"+(sel&&sel.type==="p"&&sel.id===p.id?" sel":""), tabindex:0, role:"button", "aria-label":p.name}, nodes);
+    el("rect", {x:PX, y:pY[p.id], width:PW, height:pH, rx:7}, n);
+    el("text", {class:"t1", x:PX+12, y:pY[p.id]+19}, n).textContent = p.name;
+    el("text", {class:"t2", x:PX+12, y:pY[p.id]+34}, n).textContent = `${fmt(p.rev,0)} revenue`;
+    el("text", {class:"t2 num", x:PX+12, y:pY[p.id]+50}, n).textContent = `margin ${(b/p.rev*100).toFixed(1)}% > ${(a/p.rev*100).toFixed(1)}%`;
+    const t = el("text", {class:"t3 num", x:PX+PW-12, y:pY[p.id]+19, "text-anchor":"end", fill:d<-0.05?"#c2410c":d>0.05?"#0f6b5c":"#6b746f"}, n);
+    t.textContent = Math.abs(d) < 0.05 ? "flat" : sfmt(d);
+    // before/after bar
+    el("rect", {x:PX+12, y:pY[p.id]+58, width:PW-24, height:6, rx:3, fill:"#efebe0", stroke:"none"}, n);
+    el("rect", {x:PX+12, y:pY[p.id]+58, width:Math.max(0,(PW-24)*Math.max(0,a)/b/1.25), height:6, rx:3, fill:d<-0.05?"#c2410c":"#0f6b5c", stroke:"none"}, n);
+    pick(n, {type:"p", id:p.id});
+  });
+}
+function pick(node, s){
+  const go = () => { state.sel = (state.sel && state.sel.type === s.type && state.sel.id === s.id) ? null : s; render(); };
+  node.addEventListener("click", go);
+  node.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); go(); } });
+}
+
+/* ---------- breakdown ---------- */
+function drawBreakdown(){
+  const s = state.sel;
+  const pf = s && s.type === "p" ? s.id : null, sf = s && s.type === "s" ? s.id : null;
+  const d = drivers(pf, sf), k = keep();
+  const label = !s ? "whole company" : s.type === "p" ? PRODUCTS.find(p => p.id === s.id).name : supById[s.id].name;
+  const rows = DRIVERS.map(x => ({name:x.name, v:-k*(d[x.id]||0)})).filter(r => Math.abs(r.v) > 0.005).sort((a,b) => Math.abs(b.v)-Math.abs(a.v));
+  $("bdTitle").textContent = "Margin impact by driver - " + label;
+  const host = $("breakdown"); host.innerHTML = "";
+  if(!rows.length){ host.innerHTML = '<p class="note">No shock applied. Pick a preset or move a slider.</p>'; return; }
+  const mx = Math.max(...rows.map(r => Math.abs(r.v)));
+  rows.forEach(r => {
+    const w = Math.abs(r.v)/mx*50, div = document.createElement("div"); div.className = "bar";
+    div.innerHTML = `<span>${r.name}</span><div class="track"><div class="mid"></div><div class="fill" style="${r.v<0?`right:50%;background:#c2410c`:`left:50%;background:#0f6b5c`};width:${w}%"></div></div><span class="num" style="text-align:right">${sfmt(r.v,2)}</span>`;
+    host.appendChild(div);
+  });
+  const tot = sum(rows.map(r => r.v));
+  const t = document.createElement("div"); t.className = "bar"; t.style.fontWeight = "600";
+  t.innerHTML = `<span>Total after pass-through</span><span></span><span class="num" style="text-align:right">${sfmt(tot,2)}</span>`;
+  host.appendChild(t);
+}
+
+/* ---------- Monte Carlo ---------- */
+const N = 4000;
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed>>>15, 1|seed);
+  t = t + Math.imul(t ^ t>>>7, 61|t) ^ t; return ((t ^ t>>>14)>>>0)/4294967296; }; }
+const R = rng(20260);
+const Z = FACTORS.map(() => { const a = new Float64Array(N);
+  for(let i=0;i<N;i+=2){ const u = R()||1e-9, v = R(), m = Math.sqrt(-2*Math.log(u)); a[i] = m*Math.cos(2*Math.PI*v); if(i+1<N) a[i+1] = m*Math.sin(2*Math.PI*v); } return a; });
+// $M of annual cost that moves 1:1 with each factor (before pass-through)
+const EXPO = Object.fromEntries(FACTORS.map(f => [f.id, sum(SUPPLIERS.map(s => (supTotal[s.id])*(s.load[f.id]||0)))]));
+const BASE = sum(PRODUCTS.map(baseMargin));
+function simulate(h){
+  const k = keep(), out = new Float64Array(N);
+  const tariffCost = k*sum(DRIVERS.filter(d => d.kind === "t").map(d => drivers(null,null)[d.id]||0));
+  let hedgeCost = 0;
+  FACTORS.forEach(f => hedgeCost += k*EXPO[f.id]*(h[f.id]||0)*f.carry);
+  for(let i=0;i<N;i++){
+    let cost = tariffCost + hedgeCost;
+    FACTORS.forEach((f,j) => {
+      const x = Math.max(-.6, state.m[f.id]/100 + f.vol*Z[j][i]);
+      cost += k*EXPO[f.id]*(1-(h[f.id]||0))*x;
+    });
+    out[i] = BASE - cost;
+  }
+  return {v:out, hedgeCost, tariffCost};
+}
+function stats(a){
+  const s = Float64Array.from(a).sort(), m = sum(Array.from(a))/N;
+  const sd = Math.sqrt(sum(Array.from(a, x => (x-m)*(x-m)))/N);
+  return {mean:m, p5:s[Math.floor(N*.05)], p95:s[Math.floor(N*.95)], sd, min:s[0], max:s[N-1]};
+}
+function suggest(){
+  const k = keep(), g = 0.4/Math.pow(1.6, state.gamma-1), why = [];
+  FACTORS.forEach(f => {
+    const kk = k*EXPO[f.id], d = state.m[f.id]/100, c = f.carry, v2 = f.vol*f.vol;
+    // maximize  -kk[(1-h)d + h c] - (g/2) kk^2 (1-h)^2 v2   (mean minus risk penalty)
+    let h = 1 + (d - c)/(g*kk*v2); h = Math.max(0, Math.min(1, h)); h = Math.round(h*20)/20;
+    state.h[f.id] = h;
+    if(h > 0) why.push(`${f.name} ${Math.round(h*100)}%`);
+  });
+  $("why").textContent = why.length ? "Suggested: " + why.join(", ") + ". Carry cost is weighed against how much each factor can swing your margin." : "At this risk appetite, hedging costs more than it saves.";
+  render();
+}
+
+/* ---------- hedge panel + histogram ---------- */
+function drawHist(a, b){
+  const cv = $("hist"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight; cv.width = W*dpr; cv.height = H*dpr;
+  const c = cv.getContext("2d"); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,W,H);
+  const lo = Math.min(a.min, b.min)-1, hi = Math.max(a.max, b.max)+1, B = 48;
+  const hist = arr => { const h = new Array(B).fill(0); arr.forEach(x => h[Math.min(B-1, Math.floor((x-lo)/(hi-lo)*B))]++); return h; };
+  const ha = hist(a.v), hb = hist(b.v), top = Math.max(...ha, ...hb)*1.1, pl = 10, pb = 26, bw = (W-pl*2)/B;
+  const X = v => pl + (v-lo)/(hi-lo)*(W-pl*2);
+  [[ha,"#c9c3b2"],[hb,"rgba(15,107,92,.72)"]].forEach(([h,col]) => {
+    c.fillStyle = col; h.forEach((n,i) => { const bh = n/top*(H-pb-8); c.fillRect(pl+i*bw+1, H-pb-bh, bw-2, bh); });
+  });
+  c.strokeStyle = "#1c2420"; c.lineWidth = 1; c.beginPath(); c.moveTo(pl, H-pb+.5); c.lineTo(W-pl, H-pb+.5); c.stroke();
+  c.font = "11px ui-monospace,Menlo,monospace"; c.fillStyle = "#6b746f"; c.textAlign = "center";
+  for(let i=0;i<=5;i++){ const v = lo+(hi-lo)*i/5; c.fillText("$"+v.toFixed(0)+"M", X(v), H-9); }
+  const mark = (v, col, txt, y) => { c.strokeStyle = col; c.setLineDash([4,3]); c.beginPath(); c.moveTo(X(v), 6); c.lineTo(X(v), H-pb); c.stroke(); c.setLineDash([]);
+    c.fillStyle = col; c.textAlign = "left"; c.fillText(txt, X(v)+4, y); };
+  mark(BASE, "#1c2420", "today's margin", 14);
+  mark(a.p5, "#8a8472", "5% worst, no hedge", 30);
+  if(Math.abs(b.p5-a.p5) > .05) mark(b.p5, "#0f6b5c", "5% worst, hedged", 46);
+}
+function drawHedge(){
+  const k = keep();
+  FACTORS.forEach(f => {
+    const h = state.h[f.id]; $("h_"+f.id).value = h*100; $("hv_"+f.id).textContent = Math.round(h*100)+"%";
+    $("hc_"+f.id).textContent = fmt(k*EXPO[f.id],1)+" open";
+  });
+  const g = 0.4/Math.pow(1.6, state.gamma-1);
+  $("gammaOut").textContent = state.gamma <= 3 ? "cautious" : state.gamma >= 8 ? "relaxed" : "balanced";
+  const none = simulate({}), mine = simulate(state.h);
+  const A = stats(none.v), Bs = stats(mine.v);
+  const stat = (l, v, sub) => `<div class="stat"><small>${l}</small><b class="num">${v}</b>${sub?`<small>${sub}</small>`:""}</div>`;
+  const short = arr => arr.filter(x => x < BASE-5).length/N*100;
+  $("stats").innerHTML =
+    stat("Expected margin", fmt(Bs.mean), "no hedge " + fmt(A.mean)) +
+    stat("5% worst case", fmt(Bs.p5), "no hedge " + fmt(A.p5)) +
+    stat("Chance of a >$5M miss", short(mine.v).toFixed(0)+"%", "no hedge " + short(none.v).toFixed(0)+"%") +
+    stat("Hedge carry", fmt(mine.hedgeCost,2), "per year") +
+    stat("Spread (1 sd)", fmt(Bs.sd), "no hedge " + fmt(A.sd));
+  drawHist(Object.assign(A,{v:none.v}), Object.assign(Bs,{v:mine.v}));
+  const tc = none.tariffCost;
+  $("tariffNote").textContent = tc > 0.05
+    ? `Tariffs cost ${fmt(tc)} a year after pass-through and no market hedge touches that. It is a sourcing decision: shift volume, renegotiate, or reprice.`
+    : "Hedges cover market moves. Tariffs are policy jumps with no tradable hedge, so they show up above as a separate, unhedgeable line.";
+}
+
+/* ---------- headline + render ---------- */
+function drawHeadline(){
+  const k = keep(), all = drivers(null, null);
+  const d = -k*sum(Object.values(all)), rev = sum(PRODUCTS.map(p => p.rev));
+  const b = BASE, a = b + d;
+  const top = DRIVERS.map(x => ({n:x.name, v:-k*(all[x.id]||0)})).sort((x,y) => Math.abs(y.v)-Math.abs(x.v))[0];
+  const cls = d < -.05 ? "neg" : d > .05 ? "pos" : "";
+  $("headline").innerHTML = Math.abs(d) < .05
+    ? `Company margin is <b class="num">${(b/rev*100).toFixed(1)}%</b> (${fmt(b)}). Nothing is moving yet. Try a preset on the left.`
+    : `Company margin goes <b class="num">${(b/rev*100).toFixed(1)}% to ${(a/rev*100).toFixed(1)}%</b> (<b class="num ${cls}">${sfmt(d)}</b> a year). Biggest driver: <b>${top.n}</b> at <span class="num">${sfmt(top.v,2)}</span>.`;
+}
+function render(){
+  drawHeadline(); drawGraph(); drawBreakdown(); drawHedge();
+}
+buildControls();
+$("seedNote").textContent = "synthetic data - fixed seed 20260";
+render();
+window.addEventListener("resize", () => drawHedge());
+</script>
+</body>
+</html>

@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tidemark - a toy month-end matching desk</title>
+<style>
+:root{--paper:#f5f0e6;--card:#fffdf8;--ink:#1c2421;--mute:#6b736e;--line:#ddd5c4;--pine:#2c6a55;--pine-bg:#e2efe8;--ochre:#b9801a;--ochre-bg:#f8ecd0;--rust:#b0442c;--rust-bg:#f6dfd8;--r:10px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,h3{font-family:Georgia,"Times New Roman",serif;font-weight:600;margin:0}
+.mono,.a,.num{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+header{padding:22px 28px 10px;display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap;justify-content:space-between}
+header h1{font-size:28px;letter-spacing:-.3px}
+header h1 span{color:var(--pine)}
+header p{margin:4px 0 0;color:var(--mute);max-width:640px}
+.wrap{display:grid;grid-template-columns:290px 1fr;gap:18px;padding:12px 28px 28px;align-items:start}
+@media(max-width:960px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+aside .card{position:sticky;top:12px}
+aside h2{font-size:17px;margin-bottom:2px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 12px}
+.step{display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line);font-size:14px}
+.step b{display:inline-block;width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--paper);text-align:center;font-size:12px;line-height:20px;flex:none;margin-top:1px}
+.step label{cursor:pointer;display:block}
+.step small{display:block;color:var(--mute);font-size:12px}
+.step input[type=checkbox]{margin:3px 0 0;accent-color:var(--pine);flex:none}
+.slider{padding:10px 0;border-top:1px dashed var(--line);font-size:14px}
+.slider div{display:flex;justify-content:space-between}
+.slider input{width:100%;accent-color:var(--pine)}
+button{font:inherit;border:1px solid var(--ink);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover:not(:disabled){background:var(--ink);color:var(--paper)}
+button:disabled{opacity:.4;cursor:default}
+button.go{background:var(--pine);border-color:var(--pine);color:#fff;width:100%;padding:10px;font-weight:600;margin-top:10px}
+button.go:hover:not(:disabled){background:#1f4f3f}
+button.sm{padding:4px 9px;font-size:13px}
+button.ok{border-color:var(--pine);color:var(--pine)}
+button.ok:hover:not(:disabled){background:var(--pine);color:#fff}
+button.no{border-color:var(--rust);color:var(--rust)}
+button.no:hover:not(:disabled){background:var(--rust);color:#fff}
+.row2{display:flex;gap:8px;margin-top:8px}
+.row2 button{flex:1}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.stat small{color:var(--mute);display:block;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.stat .num{font-size:22px;font-weight:600}
+.bar{height:6px;background:var(--line);border-radius:3px;margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--pine);width:0;transition:width .4s}
+section{margin-bottom:18px}
+section>h2{font-size:18px;margin:0 0 8px;display:flex;gap:10px;align-items:baseline;justify-content:space-between}
+section>h2 small{font:13px system-ui;color:var(--mute)}
+.empty{color:var(--mute);padding:14px;border:1px dashed var(--line);border-radius:var(--r);font-size:14px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--mute);text-align:left;padding:8px 10px;background:#f1ebdd}
+td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:top}
+tr.dim td{opacity:.5}
+tr:hover td{background:#faf6ec}
+.a{text-align:right;white-space:nowrap}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;font-weight:600}
+.pill.hi{background:var(--pine-bg);color:var(--pine)}
+.pill.mid{background:var(--ochre-bg);color:#80560d}
+.pill.lo{background:var(--rust-bg);color:var(--rust)}
+details summary{cursor:pointer;color:var(--mute);font-size:13px}
+details ul{margin:6px 0 0;padding-left:18px;font-size:13px;color:#39423d}
+.q{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--rust);border-radius:var(--r);padding:12px 14px;margin-bottom:10px}
+.q.review{border-left-color:var(--ochre)}
+.q.done{border-left-color:var(--pine);opacity:.6}
+.q h3{font-size:16px;display:flex;justify-content:space-between;gap:10px}
+.q p{margin:4px 0 8px;font-size:14px;color:#39423d}
+.q blockquote{margin:6px 0;padding:8px 10px;background:#f1ebdd;border-radius:6px;font-size:13px;white-space:pre-wrap}
+.q .acts{display:flex;gap:8px;flex-wrap:wrap}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.cols{grid-template-columns:1fr}}
+.cols h3{font-size:14px;margin-bottom:6px;color:var(--mute);font-family:system-ui;text-transform:uppercase;letter-spacing:.5px}
+.ln{display:grid;grid-template-columns:48px 1fr auto;gap:8px;padding:5px 8px;border:1px solid var(--line);border-left:4px solid var(--line);border-radius:6px;margin-bottom:4px;background:var(--card);font-size:13px;transition:background .15s}
+.ln .d{color:var(--mute)}
+.ln small{display:block;color:var(--mute)}
+.ln.staged{border-left-color:var(--ochre)}
+.ln.review{border-left-color:var(--ochre);background:var(--ochre-bg)}
+.ln.exc{border-left-color:var(--rust);background:var(--rust-bg)}
+.ln.ok{border-left-color:var(--pine);background:var(--pine-bg)}
+.ln.hl{outline:2px solid var(--ink);background:#fff3c4}
+.legend{font-size:12px;color:var(--mute);margin:0 0 8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 3px 0 10px;vertical-align:-1px}
+#log{background:#1c2421;color:#cfe3d8;border-radius:var(--r);padding:12px 14px;font:12.5px/1.6 ui-monospace,Menlo,monospace;max-height:230px;overflow:auto}
+#log .t{color:#7f9a8d;margin-right:8px}
+#log .u{color:#f3d58a}
+footer{padding:18px 28px 30px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+dialog{border:1px solid var(--ink);border-radius:var(--r);max-width:720px;width:92%;padding:18px;background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(28,36,33,.5)}
+dialog pre{white-space:pre-wrap;font:12.5px/1.5 ui-monospace,Menlo,monospace;background:#f1ebdd;padding:12px;border-radius:8px;max-height:60vh;overflow:auto}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Tide<span>mark</span> <small style="font:14px system-ui;color:var(--mute)">toy month-end matching desk</small></h1>
+    <p>It is June 30. The bank statement and the books disagree. Run the playbook: the desk matches what it can, explains why, and routes the rest to a person. Nothing is cleared until you approve it. All data here is made up.</p>
+  </div>
+</header>
+
+<div class="wrap">
+<aside>
+  <div class="card">
+    <h2>Playbook: June cash close</h2>
+    <p class="sub">Steps run top to bottom. Change one and the desk re-runs.</p>
+    <div class="step"><b>1</b><div>Match same amount to a ledger entry near the same date, scored by name overlap<small>always on</small></div></div>
+    <div class="slider"><div><span>Date window</span><span id="winv" class="mono">±3 days</span></div><input id="win" type="range" min="0" max="10" value="3"></div>
+    <div class="step"><b>2</b><label><input type="checkbox" id="fee" checked> Allow card-processing fee gap<small>bank = ledger minus 2.9% + $0.30</small></label></div>
+    <div class="step"><b>3</b><label><input type="checkbox" id="combine" checked> Combine invoices into one deposit<small>2 to 4 same-payer entries that sum to the bank line</small></label></div>
+    <div class="step"><b>4</b><label><input type="checkbox" id="swap" checked> Flag swapped digits<small>same digits, different order</small></label></div>
+    <div class="step"><b>5</b><label><input type="checkbox" id="dup" checked> Flag repeat charges<small>same vendor, same amount, days apart</small></label></div>
+    <div class="step"><b>6</b><div>Route leftovers to a named person<small>always on</small></div></div>
+    <div class="slider"><div><span>Auto-stage at confidence</span><span id="thrv" class="mono">85%</span></div><input id="thr" type="range" min="50" max="100" value="85"></div>
+    <button class="go" id="run">Run the close</button>
+    <div class="row2"><button id="reset">Reset</button><button id="sum" disabled>Run summary</button></div>
+  </div>
+</aside>
+
+<main>
+  <div class="stats" aria-live="polite">
+    <div class="stat"><small>Lines cleared</small><div class="num" id="s-clr">0 / 0</div><div class="bar"><i id="s-bar"></i></div></div>
+    <div class="stat"><small>Ready to approve</small><div class="num" id="s-rdy">0</div></div>
+    <div class="stat"><small>Needs a person</small><div class="num" id="s-q">0</div></div>
+    <div class="stat"><small>Open items, net</small><div class="num" id="s-gap">$0.00</div></div>
+  </div>
+
+  <section>
+    <h2>Ready to approve <small id="rdy-note"></small></h2>
+    <div id="ready"></div>
+  </section>
+
+  <section>
+    <h2>Needs your call <small>exceptions and low-confidence matches</small></h2>
+    <div id="queue"></div>
+  </section>
+
+  <section>
+    <h2>Source lines <small>hover a card above to light up its lines</small></h2>
+    <p class="legend"><i style="background:var(--line)"></i>untouched<i style="background:var(--ochre)"></i>proposed<i style="background:var(--rust)"></i>exception<i style="background:var(--pine)"></i>cleared</p>
+    <div class="cols"><div><h3>Bank statement</h3><div id="bank"></div></div><div><h3>General ledger, cash</h3><div id="led"></div></div></div>
+  </section>
+
+  <section>
+    <h2>Run log <small>every step is recorded</small></h2>
+    <div id="log"><span class="t">--:--:--</span>Waiting for a run.</div>
+  </section>
+</main>
+</div>
+
+<footer>Independent demo built by Aarush Kandukoori, inspired by Billow AI Labs (YC S26). Not affiliated with Billow AI Labs.</footer>
+
+<dialog id="dlg"><h2>Run summary</h2><pre id="sumtxt"></pre><div class="row2"><button id="copy">Copy</button><button id="close">Close</button></div></dialog>
+
+<script>
+// ---------- synthetic data: [day, name, (memo,) amount] ----------
+const BANK_RAW=[
+[2,'HARBOR FREIGHT LOGISTICS ACH',-4820],[3,'NORTHWIND CLOUD CARD',-1249],[5,'ACH CREDIT PINECREST DENTAL',3150],
+[6,'STRIPE PAYOUT ORCHARD BAKERY',1941.70],[6,'LUMEN OFFICE RENT',-6500],[8,'DELTA PRINT WORKS',-318.40],
+[10,'COBALT PAYROLL SERVICES',-12400],[11,'MERIDIAN CLINICS BATCH DEP',4450],[12,'SUMMIT INSURANCE PREMIUM',-1875.50],
+[13,'BRIGHTSIDE TELECOM',-1320],[13,'WIRE FEE',-25],[16,'COPPERLINE SUPPLIES',-560],[17,'COPPERLINE SUPPLIES',-560],
+[17,'VANTAGE FRT INC',-742.10],[18,'ALDER FINCH LLP WIRE IN',8000],[19,'UNKNOWN ACH 88213',-640],
+[22,'TIDEWATER UTIL',-389.25],[25,'ACH CREDIT PINECREST DENTAL',3150],[26,'GREYSON TOOLS',-1090],
+[27,'OWL CREEK SOFTWARE',-99],[30,'INTEREST PAID',12.84]];
+const LED_RAW=[
+[2,'Harbor Freight Logistics','Bill 7731',-4820],[3,'Northwind Cloud','Hosting, June',-1249],[4,'Pinecrest Dental Group','INV-2041',3150],
+[5,'Orchard Bakery (card sales)','Card batch',2000],[6,'Lumen Office Rent','June rent',-6500],[8,'Delta Print Works','Bill 7740',-318.40],
+[9,'Meridian Clinics','INV-2044',1200],[9,'Meridian Clinics','INV-2045',2300],[9,'Meridian Clinics','INV-2046',950],
+[10,'Cobalt Payroll Services','Payroll run',-12400],[12,'Summit Insurance','Premium',-1875.50],[13,'Brightside Telecom','Bill 7752',-1230],
+[15,'Vantage Freight','Bill 7755',-742.10],[16,'Copperline Supplies','Bill 7758',-560],[18,'Alder & Finch LLP','INV-2049',8000],
+[20,'Marlow Landscaping','Check #1187',-450],[21,'Tidewater Utilities','Bill 7761',-389.25],[24,'Pinecrest Dental Group','INV-2052',3150],
+[26,'Greyson Tools','Bill 7766',-1090],[27,'Owl Creek Software','Subscription',-99],[28,'Bayline Insurance','Refund due',215]];
+
+const bank=BANK_RAW.map((r,i)=>({id:'B'+(i+1),day:r[0],name:r[1],amt:r[2]}));
+const ledger=LED_RAW.map((r,i)=>({id:'L'+(i+1),day:r[0],name:r[1],memo:r[2],amt:r[3]}));
+const byId={};[...bank,...ledger].forEach(x=>byId[x.id]=x);
+
+// ---------- helpers ----------
+const $=s=>document.querySelector(s);
+const r2=n=>Math.round(n*100)/100;
+const money=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dl=d=>'Jun '+d;
+const STOP=new Set('inc llc llp the and group services ach credit payout card wire batch dep premium bill sales'.split(' '));
+const toks=s=>s.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=3&&!STOP.has(w)&&!/^\d+$/.test(w));
+const tokMatch=(a,b)=>a===b||(Math.min(a.length,b.length)>=4&&(a.startsWith(b)||b.startsWith(a)));
+function sim(a,b){const A=toks(a),B=toks(b);if(!A.length||!B.length)return 0;
+  return A.filter(x=>B.some(y=>tokMatch(x,y))).length/Math.min(A.length,B.length)}
+const digits=n=>Math.abs(Math.round(n*100)).toString().split('').sort().join('');
+function subsetSum(arr,target,min,max){let found=null;
+  (function go(i,pick,sum){if(found)return;if(pick.length>=min&&sum===target){found=pick.slice();return}
+    if(pick.length>=max)return;
+    for(let j=i;j<arr.length;j++){pick.push(arr[j]);go(j+1,pick,sum+arr[j].c);pick.pop()}})(0,[],0);
+  return found}
+
+// ---------- the matching engine ----------
+function compute(cfg){
+  const trace=[],T=m=>trace.push(m);
+  const fb=new Set(bank.map(b=>b.id)),fl=new Set(ledger.map(l=>l.id));
+  const matches=[],exc=[];
+  const take=m=>{m.id='M'+(matches.length+1);m.status='staged';m.bank.forEach(i=>fb.delete(i));m.ledger.forEach(i=>fl.delete(i));matches.push(m);
+    T(`${m.id} ${m.bank.join('+')} <> ${m.ledger.join('+')}  ${m.kind}  conf ${Math.round(m.conf*100)}%`)};
+  T(`Loaded ${bank.length} bank lines and ${ledger.length} ledger entries`);
+
+  // step 1: same amount, inside the date window, scored by name overlap and date distance
+  const cands=[];
+  for(const b of bank)for(const l of ledger){
+    if(Math.sign(b.amt)!==Math.sign(l.amt)||Math.abs(b.amt-l.amt)>0.004)continue;
+    const dd=Math.abs(b.day-l.day);if(dd>cfg.win)continue;
+    const s=sim(b.name,l.name),score=r2(.5+.4*s+.1*(1-dd/(cfg.win+1)));
+    if(score>=.55)cands.push({b,l,dd,s,score});
+  }
+  cands.sort((x,y)=>y.score-x.score||x.dd-y.dd);
+  T(`Step 1: ${cands.length} same-amount candidate pairs inside +/-${cfg.win} days`);
+  for(const c of cands){
+    if(!fb.has(c.b.id)||!fl.has(c.l.id))continue;
+    const rivals=cands.filter(o=>o!==c&&(o.b===c.b||o.l===c.l)&&fb.has(o.b.id)&&fl.has(o.l.id)).length;
+    const why=[`Amounts are equal: ${money(Math.abs(c.b.amt))}`,
+      c.dd?`Posted ${c.dd} day${c.dd>1?'s':''} apart (${dl(c.b.day)} bank, ${dl(c.l.day)} ledger)`:`Posted the same day, ${dl(c.b.day)}`,
+      c.s?`Names overlap ${Math.round(c.s*100)}%: "${c.b.name}" ~ "${c.l.name}"`:'No name overlap, matched on amount and date only'];
+    if(rivals)why.push(`${rivals} other lookalike candidate${rivals>1?'s':''} still free; kept the closest date`);
+    take({kind:'exact',bank:[c.b.id],ledger:[c.l.id],conf:r2(Math.max(0,c.score-(rivals?.12:0))),why});
+  }
+
+  // step 2: card fee gap
+  if(cfg.fee)for(const b of bank.filter(x=>fb.has(x.id)&&x.amt>0))for(const l of ledger.filter(x=>fl.has(x.id)&&x.amt>0)){
+    if(!fb.has(b.id)||!fl.has(l.id))continue;
+    const gap=r2(l.amt-b.amt),expect=r2(l.amt*.029+.30);
+    if(gap>0&&Math.abs(b.day-l.day)<=cfg.win&&sim(b.name,l.name)>=.5&&Math.abs(gap-expect)<.015)
+      take({kind:'fee gap',bank:[b.id],ledger:[l.id],conf:.93,journal:`Draft journal: Dr Merchant fees ${money(gap)} / Cr Cash ${money(gap)}`,
+        why:[`Ledger ${money(l.amt)} vs bank ${money(b.amt)}: gap ${money(gap)}`,`2.9% of ${money(l.amt)} + $0.30 = ${money(expect)}, which equals the gap`,`Names overlap ${Math.round(sim(b.name,l.name)*100)}%`,'Drafted a fee journal for you to approve with the match']});
+  }
+
+  // step 3: several invoices paid as one deposit
+  if(cfg.combine)for(const b of bank.filter(x=>fb.has(x.id)&&x.amt>0)){
+    const pool=ledger.filter(l=>fl.has(l.id)&&l.amt>0&&sim(b.name,l.name)>=.5&&b.day-l.day>=0&&b.day-l.day<=cfg.win).map(l=>({id:l.id,c:Math.round(l.amt*100)}));
+    const hit=subsetSum(pool,Math.round(b.amt*100),2,4);
+    if(hit)take({kind:`${hit.length} into 1`,bank:[b.id],ledger:hit.map(h=>h.id),conf:r2(.93-.03*(hit.length-2)),
+      why:[`${hit.length} ledger entries from the same payer sum to ${money(b.amt)}: ${hit.map(h=>money(h.c/100)).join(' + ')}`,`Entries posted ${dl(byId[hit[0].id].day)}, deposit cleared ${dl(b.day)}`,`Payer name overlap with "${b.name}"`]});
+  }
+
+  // step 4+5+6: everything left becomes a case with a suggested action and, where useful, a person to ask
+  const X=(o)=>{o.id='X'+(exc.length+1);o.status='open';o.bank=o.bank||[];o.ledger=o.ledger||[];o.bank.forEach(i=>fb.delete(i));o.ledger.forEach(i=>fl.delete(i));exc.push(o);T(`${o.id} ${o.type}: ${o.title}`)};
+  if(cfg.swap)for(const b of bank.filter(x=>fb.has(x.id)))for(const l of ledger.filter(x=>fl.has(x.id))){
+    if(!fb.has(b.id)||!fl.has(l.id)||Math.sign(b.amt)!==Math.sign(l.amt)||b.amt===l.amt)continue;
+    if(digits(b.amt)===digits(l.amt)&&sim(b.name,l.name)>=.5)X({type:'swapped digits',bank:[b.id],ledger:[l.id],title:`Digits look swapped: ${l.name}`,
+      detail:`Bank cleared ${money(b.amt)} but the ledger says ${money(l.amt)}. Same digits, different order, same vendor.`,
+      accept:`Correct ledger to ${money(b.amt)}`,done:`Drafted correction: ${l.id} ${money(l.amt)} -> ${money(b.amt)}`,
+      ask:{who:'Dana Ortiz',role:'Controller',msg:`Hi Dana, ${l.name} shows ${money(l.amt)} in the books (${l.memo}) but the bank paid ${money(b.amt)}. Can you check the invoice and tell me which is right?`,reply:`The invoice says ${money(b.amt)}. My typo, fix the ledger.`,done:`Dana confirmed the invoice: ledger corrected to ${money(b.amt)}`}});
+  }
+  if(cfg.dup)for(const b of bank.filter(x=>fb.has(x.id))){
+    const twin=matches.map(m=>byId[m.bank[0]]).find(o=>o.id!==b.id&&o.amt===b.amt&&sim(o.name,b.name)>=.5&&Math.abs(o.day-b.day)<=5);
+    if(twin)X({type:'repeat charge',bank:[b.id],title:`Possible duplicate charge: ${b.name}`,
+      detail:`${money(b.amt)} on ${dl(b.day)} repeats ${twin.id} (${dl(twin.day)}), which already matched one ledger entry. Only one bill exists.`,
+      accept:'Draft a refund request to the vendor',done:'Drafted refund request; line held as a receivable',
+      ask:{who:'Priya Nair',role:'AP lead',msg:`Hi Priya, ${b.name} charged ${money(Math.abs(b.amt))} twice (${dl(twin.day)} and ${dl(b.day)}) but we only have one bill. Was the second one intended?`,reply:'Not intended, the vendor double-ran the card. Please request the refund.',done:'Priya confirmed it was not intended; refund requested'}});
+  }
+  for(const b of bank.filter(x=>fb.has(x.id))){
+    if(/fee/i.test(b.name))X({type:'bank fee',bank:[b.id],title:`Bank fee with no ledger entry`,detail:`"${b.name}" ${money(b.amt)} on ${dl(b.day)}. Banks charge these without an invoice.`,accept:'Post to Bank charges',done:`Drafted journal: Dr Bank charges ${money(Math.abs(b.amt))} / Cr Cash`});
+    else if(/interest/i.test(b.name))X({type:'bank interest',bank:[b.id],title:'Interest with no ledger entry',detail:`"${b.name}" ${money(b.amt)} on ${dl(b.day)}.`,accept:'Post to Interest income',done:`Drafted journal: Dr Cash ${money(b.amt)} / Cr Interest income`});
+    else X({type:'unknown bank line',bank:[b.id],title:`Nothing in the books for "${b.name}"`,detail:`${money(b.amt)} left the account on ${dl(b.day)} and no ledger entry has that amount.`,
+      accept:'Park in suspense account',done:`Parked ${money(b.amt)} in suspense, flagged for follow-up`,
+      ask:{who:'Priya Nair',role:'AP lead',msg:`Hi Priya, a ${money(Math.abs(b.amt))} ACH on ${dl(b.day)} labelled "${b.name}" has no ledger entry. Do you recognise it? I need a vendor and an expense account to book it.`,reply:'That is the annual domain renewal. Book it to Software and subscriptions.',done:'Priya identified it: booked to Software and subscriptions'}});
+  }
+  for(const l of ledger.filter(x=>fl.has(x.id))){
+    if(/check/i.test(l.memo))X({type:'outstanding check',ledger:[l.id],title:`Outstanding check: ${l.name}`,detail:`${l.memo}, ${money(l.amt)} written ${dl(l.day)} and not yet cashed. Normal at month end.`,accept:'Keep as outstanding check',done:`${l.memo} listed as a reconciling item`});
+    else X({type:'not on bank yet',ledger:[l.id],title:`Booked but not on the bank: ${l.name}`,detail:`${l.memo}, ${money(l.amt)} on ${dl(l.day)}. Could be timing or a mistake.`,accept:'Mark in transit, recheck next close',done:'Marked in transit for next close',
+      ask:{who:'Marcus Webb',role:'AR',msg:`Hi Marcus, the ${money(l.amt)} ${l.memo.toLowerCase()} from ${l.name} is in our books but not on the bank. Has it actually been sent?`,reply:'They are mailing a check, it should land next week.',done:'Marcus confirmed a check is in the mail: in transit'}});
+  }
+  T(`Done: ${matches.length} proposed matches, ${exc.length} cases for people`);
+  return{matches,exc,trace};
+}
+
+// ---------- state ----------
+const S={ran:false,running:false,matches:[],exc:[],log:[],sel:new Set(),clock:9*3600+14*60,undo:{}};
+const cfg=()=>({win:+$('#win').value,fee:$('#fee').checked,combine:$('#combine').checked,swap:$('#swap').checked,dup:$('#dup').checked});
+const thr=()=>+$('#thr').value/100;
+const isReady=m=>m.conf>=thr();
+function logAdd(text,user){S.clock+=1+(S.log.length*7%4);const t=S.clock,p=n=>String(n).padStart(2,'0');
+  S.log.push({t:`${p(Math.floor(t/3600))}:${p(Math.floor(t/60)%60)}:${p(t%60)}`,text,user})}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function run(animate,reason){
+  if(S.running)return;S.running=true;$('#run').disabled=true;
+  if(reason)logAdd(reason);
+  const res=compute(cfg());S.matches=res.matches;S.exc=res.exc;S.undo={};
+  S.sel=new Set(S.matches.filter(isReady).map(m=>m.id));S.ran=true;
+  for(const line of res.trace){logAdd(line);if(animate){renderLog();await sleep(55)}}
+  S.running=false;$('#run').disabled=false;$('#run').textContent='Re-run the close';$('#sum').disabled=false;renderAll();
+}
+
+// ---------- derived numbers ----------
+function lineState(id){
+  const m=S.matches.find(m=>m.bank.includes(id)||m.ledger.includes(id));
+  if(m){if(m.status==='approved')return'ok';if(m.status==='rejected')return'exc';return isReady(m)?'staged':'review'}
+  const x=S.exc.find(x=>x.bank.includes(id)||x.ledger.includes(id));
+  if(x)return x.status==='resolved'?'ok':'exc';
+  return'';
+}
+const cleared=()=>[...bank,...ledger].filter(l=>lineState(l.id)==='ok');
+
+// ---------- render ----------
+function renderStats(){
+  const all=bank.length+ledger.length,c=cleared().length,ids=new Set(cleared().map(l=>l.id));
+  const net=r2(bank.filter(b=>!ids.has(b.id)).reduce((s,b)=>s+b.amt,0)-ledger.filter(l=>!ids.has(l.id)).reduce((s,l)=>s+l.amt,0));
+  $('#s-clr').textContent=`${c} / ${all}`;$('#s-bar').style.width=(100*c/all)+'%';
+  $('#s-rdy').textContent=S.matches.filter(m=>m.status==='staged'&&isReady(m)).length;
+  $('#s-q').textContent=S.exc.filter(x=>x.status!=='resolved').length+S.matches.filter(m=>m.status==='staged'&&!isReady(m)).length;
+  $('#s-gap').textContent=money(net);
+}
+function matchDesc(m){
+  const b=m.bank.map(i=>byId[i]),l=m.ledger.map(i=>byId[i]);
+  return`<b>${esc(l[0].name)}</b><br><span style="color:var(--mute);font-size:13px">${m.bank.join('+')} ${esc(b[0].name)} &harr; ${l.map(x=>x.id+' '+esc(x.memo)).join(', ')}</span>`;
+}
+const pill=c=>`<span class="pill ${c>=.85?'hi':c>=.7?'mid':'lo'}">${Math.round(c*100)}%</span>`;
+function renderReady(){
+  const rows=S.matches.filter(m=>isReady(m)&&m.status!=='rejected');
+  if(!S.ran){$('#ready').innerHTML='<div class="empty">Press <b>Run the close</b> on the left. High-confidence matches land here for batch approval.</div>';$('#rdy-note').textContent='';return}
+  if(!rows.length){$('#ready').innerHTML='<div class="empty">Nothing clears the confidence bar. Lower it on the left.</div>';return}
+  const pend=rows.filter(m=>m.status==='staged');
+  $('#rdy-note').textContent=`${rows.length-pend.length} of ${rows.length} approved`;
+  $('#ready').innerHTML=`<table><tr><th style="width:28px"><input type="checkbox" data-act="selall" ${pend.length&&pend.every(m=>S.sel.has(m.id))?'checked':''} ${pend.length?'':'disabled'} aria-label="select all"></th><th>Match</th><th>Type</th><th class="a">Amount</th><th>Conf.</th></tr>`+
+   rows.map(m=>`<tr data-lines="${[...m.bank,...m.ledger].join(' ')}" class="${m.status==='approved'?'dim':''}"><td>${m.status==='staged'?`<input type="checkbox" data-act="sel" data-id="${m.id}" ${S.sel.has(m.id)?'checked':''}>`:'&#10003;'}</td>
+   <td>${matchDesc(m)}<details><summary>Why this match</summary><ul>${m.why.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details></td>
+   <td>${esc(m.kind)}</td><td class="a">${money(byId[m.bank[0]].amt)}</td><td>${pill(m.conf)}</td></tr>`).join('')+
+   `</table><div class="row2" style="max-width:320px"><button class="ok" data-act="approveSel" ${[...S.sel].some(id=>S.matches.find(m=>m.id===id&&m.status==='staged'))?'':'disabled'}>Approve selected (${[...S.sel].filter(id=>S.matches.find(m=>m.id===id&&m.status==='staged')).length})</button></div>`;
+}
+function renderQueue(){
+  if(!S.ran){$('#queue').innerHTML='<div class="empty">Cases the desk cannot settle alone show up here, each with a suggested fix and a person to ask.</div>';return}
+  const items=[];
+  S.matches.filter(m=>!isReady(m)).forEach(m=>items.push({o:m.status==='staged'?0:m.status==='rejected'?1:3,h:matchCard(m)}));
+  S.exc.forEach(x=>items.push({o:x.status==='open'?0:x.status==='waiting'?1:3,h:excCard(x)}));
+  items.sort((a,b)=>a.o-b.o);
+  $('#queue').innerHTML=items.length?items.map(i=>i.h).join(''):'<div class="empty">No cases. Everything matched cleanly.</div>';
+}
+function matchCard(m){
+  const lines=[...m.bank,...m.ledger].join(' ');
+  const acts=m.status==='staged'?`<button class="sm ok" data-act="mApprove" data-id="${m.id}">Approve match</button><button class="sm no" data-act="mReject" data-id="${m.id}">Reject</button>`:
+    m.status==='rejected'?`<button class="sm" data-act="mUndo" data-id="${m.id}">Undo reject</button>`:'';
+  const note=m.status==='approved'?`<p>Approved by you.${m.journal?' '+esc(m.journal):''}</p>`:m.status==='rejected'?'<p>Rejected. Both lines stay open.</p>':'';
+  return`<div class="q review ${m.status==='approved'?'done':''}" data-lines="${lines}"><h3><span>Low-confidence match ${pill(m.conf)}</span><span class="mono" style="font-size:13px">${m.id}</span></h3><p>${matchDesc(m)}</p>
+   <details open><summary>Why the desk is unsure</summary><ul>${m.why.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>${note}<div class="acts" style="margin-top:8px">${acts}</div></div>`;
+}
+function excCard(x){
+  const lines=[...x.bank,...x.ledger].join(' ');let body='';
+  if(x.status==='open')body=`<div class="acts"><button class="sm ok" data-act="xAccept" data-id="${x.id}">${esc(x.accept)}</button>${x.ask?`<button class="sm" data-act="xAsk" data-id="${x.id}">Ask ${esc(x.ask.who)} (${esc(x.ask.role)})</button>`:''}</div>`;
+  else if(x.status==='waiting')body=`<blockquote>To ${esc(x.ask.who)}: ${esc(x.ask.msg)}</blockquote><div class="acts"><span style="color:var(--mute);font-size:13px;align-self:center">Waiting on ${esc(x.ask.who)}.</span><button class="sm" data-act="xReply" data-id="${x.id}">Simulate their reply</button></div>`;
+  else body=`<p style="margin:0">&#10003; ${esc(x.resolution)}</p>`;
+  return`<div class="q ${x.status==='resolved'?'done':''}" data-lines="${lines}"><h3><span>${esc(x.title)}</span><span class="mono" style="font-size:13px">${x.id}</span></h3><p>${esc(x.detail)}</p>${body}</div>`;
+}
+function renderSources(){
+  const row=(l,isL)=>`<div class="ln ${lineState(l.id)}" data-id="${l.id}"><span class="d">${dl(l.day)}</span><span>${esc(l.name)}${isL?`<small>${esc(l.memo)}</small>`:''}</span><span class="a">${money(l.amt)}</span></div>`;
+  $('#bank').innerHTML=bank.map(b=>row(b,0)).join('');$('#led').innerHTML=ledger.map(l=>row(l,1)).join('');
+}
+function renderLog(){const el=$('#log');el.innerHTML=S.log.map(e=>`<div><span class="t">${e.t}</span><span class="${e.user?'u':''}">${esc(e.text)}</span></div>`).join('')||'<span class="t">--:--:--</span>Waiting for a run.';el.scrollTop=el.scrollHeight}
+function renderAll(){renderStats();renderReady();renderQueue();renderSources();renderLog()}
+
+// ---------- actions ----------
+const M=id=>S.matches.find(m=>m.id===id),Xc=id=>S.exc.find(x=>x.id===id);
+function approve(m){m.status='approved';S.sel.delete(m.id);logAdd(`You approved ${m.id} (${m.bank.join('+')} <> ${m.ledger.join('+')})${m.journal?'. '+m.journal:''}`,1)}
+const acts={
+  sel(id,el){el.checked?S.sel.add(id):S.sel.delete(id)},
+  selall(id,el){S.matches.filter(m=>isReady(m)&&m.status==='staged').forEach(m=>el.checked?S.sel.add(m.id):S.sel.delete(m.id))},
+  approveSel(){const ms=S.matches.filter(m=>S.sel.has(m.id)&&m.status==='staged');ms.forEach(approve);logAdd(`Batch of ${ms.length} approved in one click`,1)},
+  mApprove(id){approve(M(id))},
+  mReject(id){const m=M(id);m.status='rejected';logAdd(`You rejected ${id}. Lines stay open.`,1)},
+  mUndo(id){M(id).status='staged';logAdd(`You reopened ${id}`,1)},
+  xAccept(id){const x=Xc(id);x.status='resolved';x.resolution=x.done;logAdd(`${id}: ${x.accept}. ${x.done}`,1)},
+  xAsk(id){const x=Xc(id);x.status='waiting';logAdd(`${id}: drafted a message to ${x.ask.who} (${x.ask.role}) and paused the case`)},
+  xReply(id){const x=Xc(id);x.status='resolved';x.resolution=x.ask.done;logAdd(`${id}: ${x.ask.who} replied: "${x.ask.reply}"`);logAdd(`${id}: ${x.ask.done}`)},
+};
+document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el||!acts[el.dataset.act])return;acts[el.dataset.act](el.dataset.id,el);renderAll()});
+document.addEventListener('mouseover',e=>{
+  document.querySelectorAll('.ln.hl').forEach(n=>n.classList.remove('hl'));
+  const c=e.target.closest('[data-lines]');if(!c)return;
+  c.dataset.lines.split(' ').forEach(id=>{const n=document.querySelector(`.ln[data-id="${id}"]`);if(n)n.classList.add('hl')})});
+
+$('#run').onclick=()=>run(true,S.ran?'Re-run requested, approvals cleared':'');
+$('#reset').onclick=()=>{if(S.running)return;Object.assign(S,{ran:false,matches:[],exc:[],log:[],sel:new Set(),clock:9*3600+14*60});$('#run').textContent='Run the close';$('#sum').disabled=true;renderAll()};
+$('#win').oninput=()=>{$('#winv').textContent='±'+$('#win').value+' day'+($('#win').value==1?'':'s');if(S.ran)run(false,`Date window set to ${$('#win').value}: re-ran, approvals cleared`)};
+$('#thr').oninput=()=>{$('#thrv').textContent=$('#thr').value+'%';if(S.ran){S.sel=new Set(S.matches.filter(m=>isReady(m)&&m.status==='staged').map(m=>m.id));renderAll()}};
+for(const id of['fee','combine','swap','dup'])$('#'+id).onchange=()=>{if(S.ran)run(false,`Playbook step "${id}" changed: re-ran, approvals cleared`)};
+
+function summary(){
+  const ids=new Set(cleared().map(l=>l.id)),left=bank.length+ledger.length-ids.size,c=cfg();
+  const ap=S.matches.filter(m=>m.status==='approved'),rs=S.exc.filter(x=>x.status==='resolved'),op=S.exc.filter(x=>x.status!=='resolved');
+  const L=[`JUNE CASH CLOSE, RUN SUMMARY (synthetic data)`,`Status: ${left?`NOT READY, ${left} lines still open`:'READY FOR SIGN-OFF, every line cleared'}`,
+   `Settings: window +/-${c.win} days, auto-stage at ${Math.round(thr()*100)}%, fee gap ${c.fee?'on':'off'}, combine ${c.combine?'on':'off'}, swapped digits ${c.swap?'on':'off'}, repeat charges ${c.dup?'on':'off'}`,'',
+   `APPROVED MATCHES (${ap.length})`,...ap.map(m=>`- ${m.id} ${m.bank.join('+')} <> ${m.ledger.join('+')} [${m.kind}, ${Math.round(m.conf*100)}%] ${money(byId[m.bank[0]].amt)}\n    ${m.why.join('; ')}${m.journal?'\n    '+m.journal:''}`),'',
+   `RESOLVED CASES (${rs.length})`,...rs.map(x=>`- ${x.id} ${x.title}: ${x.resolution}`),'',
+   `STILL OPEN (${op.length+S.matches.filter(m=>m.status!=='approved').length})`,...op.map(x=>`- ${x.id} ${x.title} [${x.status}]`),...S.matches.filter(m=>m.status!=='approved').map(m=>`- ${m.id} unapproved match [${m.status}]`),'',
+   `LOG (${S.log.length} entries)`,...S.log.map(e=>`${e.t} ${e.text}`)];
+  return L.join('\n');
+}
+$('#sum').onclick=()=>{$('#sumtxt').textContent=summary();$('#dlg').showModal()};
+$('#close').onclick=()=>$('#dlg').close();
+$('#copy').onclick=async()=>{try{await navigator.clipboard.writeText($('#sumtxt').textContent);$('#copy').textContent='Copied'}catch(_){const r=document.createRange();r.selectNodeContents($('#sumtxt'));getSelection().removeAllRanges();getSelection().addRange(r);$('#copy').textContent='Selected, press copy'}setTimeout(()=>$('#copy').textContent='Copy',1500)};
+renderAll();
+</script>
+</body>
+</html>
