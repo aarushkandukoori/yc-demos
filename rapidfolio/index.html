@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>casework · a toy KYB procedure that compiles, runs and replays</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --paper: #f4f1ea; --card: #fffdf8; --ink: #1c1b18; --muted: #6f6a60; --rule: #e3ddd0; --accent: #1f5c4d;
+  --ok: #2e6b3f; --ok-bg: #e2eee0; --esc: #8a5806; --esc-bg: #f6e9cf; --no: #a1342b; --no-bg: #f6dfda;
+  --re: #36557a; --re-bg: #e1e8f1;
+  --serif: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.45 var(--sans); }
+header { padding: 22px 24px 0; }
+.top { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: flex-end; justify-content: space-between; }
+.brand { font: 700 30px/1 var(--serif); letter-spacing: -.01em; margin: 0; }
+.brand i { display: inline-block; width: .5em; height: .5em; background: var(--accent); margin-right: .3em; vertical-align: .06em; }
+.tag { color: var(--muted); max-width: 680px; margin: 8px 0 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.howto { display: flex; flex-wrap: wrap; gap: 6px 26px; list-style: none; margin: 16px 0 0; padding: 10px 0; border-block: 1px solid var(--rule); font-size: 13px; color: var(--muted); counter-reset: s; }
+.howto li { counter-increment: s; }
+.howto li::before { content: counter(s); display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 7px; border: 1px solid var(--ink); border-radius: 50%; font: 600 11px var(--sans); color: var(--ink); }
+.hint { min-height: 1.45em; margin: 8px 0 0; font-size: 13px; color: var(--accent); }
+button { font: 600 13px var(--sans); border: 1px solid var(--ink); background: var(--card); color: var(--ink); padding: 7px 12px; border-radius: 6px; cursor: pointer; }
+button:hover { background: #efeadf; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: #174a3d; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.chip { font-weight: 500; font-size: 12px; padding: 3px 9px; border-color: #cfc7b6; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+label.opt { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr) minmax(290px, 350px); gap: 16px; padding: 12px 24px 8px; align-items: start; }
+@media (max-width: 1280px) { main { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.4fr); } .side { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } }
+@media (max-width: 760px) { main, .side { grid-template-columns: 1fr; } main { padding-inline: 12px; } header { padding-inline: 12px; } }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+h2 { font: 600 11px/1.2 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+h3 { font: 700 20px/1.2 var(--serif); margin: 0 0 2px; }
+h4 { font: 600 12.5px var(--sans); margin: 16px 0 6px; display: flex; justify-content: space-between; gap: 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.mono, code { font-family: var(--mono); font-size: 12px; }
+.ver { font: 600 11px var(--sans); letter-spacing: .04em; text-transform: none; color: var(--ok); }
+.ver.drafty { color: var(--esc); }
+#status { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; color: var(--ink); }
+textarea { width: 100%; min-height: 200px; overflow: hidden; resize: none; font: 13.5px/1.55 var(--serif); color: var(--ink); background: #fffefb; border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; }
+.tries { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 0; font-size: 12px; }
+ol.compiled { list-style: none; margin: 0; padding: 0; }
+ol.compiled li { display: grid; grid-template-columns: 30px 1fr; gap: 4px; padding: 4px 0; border-bottom: 1px dashed var(--rule); }
+ol.compiled code { color: var(--accent); white-space: normal; }
+ol.compiled li.man code { color: var(--esc); }
+.sec { font: 600 11.5px var(--mono); color: var(--muted); }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font: 600 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 6px 6px; border-bottom: 1px solid var(--rule); }
+td { padding: 6px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+tr.sel td { background: #f2eee2; }
+.num { text-align: right; font-family: var(--mono); }
+.rowbtn { all: unset; cursor: pointer; font-weight: 600; }
+.rowbtn:hover { text-decoration: underline; }
+.rowbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pill { display: inline-block; font: 600 10.5px/1 var(--sans); letter-spacing: .05em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.approve { color: var(--ok); background: var(--ok-bg); }
+.pill.escalate { color: var(--esc); background: var(--esc-bg); }
+.pill.decline { color: var(--no); background: var(--no-bg); }
+.pill.regather { color: var(--re); background: var(--re-bg); }
+.pill.idle { color: var(--muted); border-style: dashed; }
+.pill.run { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.pill.big { font-size: 12.5px; padding: 7px 11px; border-width: 2px; transform: rotate(-3deg); }
+@keyframes pulse { 50% { opacity: .35; } }
+.flag { color: var(--esc); cursor: help; }
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.stamps { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.tree { font: 12px/1.65 var(--mono); white-space: pre; overflow-x: auto; background: #faf7f0; border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; }
+.tree .bo { font-weight: 700; } .tree .below, .tree .below-t { color: var(--muted); } .tree .opq, .tree .opq-t { color: var(--esc); } .tree .bo-t { color: var(--ok); }
+ol.ev { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+ol.ev li { display: grid; grid-template-columns: 128px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--rule); }
+ol.ev li:last-child { animation: in .3s ease-out; }
+ol.ev code { color: var(--accent); }
+@keyframes in { from { opacity: 0; transform: translateY(-3px); } }
+ul.rows { list-style: none; margin: 0; padding: 0; }
+ul.rows li { display: grid; grid-template-columns: 16px 34px 1fr; gap: 4px; padding: 3px 4px; font-size: 13px; border-radius: 4px; }
+.ic { font-weight: 700; text-align: center; }
+.v-ok .ic, .v-clear .ic { color: var(--ok); } .v-no .ic { color: var(--no); } .v-esc .ic, .v-pts .ic, .v-human .ic { color: var(--esc); }
+.v-re .ic { color: var(--re); } .v-info { color: var(--muted); } .v-clear { background: #eef5ec; } .v-out { background: #fbf0d4; }
+.v-no { background: #fbeeec; }
+.analyst { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--esc); background: var(--esc-bg); border-radius: 8px; }
+.analyst.re { border-color: var(--re); background: var(--re-bg); }
+.analyst p { margin: 0 0 8px; }
+.lookback { margin: 10px 0 0; font-size: 12.5px; color: var(--re); }
+.draft { border: 1px solid var(--esc); background: #fdf8ec; border-radius: 8px; padding: 10px 12px; }
+.draft p { margin: 0 0 6px; }
+ul.changes { margin: 0 0 8px; padding-left: 18px; font: 12px/1.5 var(--mono); }
+.sum { font-size: 13px; }
+.diff td, .diff th { padding: 4px 6px; font-size: 12.5px; }
+.diff tr.chg td { background: #f8e9c6; font-weight: 600; }
+ol.hist { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12.5px; }
+ol.hist li { padding: 3px 0; border-bottom: 1px dashed var(--rule); }
+ol.log { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow: auto; font: 11.5px/1.45 var(--mono); }
+ol.log li { padding: 3px 0; border-bottom: 1px dotted var(--rule); overflow-wrap: anywhere; }
+ol.log li.bad { background: var(--no-bg); color: var(--no); }
+.cid { color: var(--accent); } .h { color: #a39d90; }
+#lognote.bad { color: var(--no); font-weight: 600; } #lognote.good { color: var(--ok); font-weight: 600; }
+footer { margin: 8px 24px 0; padding: 14px 0 28px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 12.5px; }
+@media (max-width: 760px) { footer { margin-inline: 12px; } ol.ev li { grid-template-columns: 1fr; gap: 0; } }
+@media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div>
+      <h1 class="brand"><i aria-hidden="true"></i>casework</h1>
+      <p class="tag">A toy back office. A KYB procedure written in plain English compiles into deterministic checks, works a queue of fictional business applications, and replays every past case before a new version of the procedure can ship.</p>
+    </div>
+    <div class="controls">
+      <button class="primary" id="run">Work the queue</button>
+      <label class="opt"><input type="checkbox" id="animate" checked> animate</label>
+      <label class="opt" title="On: also screens owners under the ownership line and stores near-miss names, so a stricter procedure can be replayed without new lookups."><input type="checkbox" id="wide" checked> collect beyond the procedure</label>
+      <button id="reset">Reset cases</button>
+    </div>
+  </div>
+  <ol class="howto">
+    <li>Write the procedure</li>
+    <li>Each line compiles to a check</li>
+    <li>The agent gathers and seals evidence, the procedure decides</li>
+    <li>Edit a line: past cases replay before you publish</li>
+  </ol>
+  <p class="hint" id="hint" aria-live="polite">Start with <b>Work the queue</b>, then edit a line of the procedure.</p>
+</header>
+<main>
+  <div>
+    <section class="card" aria-labelledby="h-proc">
+      <h2 id="h-proc"><span>Procedure</span><span id="ver" class="ver"></span></h2>
+      <label for="proc" class="sr">KYB procedure, one numbered step per line</label>
+      <textarea id="proc" spellcheck="false"></textarea>
+      <div class="tries"><span class="muted">Try:</span>
+        <button class="chip" data-try="2|25%|10%">§2 owners 25% → 10%</button>
+        <button class="chip" data-try="10|25 or less|40 or less">§10 score 25 → 40</button>
+        <button class="chip" data-try="6|90 days|30 days">§6 90 → 30 days</button>
+      </div>
+      <h4>Compiled workflow <span class="muted" id="compiled-sum"></span></h4>
+      <ol class="compiled" id="compiled"></ol>
+    </section>
+  </div>
+  <div>
+    <section class="card" aria-labelledby="h-q">
+      <h2 id="h-q"><span>Queue · 8 fictional applications</span><span id="status" aria-live="polite"></span></h2>
+      <table id="queue"><thead><tr><th>Applicant</th><th>Decision</th><th class="num">Score</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="card" id="case" aria-label="Case file"></section>
+  </div>
+  <div class="side">
+    <section class="card" aria-labelledby="h-v">
+      <h2 id="h-v"><span>Versions &amp; replay</span></h2>
+      <div id="versions"></div>
+    </section>
+    <section class="card" aria-labelledby="h-l">
+      <h2 id="h-l"><span>Audit log</span><span><button class="chip" data-act="verify">Verify chain</button> <button class="chip" data-act="tamper">Tamper</button></span></h2>
+      <p id="lognote" class="muted small">Every tool call, decision and edit is chained to the entry before it (toy 53-bit hash, not cryptographic).</p>
+      <ol class="log" id="log"></ol>
+    </section>
+  </div>
+</main>
+<footer>Independent demo built by Aarush Kandukoori, inspired by Rapidfolio (YC S26). Not affiliated with Rapidfolio. Every company, person, registry record and watchlist entry on this page is fictional.</footer>
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+const f2 = x => Number(x).toFixed(2);
+const pct = e => `${+(e * 100).toFixed(2)}%`;
+const days = d => d < 365 ? `${d} days` : `${(d / 365).toFixed(1)} years`;
+const clock = () => new Date().toTimeString().slice(0, 8);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ZERO = '0'.repeat(14), EPS = 1e-9;
+function cyrb53(str) { // toy 53-bit hash, NOT cryptographic: a real ledger would sign SHA-256 digests
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0');
+}
+
+/* ---------- name matching: normalize, sort tokens, Jaro-Winkler ---------- */
+const SUFFIX = { limited: 'ltd', incorporated: 'inc', company: 'co', corporation: 'corp' };
+const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  .split(' ').map(w => SUFFIX[w] || w).sort().join(' ');
+function jaro(a, b) {
+  if (a === b) return 1;
+  const win = Math.max(0, (Math.max(a.length, b.length) >> 1) - 1), am = [], bm = [];
+  let m = 0, t = 0, k = 0;
+  for (let i = 0; i < a.length; i++)
+    for (let j = Math.max(0, i - win); j < Math.min(b.length, i + win + 1); j++)
+      if (!bm[j] && a[i] === b[j]) { am[i] = bm[j] = true; m++; break; }
+  if (!m) return 0;
+  for (let i = 0; i < a.length; i++) if (am[i]) { while (!bm[k]) k++; if (a[i] !== b[k++]) t++; }
+  return (m / a.length + m / b.length + (m - t / 2) / m) / 3;
+}
+function sim(x, y) {
+  const a = norm(x), b = norm(y), j = jaro(a, b);
+  let p = 0; while (p < 4 && p < a.length && a[p] === b[p]) p++;
+  return j + p * 0.1 * (1 - j);
+}
+
+/* ---------- fictional sources ---------- */
+const WATCHLIST = [
+  { id: 'FW-0192', name: 'Lev Oransky', dob: '1969-02-11' },
+  { id: 'FW-0457', name: 'Rafael Durante', dob: '1958-07-30' },
+  { id: 'FW-0803', name: 'Maren Holt-Vogel', dob: null },
+  { id: 'FW-1120', name: 'Ilya Brandvold', dob: '1975-12-03' },
+];
+const P = (name, pct, dob, id = true) => ({ kind: 'p', name, pct, dob, id });
+const C = (name, pct) => ({ kind: 'c', name, pct });
+const HOLDCOS = { // holding companies the toy registry knows; anything missing has no public register
+  'Kestrel Holdings Ltd': [P('Rafael Duarte', 50, '1988-05-14'), P('Mina Sato', 50, '1990-09-02')],
+  'Copperfield Ventures Ltd': [P('Jonah Arkwright', 75, '1979-06-18'), P('Lev Oransky', 25, '1969-02-11')],
+};
+const R = (name, status, age, addr, addrCount, directors) => ({ name, status, age, addr, addrCount, directors });
+const K = (id, name, reg, industry, site, rec, owners, domain, siteSays, quote) => ({ id, name, reg, industry, site, rec, owners, domain, siteSays, quote });
+const CASES = [
+  K('K-101', 'Bramblewood Coffee Traders Ltd', 'RC-0288141', 'wholesale coffee', 'bramblewood-coffee.example',
+    R('BRAMBLEWOOD COFFEE TRADERS LIMITED', 'active', 3110, '14 Kiln Lane, Unit 2', 3, [['Ana Ferreira-Lowe', '1984-03-22']]),
+    [P('Ana Ferreira-Lowe', 60, '1984-03-22'), P('Tomas Lowe', 40, '1982-11-05')], 2890, 'wholesale coffee', 'Green and roasted coffee for cafes, by the 60 kg bag.'),
+  K('K-102', 'Northpass Logistics Inc.', 'RC-0412907', 'freight logistics', 'northpass-logistics.example',
+    R('NORTHPASS LOGISTICS INCORPORATED', 'active', 2240, '900 Quay Street, Floor 3', 41, [['Ines Okonkwo', '1985-01-27']]),
+    [C('Kestrel Holdings Ltd', 70), P('Ines Okonkwo', 30, '1985-01-27')], 2100, 'freight logistics', 'Cross-dock and last-mile freight across three ports.'),
+  K('K-103', 'Harborline Dental Supply Co.', 'RC-0530218', 'dental supplies', 'harborline-dental.example',
+    R('HARBORLINE DENTAL SUPPLY COMPANY', 'active', 1460, '7 Mercer Row', 6, [['Grace Whitfield', '1971-04-09']]),
+    [P('Grace Whitfield', 55, '1971-04-09'), P('Owen Whitfield', 30, '1969-10-30'), P('Dana Whitfield', 15, '1996-08-12', false)], 1400, 'dental supplies', 'Impression trays, burs and sterilization pouches for clinics.'),
+  K('K-104', 'Saltmarsh Analytics Ltd', 'RC-0611573', 'analytics software', 'saltmarsh-analytics.example',
+    R('SALTMARSH ANALYTICS LIMITED', 'active', 980, '31 Ferry Road', 12, [['Priya Raman', '1987-12-01']]),
+    [P('Priya Raman', 55, '1987-12-01'), C('Copperfield Ventures Ltd', 45)], 960, 'analytics software', 'Demand forecasting dashboards for regional retailers.'),
+  K('K-105', 'Quillfeather Studio LLC', 'RC-0790034', 'design studio', 'quillfeather.example',
+    R('QUILLFEATHER STUDIOS LLC', 'active', 34, '40 Harbor Row, Suite 1209', 2314, [['June Calloway', '1993-05-19']]),
+    [P('June Calloway', 100, '1993-05-19')], 9, 'design studio', 'Brand identity and packaging for small food brands.'),
+  K('K-106', 'Tidewater Freight Brokers Ltd', 'RC-0199860', 'freight brokerage', 'tidewater-freight.example',
+    R('TIDEWATER FREIGHT BROKERS LIMITED', 'dissolved', 4020, '2 Dock Approach', 18, [['Colm Avery', '1966-02-14']]),
+    [P('Colm Avery', 100, '1966-02-14')], 3900, 'freight brokerage', 'Full and part loads, booked same day.'),
+  K('K-107', 'Meridian Grain Exports Ltd', 'RC-0702245', 'wholesale grain', 'meridian-grain.example',
+    R('MERIDIAN GRAIN EXPORTS LIMITED', 'active', 610, '5 Silo Street', 9, [['Hana Kovač', '1982-07-07']]),
+    [P('Hana Kovač', 50, '1982-07-07'), P('Piet Brandsma', 50, '1980-03-15')], 200, 'crypto trading', 'OTC desk: settle USDT or USDC within the hour, no limits.'),
+  K('K-108', 'Lumen Ridge Remit LLC', 'RC-0745120', 'money services', 'lumenridge-remit.example',
+    R('LUMEN RIDGE REMIT LLC', 'active', 720, '118 Canal Street', 27, [['Kofi Mensah-Arden', '1977-09-23']]),
+    [P('Kofi Mensah-Arden', 70, '1977-09-23'), C('Ardent Bay Partners LP', 30)], 700, 'money services', 'Send money home to 14 corridors, cash pickup in minutes.'),
+];
+
+/* ---------- compiler: one numbered line -> one deterministic step ---------- */
+const DEFAULT = `1. Look the business up in the company registry. Decline if it is not active; escalate if the registered name is less than 0.90 similar to the application.
+2. Anyone who owns 25% or more, directly or through other companies, is a beneficial owner. Each one needs a verified ID; escalate if one can't be traced to a person.
+3. Screen every beneficial owner and director against the watchlist. A name match of 0.88 or above is a potential hit: clear it if birth dates differ, decline if they match, escalate if a date is missing.
+4. Decline these industries: firearms, unlicensed lending.
+5. Escalate these industries for enhanced due diligence: money services, crypto, gambling.
+6. Add 15 risk points if the business was incorporated less than 90 days ago.
+7. Add 15 risk points if its registered address is shared by more than 500 companies.
+8. Add 10 risk points if its website domain is less than 30 days old.
+9. Add 40 risk points if its website describes a different business than the application.
+10. Approve if nothing above declined or escalated and the score is 25 or less; otherwise escalate to an analyst with a summary.`;
+function compile(text) {
+  return text.split('\n').map(l => l.trim()).filter(Boolean).map((line, i) => {
+    const m = line.match(/^(\d+)[.)]\s*(.*)$/), sec = m ? m[1] : String(i + 1), body = m ? m[2] : line, lo = body.toLowerCase();
+    const num = re => { const x = lo.match(re); return x ? parseFloat(x[1]) : null; };
+    const list = () => (lo.split(':')[1] || '').replace(/\.\s*$/, '').split(/,|\band\b/).map(x => x.trim()).filter(Boolean);
+    const OWN = /(\d+(?:\.\d+)?)\s*%\s*or more/, MAX = /(\d+) or (?:less|fewer|below|under)/;
+    let s = null, x;
+    if (/registry/.test(lo)) s = { kind: 'registry', nameSim: num(/(\d*\.\d+)\s+similar/) ?? 0.9 };
+    else if (/\bown/.test(lo) && num(OWN) != null) s = { kind: 'owners', line: num(OWN) };
+    else if (/screen|watchlist/.test(lo)) s = { kind: 'screen', min: num(/(\d*\.\d+)\s+or (?:above|higher|more)/) ?? 0.88 };
+    else if (/industr/.test(lo) && /^decline/.test(lo)) s = { kind: 'declineInd', list: list() };
+    else if (/industr/.test(lo) && /escalate/.test(lo)) s = { kind: 'eddInd', list: list() };
+    else if ((x = lo.match(/add (\d+) (?:risk )?points? if (.+)/))) {
+      const pts = +x[1], cond = x[2], n = +(cond.match(/(\d+)/) || [0, NaN])[1];
+      if (/incorporated/.test(cond) && n) s = { kind: 'points', pts, cond: 'age', n };
+      else if (/address/.test(cond) && n) s = { kind: 'points', pts, cond: 'addr', n };
+      else if (/domain/.test(cond) && n) s = { kind: 'points', pts, cond: 'domain', n };
+      else if (/site/.test(cond) && /different/.test(cond)) s = { kind: 'points', pts, cond: 'site' };
+    } else if (/^approve/.test(lo) && num(MAX) != null) s = { kind: 'approve', max: num(MAX) };
+    return { sec, text: body, ...(s || { kind: 'manual' }) };
+  });
+}
+const COND = { age: n => `if incorporated < ${n} days ago`, addr: n => `if address hosts > ${n} companies`, domain: n => `if domain < ${n} days old`, site: () => 'if site describes another business' };
+function describe(s) {
+  switch (s.kind) {
+    case 'registry': return `registry.lookup → decline unless active · escalate if name match < ${f2(s.nameSim)}`;
+    case 'owners': return `ownership.trace → owner if ≥ ${s.line}% summed across holding paths · needs verified ID · untraceable holder escalates`;
+    case 'screen': return `watchlist.screen(owners, directors) → hit at ≥ ${f2(s.min)} · birth date clears, declines or escalates`;
+    case 'declineInd': return `industry ∈ {${s.list.join(', ')}} → decline`;
+    case 'eddInd': return `industry ∈ {${s.list.join(', ')}} → escalate for EDD`;
+    case 'points': return `score += ${s.pts} ${COND[s.cond](s.n)}`;
+    case 'approve': return `approve if nothing blocked and score ≤ ${s.max}, else analyst`;
+    default: return 'did not compile → an analyst does this step by hand on every case';
+  }
+}
+function brief(s) {
+  switch (s.kind) {
+    case 'registry': return `name match ≥ ${f2(s.nameSim)}`;
+    case 'owners': return `owners at ≥ ${s.line}%`;
+    case 'screen': return `watchlist hit at ≥ ${f2(s.min)}`;
+    case 'declineInd': return `decline {${s.list.join(', ')}}`;
+    case 'eddInd': return `EDD {${s.list.join(', ')}}`;
+    case 'points': return `+${s.pts} ${COND[s.cond](s.n)}`;
+    case 'approve': return `approve at score ≤ ${s.max}`;
+    default: return `by hand: "${s.text.slice(0, 40)}"`;
+  }
+}
+function diffSteps(a, b) {
+  const A = new Map(a.map(s => [s.sec, brief(s)])), B = new Map(b.map(s => [s.sec, brief(s)]));
+  return [...new Set([...A.keys(), ...B.keys()])].filter(k => A.get(k) !== B.get(k))
+    .map(k => `§${k}: ${A.get(k) || 'new'} → ${B.get(k) || 'removed'}`);
+}
+const lineOf = steps => (steps.find(s => s.kind === 'owners') || { line: 25 }).line;
+const minOf = steps => (steps.find(s => s.kind === 'screen') || { min: 0.88 }).min;
+
+/* ---------- state + audit log ---------- */
+const S = { pub: { v: 1, text: DEFAULT, steps: compile(DEFAULT) }, draft: null, versions: [], ev: {}, res: {}, human: {}, log: [],
+  sel: 'K-101', running: null, animate: !matchMedia('(prefers-reduced-motion: reduce)').matches, wide: true, bad: null, tampered: null };
+const entryStr = e => [e.prev, e.n, e.t, e.actor, e.action, e.cid, e.detail].join('|');
+function log(actor, action, cid, detail) {
+  const e = { n: S.log.length + 1, t: clock(), actor, action, cid, detail, prev: S.log.length ? S.log[S.log.length - 1].h : ZERO };
+  e.h = cyrb53(entryStr(e)); S.log.push(e); renderLog();
+}
+
+/* ---------- agent: gather evidence (simulated tool calls), then seal it ---------- */
+function trace(holders, mult, seen, people, opaque) {
+  return holders.map(h => {
+    const eff = mult * h.pct / 100, node = { name: h.name, pct: h.pct, kind: h.kind };
+    if (h.kind === 'p') (people[h.name] ||= { name: h.name, eff: 0, dob: h.dob, src: h.id }).eff += eff;
+    else if (HOLDCOS[h.name] && !seen.includes(h.name)) node.kids = trace(HOLDCOS[h.name], eff, [...seen, h.name], people, opaque);
+    else { node.opaque = true; opaque.push({ name: h.name, eff }); }
+    return node;
+  });
+}
+async function gather(c) {
+  const wide = S.wide, ev = S.ev[c.id] = { steps: [], done: false, simFloor: wide ? 0.75 : minOf(S.pub.steps), ownFloor: wide ? 0 : lineOf(S.pub.steps) };
+  const tool = async (name, fn) => {
+    await sleep(S.animate ? 120 : 0);
+    const res = fn(); ev.steps.push({ name, res }); log('agent', name, c.id, res);
+    if (S.sel === c.id) renderCase();
+  };
+  await tool('registry.lookup', () => { ev.reg = { ...c.rec }; return `"${c.rec.name}", ${c.rec.status}, incorporated ${days(c.rec.age)} ago`; });
+  await tool('ownership.trace', () => {
+    ev.people = {}; ev.opaque = []; ev.tree = trace(c.owners, 1, [], ev.people, ev.opaque);
+    c.rec.directors.forEach(([name, dob]) => { (ev.people[name] ||= { name, eff: 0, dob, src: true }).director = true; });
+    const n = Object.values(ev.people).filter(p => p.eff > 0).length;
+    return `${n} people behind the applicant${ev.opaque.length ? `; ${ev.opaque.map(o => o.name).join(', ')} has no public register` : ''}`;
+  });
+  const scope = Object.values(ev.people).filter(p => p.director || p.eff * 100 >= ev.ownFloor - EPS);
+  await tool('idv.status', () => {
+    scope.forEach(p => { p.id = p.src !== false; });
+    const bad = scope.filter(p => !p.id).map(p => p.name);
+    return `${scope.length} checked, ${bad.length ? bad.join(', ') + ' has no verified ID' : 'all verified'}`;
+  });
+  await tool('watchlist.screen', () => {
+    let near = 0;
+    scope.forEach(p => { p.hits = WATCHLIST.map(w => ({ w, s: sim(p.name, w.name) })).filter(h => h.s >= ev.simFloor); near += p.hits.length; });
+    return `${scope.length} names screened, ${near} candidate${near === 1 ? '' : 's'} at ≥ ${f2(ev.simFloor)} stored`;
+  });
+  await tool('address.index', () => { ev.addrCount = c.rec.addrCount; return `${c.rec.addrCount.toLocaleString('en-US')} companies registered at ${c.rec.addr}`; });
+  await tool('whois', () => { ev.domain = c.domain; return `${c.site} created ${days(c.domain)} ago`; });
+  await tool('site.read', () => { ev.siteSays = c.siteSays; ev.mismatch = c.siteSays !== c.industry; return `reads as ${c.siteSays}: "${c.quote}"`; });
+  ev.hash = cyrb53(JSON.stringify([ev.reg, ev.people, ev.opaque, ev.addrCount, ev.domain, ev.siteSays]));
+  ev.done = true;
+  log('agent', 'evidence.seal', c.id, ev.hash);
+}
+
+/* ---------- procedure: a pure function of (sealed evidence, compiled steps) ---------- */
+function decide(ev, steps, c) {
+  const rows = [], flags = new Set(), add = (sec, v, text) => rows.push({ sec, v, text });
+  const people = Object.values(ev.people), own = steps.find(s => s.kind === 'owners');
+  const isBo = p => own && p.eff * 100 >= own.line - EPS, bos = people.filter(isBo);
+  let score = 0, approve = null;
+  for (const s of steps) {
+    if (s.kind === 'registry') {
+      const ns = sim(c.name, ev.reg.name);
+      if (ev.reg.status !== 'active') { add(s.sec, 'no', `registry status is ${ev.reg.status}`); flags.add('decline'); }
+      else if (ns < s.nameSim) { add(s.sec, 'esc', `registered name "${ev.reg.name}" is only ${f2(ns)} similar`); flags.add('escalate'); }
+      else add(s.sec, 'ok', `active, name match ${f2(ns)} ("${ev.reg.name}")`);
+    } else if (s.kind === 'owners') {
+      ev.opaque.filter(o => o.eff * 100 >= s.line - EPS).forEach(o => { add(s.sec, 'esc', `${o.name} holds ${pct(o.eff)} and has no public register, so it can't be traced to people`); flags.add('escalate'); });
+      for (const p of bos) {
+        if (p.id === undefined) { add(s.sec, 're', `ID status for ${p.name} (${pct(p.eff)}) was never collected`); flags.add('regather'); }
+        else if (!p.id) { add(s.sec, 'esc', `${p.name} (${pct(p.eff)}) has no verified ID`); flags.add('escalate'); }
+      }
+      const ok = bos.filter(p => p.id).map(p => `${p.name} ${pct(p.eff)}`);
+      if (ok.length) add(s.sec, 'ok', `verified owners at ≥ ${s.line}%: ${ok.join(', ')}`);
+      const below = people.filter(p => p.eff > 0 && !isBo(p));
+      if (below.length) add(s.sec, 'info', `under the ${s.line}% line: ${below.map(p => `${p.name} ${pct(p.eff)}`).join(', ')}`);
+    } else if (s.kind === 'screen') {
+      if (s.min < ev.simFloor - EPS) { add(s.sec, 're', `names under ${f2(ev.simFloor)} similarity were never stored`); flags.add('regather'); continue; }
+      const subjects = people.filter(p => p.director || isBo(p));
+      let hits = 0;
+      for (const p of subjects) {
+        if (!p.hits) { add(s.sec, 're', `${p.name} was never screened`); flags.add('regather'); continue; }
+        for (const h of p.hits.filter(h => h.s >= s.min)) {
+          const tag = `${p.name} ~ ${h.w.id} "${h.w.name}" (${f2(h.s)})`; hits++;
+          if (!h.w.dob || !p.dob) { add(s.sec, 'esc', `${tag}: no birth date to compare`); flags.add('escalate'); }
+          else if (h.w.dob === p.dob) { add(s.sec, 'no', `${tag}: birth dates match`); flags.add('decline'); }
+          else add(s.sec, 'clear', `${tag}: cleared, born ${p.dob.slice(0, 4)} vs ${h.w.dob.slice(0, 4)}`);
+        }
+      }
+      if (!hits && subjects.every(p => p.hits)) add(s.sec, 'ok', `${subjects.length} screened, nothing at ≥ ${f2(s.min)}`);
+      people.filter(p => !subjects.includes(p) && p.hits).forEach(p => p.hits.filter(h => h.s >= s.min && h.w.dob === p.dob).forEach(h =>
+        add(s.sec, 'out', `stored but unused: ${p.name} (${pct(p.eff)}, under the owner line) matches ${h.w.id} with the same birth date`)));
+    } else if (s.kind === 'declineInd' || s.kind === 'eddInd') {
+      const dec = s.kind === 'declineInd', hit = s.list.find(x => c.industry.includes(x) || x.includes(c.industry));
+      if (hit) { add(s.sec, dec ? 'no' : 'esc', `"${c.industry}" is on the ${dec ? 'decline' : 'enhanced due diligence'} list`); flags.add(dec ? 'decline' : 'escalate'); }
+      else add(s.sec, 'ok', `"${c.industry}" is not on the ${dec ? 'decline' : 'EDD'} list`);
+    } else if (s.kind === 'points') {
+      const [hit, why] = {
+        age: () => [ev.reg.age < s.n, `incorporated ${days(ev.reg.age)} ago`],
+        addr: () => [ev.addrCount > s.n, `${ev.addrCount.toLocaleString('en-US')} companies at this address`],
+        domain: () => [ev.domain < s.n, `domain is ${days(ev.domain)} old`],
+        site: () => [ev.mismatch, ev.mismatch ? `site reads as ${ev.siteSays}, not ${c.industry}` : 'site matches the application'],
+      }[s.cond]();
+      if (hit) score += s.pts;
+      add(s.sec, hit ? 'pts' : 'ok', `+${hit ? s.pts : 0}: ${why}`);
+    } else if (s.kind === 'approve') approve = s;
+    else { add(s.sec, 'human', `"${s.text.slice(0, 48)}${s.text.length > 48 ? '…' : ''}" did not compile, so an analyst does it by hand`); flags.add('escalate'); }
+  }
+  let out = 'approve';
+  if (flags.has('decline')) out = 'decline';
+  else if (flags.has('regather')) out = 'regather';
+  else if (flags.has('escalate')) out = 'escalate';
+  if (!approve) { if (out === 'approve') out = 'escalate'; add('·', 'human', 'no approval rule compiled, so nothing auto-approves'); }
+  else if (out !== 'approve') add(approve.sec, 'info', `not auto-approved: blocked above (score ${score})`);
+  else if (score > approve.max) { out = 'escalate'; add(approve.sec, 'esc', `score ${score} is over ${approve.max}`); }
+  else add(approve.sec, 'ok', `nothing blocked and score ${score} ≤ ${approve.max}: approve`);
+  return { out, score, rows };
+}
+const memo = r => r.rows.filter(x => ['esc', 'no', 're', 'human', 'pts'].includes(x.v)).map(x => `§${x.sec} ${x.text}`).join('; ');
+
+/* ---------- running cases ---------- */
+async function work(c) {
+  S.running = c.id; S.sel = c.id; renderAll();
+  await gather(c);
+  const r = decide(S.ev[c.id], S.pub.steps, c); r.v = S.pub.v; S.res[c.id] = r; delete S.human[c.id];
+  log(`procedure v${S.pub.v}`, 'decide', c.id, `${r.out}, score ${r.score}`);
+  S.running = null; renderAll();
+}
+async function runQueue() {
+  if (S.running) return;
+  const todo = CASES.filter(c => !S.ev[c.id]?.done);
+  if (!todo.length) return hint('Every case is worked. Edit a line of the procedure, or Reset cases.');
+  for (const c of todo) await work(c);
+  hint('Queue done. Now edit the procedure (or press a Try button) and watch the replay on the right.');
+}
+function publish() {
+  const d = S.draft; if (!d || S.running) return;
+  const v = S.pub.v + 1, done = CASES.filter(c => S.ev[c.id]?.done);
+  const flips = done.filter(c => decide(S.ev[c.id], S.pub.steps, c).out !== decide(S.ev[c.id], d.steps, c).out).length;
+  S.pub = { v, text: d.text, steps: d.steps }; S.draft = null;
+  S.versions.push({ v, at: clock(), note: d.changes.join('; ') });
+  log('you', 'procedure.publish', `v${v}`, `${d.changes.join('; ')} · replay changed ${flips} of ${done.length}`);
+  done.forEach(c => {
+    const prev = S.res[c.id]?.out, r = decide(S.ev[c.id], S.pub.steps, c); r.v = v; r.prev = prev; S.res[c.id] = r;
+    if (prev !== r.out) { delete S.human[c.id]; log(`procedure v${v}`, 'redecide', c.id, `${prev} → ${r.out} (lookback, no new lookups)`); }
+  });
+  renderProc(S.pub.steps); renderAll();
+}
+function onEdit() {
+  const text = $('#proc').value, steps = compile(text), changes = diffSteps(S.pub.steps, steps);
+  S.draft = changes.length ? { text, steps, changes } : null;
+  renderProc(steps); renderVersions();
+}
+function tryEdit(sec, from, to) {
+  const ta = $('#proc');
+  ta.value = ta.value.split('\n').map(l => !l.trim().startsWith(sec + '.') ? l : l.includes(from) ? l.replace(from, to) : l.replace(to, from)).join('\n');
+  fit(); onEdit();
+  if (!CASES.some(c => S.ev[c.id]?.done)) hint('Draft open. Work the queue first so there is sealed evidence to replay.');
+}
+function verifyChain() {
+  let prev = ZERO;
+  for (const e of S.log) {
+    if (e.prev !== prev || cyrb53(entryStr(e)) !== e.h) { S.bad = e.n; renderLog(); return logNote(`✗ Chain breaks at #${e.n}: it no longer matches its own hash, so nothing after it can be trusted.`, 'bad'); }
+    prev = e.h;
+  }
+  S.bad = null; renderLog(); logNote(`✓ ${S.log.length} entries, each hash links to the one before.`, 'good');
+}
+function tamper() {
+  if (S.tampered) { S.tampered.e.detail = S.tampered.orig; S.tampered = null; $('[data-act="tamper"]').textContent = 'Tamper'; return verifyChain(); }
+  const cands = S.log.filter(e => e.action === 'decide');
+  if (!cands.length) return logNote('Work a case first, then tamper with its decision.', '');
+  const e = cands[Math.floor(Math.random() * cands.length)];
+  S.tampered = { e, orig: e.detail };
+  e.detail = e.detail.startsWith('approve') ? e.detail.replace('approve', 'decline') : e.detail.replace(/^\w+/, 'approve');
+  $('[data-act="tamper"]').textContent = 'Undo tamper'; renderLog();
+  logNote(`Rewrote entry #${e.n} in place (${e.cid} now says "${e.detail}"). Press Verify chain.`, '');
+}
+const hint = msg => { $('#hint').innerHTML = msg; };
+const logNote = (msg, cls) => { const n = $('#lognote'); n.textContent = msg; n.className = 'small ' + (cls || 'muted'); };
+
+/* ---------- rendering ---------- */
+const LABEL = { approve: 'approved', escalate: 'escalated', decline: 'declined', regather: 'needs re-gather' };
+const ICON = { ok: '✓', clear: '✓', no: '✕', esc: '!', pts: '+', re: '?', info: '·', out: '⚑', human: '✎' };
+const pill = (o, big) => `<span class="pill ${o}${big ? ' big' : ''}">${LABEL[o]}</span>`;
+function renderProc(steps) {
+  const man = steps.filter(s => s.kind === 'manual').length;
+  $('#ver').textContent = S.draft ? `draft v${S.pub.v + 1} · unpublished` : `v${S.pub.v} · published`;
+  $('#ver').className = 'ver' + (S.draft ? ' drafty' : '');
+  $('#compiled-sum').textContent = `${steps.length} lines → ${steps.length - man} checks${man ? `, ${man} by hand` : ''}`;
+  $('#compiled').innerHTML = steps.map(s => `<li class="${s.kind === 'manual' ? 'man' : ''}"><span class="sec">§${esc(s.sec)}</span><code>${esc(describe(s))}</code></li>`).join('');
+}
+function renderQueue() {
+  $('#queue tbody').innerHTML = CASES.map(c => {
+    const r = S.res[c.id], hum = S.human[c.id];
+    const st = S.running === c.id ? '<span class="pill run">working</span>' : !r ? '<span class="pill idle">queued</span>'
+      : pill(r.out) + (hum ? ` <span class="pill ${hum}">analyst</span>` : '') + (r.rows.some(x => x.v === 'out') ? ' <span class="flag" title="holds evidence this procedure ignores">⚑</span>' : '');
+    return `<tr${S.sel === c.id ? ' class="sel"' : ''}><td><button class="rowbtn" data-sel="${c.id}">${esc(c.name)}</button><div class="muted small">${esc(c.industry)}</div></td><td>${st}</td><td class="num">${r ? r.score : ''}</td></tr>`;
+  }).join('');
+  const n = k => CASES.filter(c => S.res[c.id]?.out === k).length;
+  $('#status').textContent = Object.keys(S.res).length ? `${n('approve')} approved · ${n('escalate')} escalated · ${n('decline')} declined${n('regather') ? ` · ${n('regather')} re-gather` : ''}` : '';
+  $('#run').disabled = $('#reset').disabled = !!S.running;
+}
+function tree(c, ev) {
+  const line = lineOf(S.pub.steps), out = [esc(c.name)];
+  const walk = (nodes, pre) => nodes.forEach((n, i) => {
+    const last = i === nodes.length - 1;
+    let cls = '', tag = '';
+    if (n.kind === 'p') { const p = ev.people[n.name], bo = p.eff * 100 >= line - EPS; cls = bo ? 'bo' : 'below'; tag = `${pct(p.eff)} effective${bo ? ', owner' : ', under line'}`; }
+    else if (n.opaque) { cls = 'opq'; tag = 'no public register'; }
+    out.push(`${pre}${last ? '└─ ' : '├─ '}<span class="${cls}">${esc(n.name)}</span> <span class="muted">${n.pct}%</span>${tag ? `  <span class="${cls}-t">${tag}</span>` : ''}`);
+    if (n.kids) walk(n.kids, pre + (last ? '   ' : '│  '));
+  });
+  walk(ev.tree, '');
+  return out.join('\n');
+}
+function renderCase() {
+  const c = CASES.find(x => x.id === S.sel), ev = S.ev[c.id], r = S.res[c.id], hum = S.human[c.id];
+  let h = `<div class="head"><div><h2>Case file</h2><h3>${esc(c.name)}</h3><p class="muted mono" style="margin:0">${c.id} · ${c.reg} · ${esc(c.industry)} · ${c.site}</p></div>
+    <div class="stamps">${r ? pill(r.out, true) : ''}${hum ? `<span class="pill big ${hum}">analyst: ${hum}</span>` : ''}</div></div>`;
+  if (!ev) h += `<p class="muted">Not worked yet. The agent will call six fictional sources, seal what it found, then apply procedure v${S.pub.v}.</p><button class="primary" data-act="run1"${S.running ? ' disabled' : ''}>Work this case</button>`;
+  else {
+    if (ev.tree) h += `<h4>Ownership, traced through holding companies <span class="muted">owner line ${lineOf(S.pub.steps)}%</span></h4><div class="tree">${tree(c, ev)}</div>`;
+    h += `<h4>Evidence gathered <span class="muted mono">${ev.done ? 'sealed ' + ev.hash.slice(0, 10) : 'gathering…'}</span></h4>
+      <ol class="ev">${ev.steps.map(s => `<li><code>${s.name}</code><span>${esc(s.res)}</span></li>`).join('')}</ol>`;
+    if (r) {
+      h += `<h4>Decision under procedure v${r.v} <span class="muted">score ${r.score}</span></h4><ul class="rows">${r.rows.map(x =>
+        `<li class="v-${x.v}"><span class="ic" aria-hidden="true">${ICON[x.v]}</span><span class="sec">§${esc(x.sec)}</span><span>${esc(x.text)}</span></li>`).join('')}</ul>`;
+      if (r.prev && r.prev !== r.out) h += `<p class="lookback">Re-decided when v${r.v} was published (was ${LABEL[r.prev]}), from the sealed evidence. No new lookups.</p>`;
+      if (r.out === 'escalate' && !hum) h += `<div class="analyst"><p><b>Paused for a human.</b> ${esc(memo(r))}.</p><button data-act="ha">Approve</button> <button data-act="hd">Decline</button></div>`;
+      if (r.out === 'regather') h += `<div class="analyst re"><p><b>Can't decide from the sealed evidence.</b> ${esc(memo(r))}.</p><button data-act="run1"${S.running ? ' disabled' : ''}>Re-gather this case</button></div>`;
+    }
+  }
+  $('#case').innerHTML = h;
+}
+function renderVersions() {
+  const d = S.draft, done = CASES.filter(c => S.ev[c.id]?.done);
+  let h = `<p style="margin-top:0"><b>v${S.pub.v}</b> is live.${d ? '' : ' Edit any line of the procedure to open a draft; it has to replay every worked case before it can be published.'}</p>`;
+  if (d) {
+    h += `<div class="draft"><p><b>Draft v${S.pub.v + 1}</b></p><ul class="changes">${d.changes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+    if (!done.length) h += `<p class="muted">Nothing to replay yet: work the queue first.</p>`;
+    else {
+      const t0 = performance.now();
+      const rows = done.map(c => ({ c, a: decide(S.ev[c.id], S.pub.steps, c).out, b: decide(S.ev[c.id], d.steps, c).out }));
+      const ms = performance.now() - t0, ch = rows.filter(x => x.a !== x.b).length, re = rows.filter(x => x.b === 'regather').length;
+      h += `<p class="sum"><b>${ch} of ${rows.length}</b> decisions change${re ? `, and <b>${re}</b> can't be replayed without new lookups` : ''}. Replayed on sealed evidence in ${ms.toFixed(1)} ms, 0 tool calls.</p>
+        <table class="diff"><thead><tr><th>Case</th><th>v${S.pub.v}</th><th>Draft</th></tr></thead><tbody>${rows.map(x =>
+        `<tr${x.a !== x.b ? ' class="chg"' : ''}><td>${esc(x.c.name.split(' ').slice(0, 2).join(' '))}</td><td>${pill(x.a)}</td><td>${pill(x.b)}</td></tr>`).join('')}</tbody></table>`;
+    }
+    h += `<p style="margin:10px 0 0"><button class="primary" data-act="publish"${S.running ? ' disabled' : ''}>Publish v${S.pub.v + 1}</button> <button data-act="discard">Discard</button></p></div>`;
+  }
+  h += `<ol class="hist">${S.versions.slice().reverse().map(v => `<li><b>v${v.v}</b> <span class="muted">${v.at}</span> ${esc(v.note)}</li>`).join('')}</ol>`;
+  $('#versions').innerHTML = h;
+}
+function renderLog() {
+  $('#log').innerHTML = S.log.slice(-150).reverse().map(e => `<li${S.bad === e.n ? ' class="bad"' : ''}><span class="muted">#${e.n} ${e.t}</span> <b>${esc(e.actor)}</b> ${esc(e.action)} <span class="cid">${esc(e.cid)}</span> ${esc(e.detail)} <span class="h">${e.h.slice(0, 8)}</span></li>`).join('');
+}
+function renderAll() { renderQueue(); renderCase(); renderVersions(); }
+
+/* ---------- wiring ---------- */
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  const c = CASES.find(x => x.id === S.sel), act = b.dataset.act;
+  if (b.dataset.try) tryEdit(...b.dataset.try.split('|'));
+  else if (b.dataset.sel) { S.sel = b.dataset.sel; renderQueue(); renderCase(); }
+  else if (act === 'run1') work(c);
+  else if (act === 'ha' || act === 'hd') { S.human[c.id] = act === 'ha' ? 'approve' : 'decline'; log('analyst (you)', 'review', c.id, `${S.human[c.id]} after reading the memo, procedure v${S.pub.v}`); renderAll(); }
+  else if (act === 'publish') publish();
+  else if (act === 'discard') { $('#proc').value = S.pub.text; fit(); S.draft = null; renderProc(S.pub.steps); renderVersions(); }
+  else if (act === 'verify') verifyChain();
+  else if (act === 'tamper') tamper();
+});
+$('#run').addEventListener('click', runQueue);
+$('#reset').addEventListener('click', () => {
+  if (S.running) return;
+  S.ev = {}; S.res = {}; S.human = {};
+  log('you', 'queue.reset', '-', `sealed evidence cleared; collect beyond the procedure: ${S.wide ? 'on' : 'off'}`);
+  renderAll(); hint('Cases reset. Work the queue again.');
+});
+$('#animate').checked = S.animate;
+$('#animate').addEventListener('change', e => { S.animate = e.target.checked; });
+$('#wide').addEventListener('change', e => {
+  S.wide = e.target.checked;
+  hint(S.wide ? 'Collecting beyond the procedure again: owners under the line get screened and near-miss names are stored.'
+    : 'Collecting only what the published procedure asks for. Reset cases, work the queue, then try §2 25% → 10%.');
+});
+let timer;
+const fit = () => { const ta = $('#proc'); ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; };
+$('#proc').addEventListener('input', () => { fit(); clearTimeout(timer); timer = setTimeout(onEdit, 180); });
+addEventListener('resize', fit);
+$('#proc').value = DEFAULT;
+$('#wide').checked = S.wide;
+S.versions.push({ v: 1, at: clock(), note: 'initial procedure, 10 lines' });
+log('you', 'procedure.publish', 'v1', 'initial procedure, 10 lines');
+renderProc(S.pub.steps); renderAll(); fit();
+</script>
+</body>
+</html>

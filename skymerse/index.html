@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verdict Desk · toy per-flight runway decision engine</title>
+<style>
+:root{--bg:#f2efe7;--panel:#fffdf8;--soft:#f8f5ee;--line:#e2dbcd;--ink:#1c2026;--muted:#6d675c;--acc:#7d2a66;
+  --ok:#1d7447;--cau:#95600f;--caub:#fbf0da;--bad:#ad2a1f;--badb:#f9e4e0;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+.brand small{display:block;font-weight:400;font-size:12.5px;color:var(--muted)}
+.tag{margin-left:auto;font:12px var(--mono);color:var(--muted);border:1px dashed #cfc6b5;padding:4px 8px;border-radius:6px}
+.intro{margin:12px 22px 0;color:var(--muted);max-width:1000px}
+.flights{display:flex;flex-wrap:wrap;gap:10px;padding:12px 22px}
+.flights button{font:inherit;color:inherit;text-align:left;cursor:pointer;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:240px}
+.flights button[aria-pressed=true]{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.flights b{font-family:var(--mono)}
+.flights span{display:block;font-size:12px;color:var(--muted)}
+main{display:grid;gap:14px;padding:0 22px 18px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:920px){main{grid-template-columns:minmax(290px,350px) minmax(0,1fr)}#impact{grid-column:2}}
+@media (min-width:1340px){main{grid-template-columns:minmax(290px,340px) minmax(0,1fr) minmax(320px,390px)}#impact{grid-column:auto}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+h2{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:650}
+* + h2{margin-top:16px}
+label{display:block;font-size:12.5px;color:var(--muted);margin:10px 0 4px}
+label output{float:right;font:600 12.5px var(--mono);color:var(--ink)}
+textarea,input[type=text],select{width:100%;font:12px/1.45 var(--mono);color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:7px 8px}
+select{font:13px system-ui,sans-serif}
+textarea{resize:vertical}
+input[type=range]{width:100%;accent-color:var(--acc);margin:2px 0}
+.lims{font:11.5px var(--mono);color:var(--muted);margin-top:4px}
+.ghost{margin-top:10px;font:inherit;font-size:12.5px;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--muted)}
+.tl{margin-top:6px;font:10px var(--mono);color:var(--muted)}
+.trk{display:grid;grid-template-columns:52px 1fr;align-items:center;min-height:15px}
+.lane{position:relative;height:9px;background:#ece5d8;border-radius:3px;cursor:crosshair}
+.lane i{position:absolute;top:0;bottom:0;background:#cdbfc8;border-radius:3px}
+.lane i.on{background:var(--acc)} .lane i.x{background:repeating-linear-gradient(90deg,#cdbfc8 0 2px,transparent 2px 5px)}
+.lane i.metar{background:#93b9a0} .lane i.becmg{background:#b4c0d6}
+.lane i.tempo{background:repeating-linear-gradient(45deg,#d4a64c 0 3px,#f6e7c6 3px 6px)}
+.lane b{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--ink)}
+.axis{display:flex;justify-content:space-between}
+.cap{font-size:11px;color:var(--muted);margin:4px 0 0}
+.verdict{display:flex;gap:14px;align-items:center;padding:12px;border-radius:10px;background:var(--soft);border:1px solid var(--line)}
+.vl{font:700 21px/1 var(--mono);padding:12px 10px;border-radius:8px;color:#fff;min-width:116px;text-align:center}
+.vl.ok{background:var(--ok)} .vl.cau{background:var(--cau)} .vl.bad{background:var(--bad)}
+.verdict b{display:block;font-size:15.5px}
+.verdict span{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.row2{display:grid;grid-template-columns:minmax(170px,240px) minmax(0,1fr);gap:14px;margin:14px 0 6px;align-items:start}
+@media (max-width:600px){.row2{grid-template-columns:1fr}}
+#map{width:100%;aspect-ratio:1;background:var(--soft);border:1px solid var(--line);border-radius:10px;display:block}
+#map text{font-family:var(--mono)}
+#map .ring{fill:none;stroke:#ddd5c6;stroke-dasharray:2 4}
+#map .rw{fill:#555a62} #map .rw.closed{fill:url(#hatch)}
+#map .cl{stroke:#fff;stroke-width:.8;stroke-dasharray:5 5}
+#map .th circle{fill:#fff;stroke-width:2} #map .th text{font-size:7.5px;font-weight:700;text-anchor:middle}
+#map .th.ok circle{stroke:var(--ok)} #map .th.cau circle{stroke:var(--cau)} #map .th.bad circle{stroke:var(--bad)}
+#map .th.ok text{fill:var(--ok)} #map .th.cau text{fill:var(--cau)} #map .th.bad text{fill:var(--bad)}
+#map .th.ok.pick circle{fill:var(--ok)} #map .th.cau.pick circle{fill:var(--cau)} #map .th.pick text{fill:#fff}
+#map .app{stroke:var(--ok);stroke-width:1.5;stroke-dasharray:3 3}
+#map .wind{stroke:var(--acc);stroke-width:2;fill:var(--acc)}
+#map .lbl{font-size:8px;fill:var(--muted)}
+dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;margin:0;font-size:13px}
+dt{color:var(--muted);white-space:nowrap} dd{margin:0} dd code{font:12px var(--mono)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+thead th{font-size:10.5px;color:var(--muted);font-weight:650;text-transform:uppercase;letter-spacing:.05em}
+tbody th{font:700 13px var(--mono)}
+td.ok{color:var(--ok)} td.cau{background:var(--caub);color:var(--cau)} td.bad{background:var(--badb);color:var(--bad)}
+td small{display:block;font:10.5px var(--mono);opacity:.85}
+tr.best th{box-shadow:inset 3px 0 var(--ok)}
+.rules{margin-top:12px;font-size:12.5px;color:var(--muted)}
+.rules summary{cursor:pointer;color:var(--ink)}
+.rules ul{margin:6px 0 0;padding-left:18px}
+.insight{background:#f6eef3;border:1px solid #e6d3df;border-radius:10px;padding:10px;font-size:13px}
+.card{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-top:8px;background:#fffefb}
+.card.dim{opacity:.55}
+.ctop{display:flex;align-items:center;gap:8px}
+.ctop label{margin:0;display:flex;gap:6px;align-items:center;color:var(--ink);font:700 12.5px var(--mono);cursor:pointer}
+.sev{margin-left:auto;font:600 10px var(--mono);padding:2px 6px;border-radius:5px;border:1px solid currentColor;white-space:nowrap}
+.sev.HIGH{color:var(--bad)} .sev.MED{color:var(--cau)} .sev.LOW{color:var(--muted)}
+.sum{margin:5px 0 2px;font-weight:600}
+.meta{font-size:11.5px;color:var(--muted)}
+.chip{display:inline-block;font:10.5px var(--mono);background:#efe9dd;border-radius:4px;padding:1px 5px;margin:2px 4px 0 0;color:var(--ink)}
+.bar{height:6px;background:#efe9dd;border-radius:3px;margin:8px 0 4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--acc)}
+.imp{font-size:12.5px} .imp .ok{color:var(--ok)} .imp .cau{color:var(--cau)} .imp .bad{color:var(--bad)}
+.dec{font:700 10px var(--mono);color:#fff;background:var(--acc);border-radius:4px;padding:1px 5px;margin-left:6px}
+.card details summary{font-size:11.5px;color:var(--muted);cursor:pointer;margin-top:4px}
+.card pre{white-space:pre-wrap;font:11px/1.4 var(--mono);background:var(--soft);padding:6px;border-radius:6px;margin:6px 0 0}
+.method{font-size:11.5px;color:var(--muted);margin:10px 0 0}
+footer{padding:14px 22px 22px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line)}
+footer strong{color:var(--ink);font-weight:600}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .25s}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="10" y="2" width="9" height="26" rx="1.5" fill="#1c2026"/><path d="M14.5 5v4M14.5 12v4M14.5 19v4" stroke="#fff" stroke-width="1.4"/><circle cx="23" cy="22" r="6" fill="#7d2a66"/><path d="M20.3 22l1.9 1.9 3.5-3.6" stroke="#fff" stroke-width="1.6" fill="none"/></svg>
+    <div>Verdict Desk<small>Raw NOTAMs + METAR/TAF + aircraft limits → one runway decision per flight</small></div>
+  </div>
+  <div class="tag">toy engine · synthetic data · runs offline</div>
+</header>
+<p class="intro">Pick a flight, drag the ETA (or click the timeline), edit any NOTAM, METAR or TAF, or untick a NOTAM. Every message is parsed into structured effects, each runway end is checked against the aircraft's limits at the ETA, and NOTAMs are ranked by how much they actually move this flight's verdict instead of by publication order.</p>
+<nav class="flights" id="flights" aria-label="Sample flights"></nav>
+<main>
+<section id="inputs" aria-label="Inputs">
+  <h2>Flight</h2>
+  <label for="ac">Aircraft (synthetic limits)</label>
+  <select id="ac"></select>
+  <div class="lims" id="lims"></div>
+  <label for="eta">ETA at destination <output id="etaOut" for="eta"></output></label>
+  <input type="range" id="eta" min="360" max="1435" step="5">
+  <div id="tl" class="tl"></div>
+  <p class="cap">Bars: NOTAM validity, B) to C). WX lane: green = METAR window, blue = BECMG, hatched = TEMPO/PROB. Click any lane to move the ETA.</p>
+  <h2>Raw inputs</h2>
+  <label for="notams">NOTAMs (ICAO format, blank line between)</label>
+  <textarea id="notams" rows="15" spellcheck="false"></textarea>
+  <label for="metar">METAR</label>
+  <input type="text" id="metar" spellcheck="false" autocomplete="off">
+  <label for="taf">TAF</label>
+  <textarea id="taf" rows="4" spellcheck="false"></textarea>
+  <button type="button" id="reset" class="ghost">Reset this flight</button>
+</section>
+<section id="decision" aria-label="Decision">
+  <div id="verdict" class="verdict" aria-live="polite"></div>
+  <div class="row2"><svg id="map" viewBox="-100 -100 200 200" role="img" aria-label="Destination runway diagram"></svg><div id="facts"></div></div>
+  <h2>Runway ends at ETA</h2>
+  <div class="tw"><table id="matrix"></table></div>
+  <details class="rules"><summary>Rules this toy applies</summary><ul>
+    <li>A NOTAM applies when A) is the destination and B) ≤ ETA &lt; C). Its plain-English line comes from rule-based parsing, standing in for a trained model.</li>
+    <li>Weather: the METAR if it was observed within 60 min of the ETA, otherwise the TAF (FM replaces, BECMG takes the worse value during its change window). TEMPO/PROB conditions that would fail a check make a usable runway marginal.</li>
+    <li>A runway end is suitable when it is open, LDA ≥ required (wet if precipitation), mean tailwind and crosswind are within limits (gusts over a limit = marginal), and an available approach has minima at or below the ceiling and visibility.</li>
+    <li>Toy minima: ILS 200 ft / 550 m, RNP 300 / 900, LOC 400 / 1000, VOR 500 / 1500. Approach lights out add 500 m.</li>
+    <li>Headings are treated as true. Destination only: no alternates, fuel or performance tables.</li>
+  </ul></details>
+</section>
+<section id="impact" aria-label="NOTAM impact">
+  <h2>NOTAMs ranked by impact on this flight</h2>
+  <div id="insight" class="insight"></div>
+  <div id="cards"></div>
+  <p class="method">Impact share = Shapley value over the runway NOTAMs in force: the engine reruns the whole runway check for every subset of them (2<sup>n</sup> runs) and averages each NOTAM's marginal effect on the verdict. "Without it" is plain leave-one-out, shown for comparison.</p>
+</section>
+</main>
+<footer><strong>Independent demo built by Aarush Kandukoori, inspired by Skymerse (YC S26). Not affiliated with Skymerse.</strong><br>Airports use unassigned X-prefix ICAO codes. All NOTAMs, weather, minima and aircraft limits are synthetic. Not for operational use.</footer>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const MIN = 60000, DAY = Date.UTC(2026, 10, 24), T0 = 360, T1 = 1440;
+const LBL = ['GO', 'CAUTION', 'NO-GO'], CLS = ['ok', 'cau', 'bad'], LV = {ok: 0, cau: 1, bad: 2};
+const MON = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+const fmt = x => Math.round(x).toLocaleString('en-US');
+const r0 = x => Math.round(Math.abs(x));
+const dh = (d, h, m = 0) => Date.UTC(2026, 10, +d, +h, +m);
+const nt = s => s ? Date.UTC(2000 + +s.slice(0, 2), +s.slice(2, 4) - 1, +s.slice(4, 6), +s.slice(6, 8), +s.slice(8, 10)) : null;
+const windTxt = w => (w.dir === null ? 'VRB' : String(w.dir).padStart(3, '0')) + String(w.spd).padStart(2, '0') + (w.gst ? 'G' + w.gst : '') + 'KT';
+function when(t) {
+  if (!isFinite(t)) return t > 0 ? 'PERM' : 'n/a';
+  const d = new Date(t), hm = d.toISOString().slice(11, 16) + 'Z';
+  if (t >= DAY && t < DAY + 1440 * MIN) return hm;
+  return String(d.getUTCDate()).padStart(2, '0') + ' ' + MON[d.getUTCMonth()] + ' ' + hm;
+}
+
+// ---------- synthetic reference data ----------
+const AC = {
+  NB: {label: 'Narrowbody twin', ldr: {dry: 1650, wet: 1900}, xw: {dry: 33, wet: 25}, tw: 10},
+  WB: {label: 'Widebody twin', ldr: {dry: 2250, wet: 2600}, xw: {dry: 35, wet: 27}, tw: 15}
+};
+const APCH = {ILS: {dh: 200, vis: 550}, RNP: {dh: 300, vis: 900}, LOC: {dh: 400, vis: 1000}, VOR: {dh: 500, vis: 1500}};
+const rw = (id, len, x, y, a, b) => ({id, len, x, y, ends: [
+  {id: id.slice(0, 2), hdg: +id.slice(0, 2) * 10, apch: a}, {id: id.slice(3), hdg: +id.slice(3) * 10, apch: b}]});
+const AIRPORTS = {
+  XBEL: {name: 'Belcastro Intl', rwys: [rw('04/22', 3000, -24, 10, ['ILS', 'RNP'], ['ILS', 'RNP']), rw('13/31', 2500, 30, -6, ['RNP'], ['ILS', 'RNP'])]},
+  XRAV: {name: 'Ravensholm', rwys: [rw('09/27', 2800, 0, -30, ['ILS', 'RNP'], ['ILS', 'RNP']), rw('16/34', 2600, -4, 14, ['RNP'], ['ILS'])]},
+  XOST: {name: 'Ostmark', rwys: [rw('06/24', 2600, -8, 14, ['ILS', 'RNP'], ['ILS', 'RNP']), rw('12/30', 1700, 40, -52, ['RNP'], ['RNP'])]}
+};
+const FLIGHTS = [
+  {id: 'TOY 101', from: 'XKAL', to: 'XBEL', ac: 'NB', eta: 860, hint: 'a MED-severity NOTAM turns decisive',
+   metar: 'METAR XBEL 241350Z 31014KT 1500 -DZ BR BKN002 OVC008 06/05 Q1011',
+   taf: 'TAF XBEL 240500Z 2406/2512 31014KT 2000 -DZ BR BKN002 OVC008\n  BECMG 2417/2419 32010KT 6000 NSW BKN012\n  TEMPO 2420/2424 4000 -RA BKN007',
+   notams: `A0412/26 NOTAMN
+Q) XFIR/QMRLC/IV/NBO/A/000/999/
+A) XBEL B) 2611241100 C) 2611241700
+E) RWY 04/22 CLSD DUE TO WIP.
+
+A0398/26 NOTAMN
+Q) XFIR/QICAS/I/NBO/A/000/999/
+A) XBEL B) 2611200600 C) 2612012359 EST
+E) ILS RWY 31 U/S.
+
+A0405/26 NOTAMN
+Q) XFIR/QMXLC/IV/M/A/000/999/
+A) XBEL B) 2611220000 C) 2611281800
+E) TWY C BTN TWY C2 AND TWY C4 CLSD.
+
+A0419/26 NOTAMN
+Q) XFIR/QOBCE/IV/M/AE/000/012/
+A) XBEL B) 2611240600 C) 2611251800
+E) CRANE ERECTED 600M NE OF ARP, 180FT AGL, LGTD.
+
+A0421/26 NOTAMN
+Q) XFIR/QMRLC/IV/NBO/A/000/999/
+A) XBEL B) 2611242000 C) 2611250500
+E) RWY 13/31 CLSD DUE TO MAINT.`},
+  {id: 'TOY 214', from: 'XNOR', to: 'XRAV', ac: 'WB', eta: 910, hint: 'two NOTAMs knock out the same runway',
+   metar: 'METAR XRAV 241450Z 35030G40KT 3000 -RA BKN008 OVC015 09/07 Q0998',
+   taf: 'TAF XRAV 240500Z 2406/2512 35028G38KT 4000 -RA BKN008\n  BECMG 2416/2418 33018KT 8000 NSW BKN015\n  PROB30 TEMPO 2418/2422 33025G35KT',
+   notams: `A0233/26 NOTAMN
+Q) XFIR/QMRLC/IV/NBO/A/000/999/
+A) XRAV B) 2611240800 C) 2611241600
+E) RWY 16/34 CLSD DUE TO RESURFACING.
+
+A0230/26 NOTAMN
+Q) XFIR/QICAS/I/NBO/A/000/999/
+A) XRAV B) 2611240800 C) 2611242000
+E) ILS RWY 34 U/S DUE TO WIP.
+
+A0228/26 NOTAMN
+Q) XFIR/QMPLC/IV/M/A/000/999/
+A) XRAV B) 2611230600 C) 2611262359
+E) STANDS 31 TO 35 CLSD.`},
+  {id: 'TOY 388', from: 'XNOR', to: 'XOST', ac: 'NB', eta: 905, hint: 'single long runway, 90-min works window',
+   metar: 'METAR XOST 241450Z 23012KT 9999 -SHRA FEW020CB SCT035 12/08 Q1015',
+   taf: 'TAF XOST 240500Z 2406/2512 22010KT 9999 SCT030\n  TEMPO 2414/2418 22018G30KT 3000 TSRA BKN010CB\n  BECMG 2420/2422 18006KT CAVOK',
+   notams: `A0577/26 NOTAMN
+Q) XFIR/QMRLC/IV/NBO/A/000/999/
+A) XOST B) 2611241400 C) 2611241530
+E) RWY 06/24 CLSD DUE TO RUBBER REMOVAL.
+
+A0571/26 NOTAMN
+Q) XFIR/QLAAS/IV/NBO/A/000/999/
+A) XOST B) 2611231800 C) 2611271800 EST
+E) ALS RWY 24 U/S.
+
+A0569/26 NOTAMN
+Q) XFIR/QPIAU/I/NBO/A/000/999/
+A) XOST B) 2611240000 C) 2611302359
+E) RNP RWY 30 NOT AVBL.
+
+A0580/26 NOTAMN
+Q) XFIR/QMXLC/IV/M/A/000/999/
+A) XOST B) 2611241500 C) 2611242359
+E) TWY D CLSD.`}
+];
+
+// ---------- weather: METAR / TAF ----------
+const DEF = {wind: {dir: 0, spd: 0, gst: 0}, vis: 10000, ceil: Infinity, wx: []};
+function parseCond(tokens) {
+  const c = {};
+  for (const t of tokens) {
+    let m;
+    if ((m = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT$/))) c.wind = {dir: m[1] === 'VRB' ? null : +m[1], spd: +m[2], gst: m[3] ? +m[3] : 0};
+    else if (t === 'CAVOK') Object.assign(c, {vis: 10000, ceil: Infinity, wx: []});
+    else if (/^\d{4}$/.test(t)) c.vis = t === '9999' ? 10000 : +t;
+    else if ((m = t.match(/^(?:BKN|OVC|VV)(\d{3})/))) c.ceil = Math.min(c.ceil ?? Infinity, m[1] * 100);
+    else if (/^(?:FEW|SCT)\d{3}|^(?:NSC|SKC|NCD|CLR)$/.test(t)) c.ceil = c.ceil ?? Infinity;
+    else if (t === 'NSW') c.wx = [];
+    else if (/^(?:[+-]|VC)?(?:TS|SH|FZ)?(?:DZ|RA|SN|GR|GS|PL|FG|BR|HZ)+$/.test(t)) c.wx = (c.wx || []).concat(t);
+  }
+  return c;
+}
+const isWet = c => c.wx.some(w => /DZ|RA|SN|GR|GS|PL/.test(w));
+function parseMetar(txt) {
+  const tk = txt.toUpperCase().split(/\s+/).filter(Boolean), i = tk.findIndex(t => /^\d{6}Z$/.test(t));
+  if (i < 0) return null;
+  const j = tk.findIndex((t, k) => k > i && /^(?:RMK|TEMPO|BECMG|NOSIG)$/.test(t));
+  return {time: dh(tk[i].slice(0, 2), tk[i].slice(2, 4), tk[i].slice(4, 6)), c: parseCond(tk.slice(i + 1, j < 0 ? tk.length : j))};
+}
+function parseTaf(txt) {
+  const tk = txt.toUpperCase().split(/\s+/).filter(Boolean), isSpan = t => /^\d{4}\/\d{4}$/.test(t || '');
+  const span = t => t.split('/').map(x => dh(x.slice(0, 2), x.slice(2)));
+  const i = tk.findIndex(isSpan);
+  if (i < 0) return null;
+  const [from, to] = span(tk[i]), groups = [{kind: 'BASE', from, to, toks: []}];
+  for (let j = i + 1; j < tk.length; j++) {
+    const t = tk[j]; let m;
+    if ((m = t.match(/^FM(\d{2})(\d{2})(\d{2})$/))) groups.push({kind: 'FM', from: dh(m[1], m[2], m[3]), to, toks: []});
+    else if (/^(?:BECMG|TEMPO|PROB\d0)$/.test(t)) {
+      let kind = t;
+      if (t.startsWith('PROB') && tk[j + 1] === 'TEMPO') kind += ' ' + tk[++j];
+      if (!isSpan(tk[j + 1])) continue;
+      const [a, b] = span(tk[++j]);
+      groups.push({kind, from: a, to: b, toks: []});
+    } else groups[groups.length - 1].toks.push(t);
+  }
+  groups.forEach(g => { g.c = parseCond(g.toks); });
+  return {from, to, groups};
+}
+const worse = (a, b) => ({wind: b.wind.spd + b.wind.gst > a.wind.spd + a.wind.gst ? b.wind : a.wind,
+  vis: Math.min(a.vis, b.vis), ceil: Math.min(a.ceil, b.ceil), wx: [...new Set(a.wx.concat(b.wx))]});
+function wxAt(T, metar, taf) {
+  let pre = null, src = '', tmp = [];
+  if (taf && T >= taf.from && T < taf.to) {
+    for (const g of taf.groups) {
+      if (g.kind === 'BASE' || (g.kind === 'FM' && T >= g.from)) pre = {...DEF, ...g.c};
+      else if (g.kind === 'BECMG' && T >= g.from) { const nx = {...pre, ...g.c}; pre = T < g.to ? worse(pre, nx) : nx; }
+    }
+    tmp = taf.groups.filter(g => /TEMPO|PROB/.test(g.kind) && T >= g.from && T < g.to).map(g => ({...g, c: {...pre, ...g.c}}));
+    src = 'TAF';
+  }
+  if (metar && Math.abs(T - metar.time) <= 60 * MIN) { pre = {...DEF, ...metar.c}; src = 'METAR'; }
+  return {pre, src, tmp};
+}
+
+// ---------- NOTAMs: raw text -> structured effects ----------
+const NA = '(?:U\\/S|NOT AVBL|NOT AVAILABLE|UNSERVICEABLE|WITHDRAWN)', AP = '(ILS|LOC|LLZ|GP|GS|RNP|RNAV(?: ?\\(GNSS\\))?|VOR)';
+const RE = {
+  clsd: /RWY ?(\d{2}[LRC]?\/\d{2}[LRC]?) (?:CLSD|CLOSED)/g,
+  eclsd: /RWY ?(\d{2}[LRC]?) (?:CLSD|CLOSED)/g,
+  na1: new RegExp(AP + '(?: APCH| APPROACH| PROC)? RWY ?(\\d{2}[LRC]?) ' + NA, 'g'),
+  na2: new RegExp('RWY ?(\\d{2}[LRC]?) ' + AP + '(?: APCH| APPROACH)? ' + NA, 'g'),
+  als: new RegExp('(?:ALS|APCH LGT|APPROACH LIGHTING|APPROACH LIGHTS) RWY ?(\\d{2}[LRC]?) ' + NA, 'g'),
+  thr: /RWY ?(\d{2}[LRC]?) THR DISPLACED (\d{2,4}) ?M\b/g,
+  lda: /RWY ?(\d{2}[LRC]?) LDA (?:REDUCED TO |RESTRICTED TO )?(\d{3,4}) ?M\b/g
+};
+const APN = a => a === 'LLZ' ? 'LOC' : a === 'GS' ? 'GP' : a.startsWith('RNAV') ? 'RNP' : a;
+function effects(E, ap) {
+  const out = [], ends = ap.rwys.flatMap(r => r.ends.map(e => e.id));
+  for (const m of E.matchAll(RE.clsd)) out.push(ap.rwys.some(r => r.id === m[1]) ? {type: 'CLSD', rwy: m[1]} : {type: 'INFO', cat: 'Unknown RWY ' + m[1]});
+  for (const m of E.matchAll(RE.eclsd)) out.push({type: 'ECLSD', end: m[1]});
+  for (const m of E.matchAll(RE.na1)) out.push({type: 'NA', apch: APN(m[1]), end: m[2]});
+  for (const m of E.matchAll(RE.na2)) out.push({type: 'NA', apch: APN(m[2]), end: m[1]});
+  for (const m of E.matchAll(RE.als)) out.push({type: 'ALS', end: m[1]});
+  for (const m of E.matchAll(RE.thr)) out.push({type: 'THR', end: m[1], d: +m[2]});
+  for (const m of E.matchAll(RE.lda)) out.push({type: 'LDA', end: m[1], m: +m[2]});
+  const fx = out.map(f => f.end && !ends.includes(f.end) ? {type: 'INFO', cat: 'Unknown RWY ' + f.end} : f);
+  if (!fx.length) fx.push({type: 'INFO', cat: /\bTWY\b/.test(E) ? 'Taxiway' : /STAND|APRON/.test(E) ? 'Apron' : /CRANE|OBST/.test(E) ? 'Obstacle' : 'General'});
+  return fx;
+}
+function parseNotams(txt, apt) {
+  return txt.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean).map((raw, k) => {
+    const T = raw.toUpperCase().replace(/\s+/g, ' '), g = re => (T.match(re) || [])[1];
+    const id = g(/\b([A-Z]\d{4}\/\d{2})\b/) || 'N' + (k + 1), loc = g(/A\) ?([A-Z]{4})\b/) || apt, c = g(/C\) ?(\d{10}|PERM)/);
+    const e = (g(/E\) ?(.*?)(?= [FG]\) |$)/) || T).trim();
+    const n = {id, raw, e, loc, q: g(/Q\) ?\w+\/Q([A-Z]{4})/) || '', est: / EST\b/.test(T),
+      from: nt(g(/B\) ?(\d{10})/)) || -Infinity, to: c && c !== 'PERM' ? nt(c) : Infinity};
+    n.fx = loc === apt ? effects(e, AIRPORTS[apt]).map(f => ({...f, src: id})) : [{type: 'INFO', cat: 'Other aerodrome'}];
+    return n;
+  });
+}
+const SEV = {MRLC: 'HIGH', MDCH: 'MED', MRLT: 'MED', ICAS: 'MED', ILAS: 'MED', IGAS: 'MED', PIAU: 'MED', LAAS: 'LOW', MXLC: 'LOW', MPLC: 'LOW', OBCE: 'LOW'};
+const sev = n => SEV[n.q] || {CLSD: 'HIGH', ECLSD: 'HIGH', THR: 'MED', LDA: 'MED', NA: 'MED'}[n.fx[0].type] || 'LOW';
+const ABBR = {TWY: 'taxiway', RWY: 'runway', CLSD: 'closed', BTN: 'between', LGTD: 'lit', ARP: 'the reference point', AVBL: 'available',
+  'U/S': 'out of service', WIP: 'works in progress', MAINT: 'maintenance', OF: 'of', TO: 'to', IN: 'in', ON: 'on', AT: 'at', BY: 'by'};
+const KEEP = new Set(['AGL', 'AMSL', 'ILS', 'RNP', 'VOR', 'LOC', 'ALS', 'GNSS']);
+const plain = e => { const s = e.replace(/[A-Z/]+/g, w => ABBR[w] || (/^[A-Z]{3,}$/.test(w) && !KEEP.has(w) ? w.toLowerCase() : w)); return s[0].toUpperCase() + s.slice(1); };
+function summary(n) {
+  const why = (n.e.match(/DUE (?:TO )?([A-Z ]+?)(?:[.,]|$)/) || [])[1], tail = why ? ` (${ABBR[why] || why.toLowerCase()})` : '';
+  if (n.fx.every(f => f.type === 'INFO')) return plain(n.e);
+  return n.fx.map(f => ({CLSD: `Runway ${f.rwy} closed`, ECLSD: `Runway ${f.end} closed for landing`,
+    NA: `${f.apch} approach to runway ${f.end} unavailable`, ALS: `Approach lights runway ${f.end} out, visibility minima up 500 m`,
+    THR: `Runway ${f.end} threshold displaced ${f.d} m`, LDA: `Runway ${f.end} landing distance cut to ${fmt(f.m)} m`})[f.type] || f.cat).join('; ') + tail;
+}
+const chip = f => ({CLSD: `RWY ${f.rwy} CLOSED`, ECLSD: `RWY ${f.end} CLSD LDG`, NA: `RWY ${f.end} -${f.apch}`, ALS: `RWY ${f.end} ALS OUT`,
+  THR: `RWY ${f.end} THR +${f.d} m`, LDA: `RWY ${f.end} LDA ${f.m} m`})[f.type] || f.cat.toUpperCase();
+
+// ---------- runway-end checks and the flight verdict ----------
+function comps(w, hdg) {
+  if (w.dir === null) return {hw: -w.spd, xw: w.spd};   // variable wind: assume the worst
+  const a = (w.dir - hdg) * Math.PI / 180;
+  return {hw: w.spd * Math.cos(a), xw: Math.abs(w.spd * Math.sin(a))};
+}
+function endState(rwy, end, fx) {
+  const s = {closed: null, lda: rwy.len, ldaSrc: null, apch: end.apch.slice(), lost: [], als: null};
+  for (const f of fx) {
+    if ((f.type === 'CLSD' && f.rwy === rwy.id) || (f.type === 'ECLSD' && f.end === end.id)) s.closed = s.closed || f.src;
+    if (f.end !== end.id) continue;
+    const l = f.type === 'THR' ? rwy.len - f.d : f.type === 'LDA' ? f.m : Infinity;
+    if (l < s.lda) { s.lda = l; s.ldaSrc = f.src; }
+    if (f.type === 'ALS') s.als = f.src;
+    if (f.type === 'NA') {
+      if (f.apch === 'GP' && s.apch.includes('ILS') && !s.apch.includes('LOC')) s.apch.push('LOC');
+      const kill = f.apch === 'ILS' || f.apch === 'LOC' ? ['ILS', 'LOC'] : f.apch === 'GP' ? ['ILS'] : [f.apch];
+      if (s.apch.some(a => kill.includes(a))) { s.apch = s.apch.filter(a => !kill.includes(a)); s.lost.push(f.src); }
+    }
+  }
+  return s;
+}
+const worst = ck => CLS[Math.max(...Object.values(ck).map(x => LV[x.st]))];
+function core(end, ac, s, c) {
+  const wet = isWet(c), k = wet ? 'wet' : 'dry', req = ac.ldr[k], xl = ac.xw[k];
+  const m = comps(c.wind, end.hdg), g = c.wind.gst ? comps({...c.wind, spd: c.wind.gst}, end.hdg) : m;
+  const add = s.als ? 500 : 0, fits = a => c.ceil >= APCH[a].dh && c.vis >= APCH[a].vis + add;
+  const list = s.apch.slice().sort((a, b) => APCH[a].dh - APCH[b].dh), a = list.find(fits), lo = list[0];
+  const src = s.lost.concat(s.als || []).join(' ') || null;
+  const ck = {
+    rwy: s.closed ? {st: 'bad', t: 'Closed', src: s.closed} : {st: 'ok', t: 'Open'},
+    lda: {st: s.lda >= req ? 'ok' : 'bad', t: `${fmt(s.lda)} vs ${fmt(req)}${wet ? ' wet' : ''}`, src: s.ldaSrc},
+    hw: {st: -m.hw > ac.tw ? 'bad' : -g.hw > ac.tw ? 'cau' : 'ok', t: m.hw < -0.5 ? `tail ${r0(m.hw)} (max ${ac.tw})` : `head ${r0(m.hw)}`},
+    xw: {st: m.xw > xl ? 'bad' : g.xw > xl ? 'cau' : 'ok', t: `${r0(m.xw)}${c.wind.gst ? ' G' + r0(g.xw) : ''} (max ${xl})`},
+    apch: !lo ? {st: 'bad', t: 'No instrument approach', src}
+      : a ? {st: 'ok', t: `${a} ${APCH[a].dh} ft / ${fmt(APCH[a].vis + add)} m`, src}
+      : {st: 'bad', t: c.ceil < APCH[lo].dh ? `ceiling ${c.ceil} ft < ${lo} ${APCH[lo].dh}` : `vis ${fmt(c.vis)} m < ${lo} ${fmt(APCH[lo].vis + add)}`, src}
+  };
+  return {ck, a, hw: m.hw, st: worst(ck)};
+}
+function evalEnd(rwy, end, ac, fx, wx) {
+  const s = endState(rwy, end, fx), e = core(end, ac, s, wx.pre);
+  if (e.st !== 'bad') for (const g of wx.tmp) {          // TEMPO/PROB: a would-be failure makes it marginal
+    const t = core(end, ac, s, g.c);
+    for (const k in t.ck) if (t.ck[k].st !== 'ok' && e.ck[k].st === 'ok') e.ck[k] = {...e.ck[k], st: 'cau', t: `${e.ck[k].t} · ${g.kind.split(' ')[0]}: ${t.ck[k].t}`};
+  }
+  return Object.assign(e, {rwy, end, s, st: worst(e.ck)});
+}
+function evaluate(fl, fx, wx) {
+  if (!wx.pre) return {lvl: 1, ends: [], best: null};
+  const ac = AC[fl.ac], ends = AIRPORTS[fl.to].rwys.flatMap(r => r.ends.map(e => evalEnd(r, e, ac, fx, wx)));
+  const lvl = Math.min(...ends.map(e => LV[e.st]));
+  const best = lvl < 2 ? ends.filter(e => LV[e.st] === lvl).sort((x, y) => APCH[x.a].dh - APCH[y.a].dh || y.hw - x.hw)[0] : null;
+  return {lvl, ends, best};
+}
+
+// ---------- attribution: which NOTAMs actually drive this verdict ----------
+const bits = m => { let c = 0; for (; m; m &= m - 1) c++; return c; };
+function attribute(fl, act, wx) {
+  const P = act.filter(n => n.fx.some(f => f.type !== 'INFO')).slice(0, 10), n = P.length, full = (1 << n) - 1, v = [], f = [1];
+  for (let m = 0; m <= full; m++) v[m] = evaluate(fl, P.flatMap((p, i) => m >> i & 1 ? p.fx : []), wx).lvl;
+  for (let i = 1; i <= n; i++) f[i] = f[i - 1] * i;
+  const phi = P.map((_, i) => {
+    let s = 0;
+    for (let m = 0; m <= full; m++) if (!(m >> i & 1)) s += f[bits(m)] * f[n - bits(m) - 1] / f[n] * (v[m | 1 << i] - v[m]);
+    return s;
+  });
+  const loo = P.map((_, i) => v[full & ~(1 << i)]), fixes = [];
+  for (let k = 1; k <= n && !fixes.length && v[full] > v[0]; k++)
+    for (let m = 1; m <= full; m++) if (bits(m) === k && v[full & ~m] === v[0]) fixes.push(P.filter((_, i) => m >> i & 1).map(p => p.id));
+  return {P, phi, loo, v0: v[0], vf: v[full], fixes};
+}
+function scanGo(fl, notams, metar, taf) {
+  for (let t = fl.eta + 5; t <= fl.eta + 720; t += 5) {
+    const T = DAY + t * MIN, act = notams.filter(n => !off.has(n.id) && n.from <= T && T < n.to);
+    const r = evaluate(fl, act.flatMap(n => n.fx), wxAt(T, metar, taf));
+    if (r.lvl === 0) return {t, r};
+  }
+  return null;
+}
+
+// ---------- rendering ----------
+let F = 0;
+const S = FLIGHTS.map(f => ({...f})), off = new Set();
+function render() {
+  const s = S[F], T = DAY + s.eta * MIN, ap = AIRPORTS[s.to], ac = AC[s.ac];
+  const notams = parseNotams(s.notams, s.to), metar = parseMetar(s.metar), taf = parseTaf(s.taf), wx = wxAt(T, metar, taf);
+  const act = notams.filter(n => !off.has(n.id) && n.loc === s.to && n.from <= T && T < n.to);
+  const res = evaluate(s, act.flatMap(n => n.fx), wx), at = attribute(s, act, wx), go = res.lvl ? scanGo(s, notams, metar, taf) : null;
+  $('#etaOut').textContent = when(T) + ' · 24 NOV';
+  $('#lims').textContent = `LDR ${fmt(ac.ldr.dry)}/${fmt(ac.ldr.wet)} m dry/wet · xwind ${ac.xw.dry}/${ac.xw.wet} kt · tailwind ${ac.tw} kt`;
+  verdict(s, wx, res, T);
+  facts(s, wx, metar, res, go, at);
+  matrix(res);
+  drawMap(ap, res, wx.pre && wx.pre.wind);
+  insight(at);
+  cards(notams, at, s, T);
+  timeline(notams, s, T, metar, taf);
+}
+function verdict(s, wx, res, T) {
+  const b = res.best, why = {rwy: 'closed', lda: 'too short', hw: 'tailwind', xw: 'crosswind'};
+  let lab = LBL[res.lvl], head, sub;
+  if (!wx.pre) { lab = 'NO WX'; head = 'No METAR or TAF covers this ETA'; sub = 'Move the ETA inside the TAF validity.'; }
+  else if (res.lvl === 0) { head = `GO via RWY ${b.end.id} · ${b.a} approach`; sub = `${b.hw < -0.5 ? 'Tailwind' : 'Headwind'} ${r0(b.hw)} kt · LDA ${fmt(b.s.lda)} m · minima ${b.ck.apch.t}`; }
+  else if (res.lvl === 1) { head = `CAUTION: best option, RWY ${b.end.id}, is marginal`; sub = Object.values(b.ck).filter(c => c.st === 'cau').map(c => c.t).join(' · '); }
+  else {
+    head = `No suitable runway at ${s.to} at ${when(T)}`;
+    sub = res.ends.map(e => { const k = Object.keys(e.ck).find(x => e.ck[x].st === 'bad'); return `${e.end.id} ${why[k] || (e.ck.apch.t.startsWith('No') ? 'no approach' : 'below minima')}`; }).join(' · ');
+  }
+  $('#verdict').innerHTML = `<div class="vl ${CLS[res.lvl]}">${lab}</div><div><b>${esc(head)}</b><span>${esc(sub)}</span></div>`;
+}
+function facts(s, wx, metar, res, go, at) {
+  const p = wx.pre;
+  const fix = res.lvl === 0 ? 'none needed' : !at.P.length || at.vf === at.v0 ? 'none: NOTAMs are not what blocks it'
+    : 'lift ' + at.fixes.slice(0, 3).map(f => f.join(' + ')).join(' or ') + (at.v0 ? ` (best case ${LBL[at.v0]})` : '');
+  $('#facts').innerHTML = `<dl>
+    <dt>Weather used</dt><dd>${wx.src === 'METAR' ? `METAR ${when(metar.time)}, actual (within 60 min of ETA)` : wx.src ? 'TAF prevailing at ETA' : 'none covers this ETA'}</dd>
+    ${p ? `<dt>At ETA</dt><dd><code>${windTxt(p.wind)}</code> · vis ${fmt(p.vis)} m · ceiling ${p.ceil === Infinity ? 'none' : fmt(p.ceil) + ' ft'} · ${isWet(p) ? 'wet' : 'dry'} runway</dd>` : ''}
+    ${wx.tmp.map(g => `<dt>${esc(g.kind)}</dt><dd>${when(g.from)} to ${when(g.to)}: <code>${esc(g.toks.join(' '))}</code></dd>`).join('')}
+    <dt>Earliest GO</dt><dd>${res.lvl === 0 ? 'now' : go ? `<b>${when(DAY + go.t * MIN)}</b> (+${go.t - s.eta} min) via RWY ${go.r.best.end.id} ${go.r.best.a}` : 'none in the next 12 h'}</dd>
+    <dt>NOTAM fix</dt><dd>${esc(fix)}</dd></dl>`;
+}
+const COLS = [['rwy', 'Status'], ['lda', 'LDA vs req (m)'], ['hw', 'Head/tail (kt)'], ['xw', 'Cross (kt)'], ['apch', 'Approach']];
+const RES = {ok: 'Suitable', cau: 'Marginal', bad: 'Unsuitable'};
+function matrix(res) {
+  const cell = c => `<td class="${c.st}">${esc(c.t)}${c.src ? `<small>${esc(c.src)}</small>` : ''}</td>`;
+  $('#matrix').innerHTML = `<thead><tr><th>End</th>${COLS.map(c => `<th>${c[1]}</th>`).join('')}<th>Result</th></tr></thead><tbody>${
+    res.ends.map(e => `<tr${e === res.best ? ' class="best"' : ''}><th>${e.end.id}</th>${COLS.map(([k]) => cell(e.ck[k])).join('')}<td class="${e.st}"><b>${RES[e.st]}</b></td></tr>`).join('')}</tbody>`;
+}
+function drawMap(ap, res, wind) {
+  let h = `<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#f1d2cd"/><rect width="2.5" height="5" fill="#c0392b"/></pattern></defs>
+    <circle r="97" class="ring"/><text y="-88" text-anchor="middle" class="lbl">N</text><text y="96" text-anchor="middle" class="lbl">${esc(ap.name)}</text>`;
+  for (const r of ap.rwys) {
+    const L = r.len * 0.05, ev = res.ends.filter(e => e.rwy === r), shut = ev.length && ev.every(e => e.ck.rwy.st === 'bad');
+    h += `<g transform="translate(${r.x} ${r.y}) rotate(${r.ends[0].hdg})"><rect x="-4.5" y="${-L / 2}" width="9" height="${L}" rx="1.5" class="rw${shut ? ' closed' : ''}"/>${shut ? '' : `<line y1="${-L / 2 + 6}" y2="${L / 2 - 6}" class="cl"/>`}</g>`;
+    for (const end of r.ends) {   // a runway end's number sits at the threshold you land on
+      const e = ev.find(x => x.end === end), a = end.hdg * Math.PI / 180, ux = Math.sin(a), uy = -Math.cos(a), d = L / 2 + 9;
+      const x = r.x - ux * d, y = r.y - uy * d, pick = res.best && res.best.end === end;
+      if (pick) h += `<line class="app" x1="${r.x - ux * (d + 9)}" y1="${r.y - uy * (d + 9)}" x2="${r.x - ux * (d + 40)}" y2="${r.y - uy * (d + 40)}"/>`;
+      h += `<g class="th ${e ? e.st : ''}${pick ? ' pick' : ''}"><circle cx="${x}" cy="${y}" r="8"/><text x="${x}" y="${y + 2.7}">${end.id}</text></g>`;
+    }
+  }
+  if (wind) h += `<g transform="translate(-74 -74)">${wind.dir === null ? '<circle r="8" class="wind" fill="none"/>'
+    : `<g transform="rotate(${wind.dir + 180})" class="wind"><line y1="11" y2="-7"/><path d="M0 -13 l-5 8 h10z"/></g>`}<text y="22" text-anchor="middle" class="lbl">${windTxt(wind)}</text></g>`;
+  $('#map').innerHTML = h;
+}
+function insight(at) {
+  const share = i => at.phi[i] / (at.vf - at.v0);
+  let h;
+  if (!at.P.length) h = 'No runway-affecting NOTAM is in force at this ETA. The verdict comes from weather and aircraft limits alone.';
+  else if (at.vf === at.v0) h = `The NOTAMs in force do not change the verdict at this ETA: it is <b>${LBL[at.vf]}</b> with or without them${at.vf ? ', so weather or aircraft limits are the binding constraint' : ''}.`;
+  else {
+    const dec = at.P.filter((p, i) => at.loo[i] < at.vf);
+    if (!dec.length) h = `<b>Leave-one-out finds nothing decisive</b>, yet together these NOTAMs turn ${LBL[at.v0]} into ${LBL[at.vf]}: their effects overlap, so removing any single one changes nothing. Shapley splits the credit, and only lifting <b>${esc(at.fixes[0].join(' + '))}</b> together changes the outcome.`;
+    else {
+      const k = at.P.findIndex((p, i) => sev(p) !== 'HIGH' && share(i) >= 0.25);
+      h = `<b>${esc(dec.map(p => p.id).join(' and '))}</b> ${dec.length > 1 ? 'each flip the verdict on their own.' : 'flips the verdict on its own.'}`
+        + (k >= 0 ? ` Q-code severity briefs ${esc(at.P[k].id)} as ${sev(at.P[k])}, yet for this flight it carries ${Math.round(share(k) * 100)}% of the ${LBL[at.vf]}.` : ' Everything else in the list is context for this flight.');
+    }
+  }
+  $('#insight').innerHTML = h;
+}
+function cards(notams, at, s, T) {
+  const gap = at.vf - at.v0, rank = n => ['HIGH', 'MED', 'LOW'].indexOf(sev(n));
+  const rows = notams.map(n => {
+    const i = at.P.indexOf(n);
+    return {n, i, st: n.loc !== s.to ? 4 : off.has(n.id) ? 2 : !(n.from <= T && T < n.to) ? 3 : i < 0 ? 1 : 0, phi: i < 0 ? 0 : at.phi[i]};
+  }).sort((a, b) => a.st - b.st || b.phi - a.phi || rank(a.n) - rank(b.n));
+  $('#cards').innerHTML = rows.map(({n, i, st, phi}) => {
+    const pct = gap > 0 ? Math.round(phi / gap * 100) : 0, loo = at.loo[i];
+    const imp = st === 0 ? (gap > 0 ? `<b>${pct}%</b> of the ${LBL[at.vf]} · without it: <b class="${CLS[loo]}">${LBL[loo]}</b>${loo < at.vf ? '<span class="dec">DECISIVE</span>' : ''}` : `Does not change the ${LBL[at.vf]} at this ETA`)
+      : st === 1 ? 'Briefing item: no runway effect for this flight' : st === 2 ? 'Switched off by you (what-if)'
+      : st === 3 ? `Not in force at ETA (${n.from > T ? 'starts ' + when(n.from) : 'ended ' + when(n.to)})` : `For ${esc(n.loc)}, not the destination`;
+    return `<article class="card${st > 1 ? ' dim' : ''}">
+      <div class="ctop"><label><input type="checkbox" data-id="${esc(n.id)}"${off.has(n.id) ? '' : ' checked'}> ${esc(n.id)}</label><span class="sev ${sev(n)}" title="Context-free severity from the Q-code">Q ${esc(n.q || 'none')} · ${sev(n)}</span></div>
+      <div class="sum">${esc(summary(n))}</div>
+      <div class="meta">${when(n.from)} → ${when(n.to)}${n.est ? ' EST' : ''} ${n.fx.map(f => `<span class="chip">${esc(chip(f))}</span>`).join('')}</div>
+      ${st === 0 && gap > 0 ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}
+      <div class="imp">${imp}</div>
+      <details><summary>Raw NOTAM</summary><pre>${esc(n.raw)}</pre></details></article>`;
+  }).join('');
+}
+function timeline(notams, s, T, metar, taf) {
+  const pct = t => Math.max(0, Math.min(100, ((t - DAY) / MIN - T0) / (T1 - T0) * 100));
+  const bar = (a, b, cls) => b <= DAY + T0 * MIN || a >= DAY + T1 * MIN ? '' : `<i class="${cls}" style="left:${pct(a)}%;width:${pct(b) - pct(a)}%"></i>`;
+  const eta = `<b style="left:${pct(T)}%"></b>`;
+  let h = notams.filter(n => n.loc === s.to).map(n => `<div class="trk"><span>${esc(n.id.split('/')[0])}</span><div class="lane">${
+    bar(n.from, n.to, off.has(n.id) ? 'x' : n.fx.some(f => f.type !== 'INFO') ? 'on' : '')}${eta}</div></div>`).join('');
+  const w = (metar ? bar(metar.time - 60 * MIN, metar.time + 60 * MIN, 'metar') : '') + (taf ? taf.groups.filter(g => g.kind !== 'BASE' && g.kind !== 'FM')
+    .map(g => bar(g.from, g.to, g.kind === 'BECMG' ? 'becmg' : 'tempo')).join('') : '');
+  h += `<div class="trk"><span>WX</span><div class="lane">${w}${eta}</div></div>`;
+  h += `<div class="trk"><span></span><div class="axis">${['06', '09', '12', '15', '18', '21', '24'].map(x => `<span>${x}</span>`).join('')}</div></div>`;
+  $('#tl').innerHTML = h;
+}
+function load() {
+  const s = S[F];
+  $('#ac').value = s.ac; $('#eta').value = s.eta; $('#notams').value = s.notams; $('#metar').value = s.metar; $('#taf').value = s.taf;
+  document.querySelectorAll('#flights button').forEach((b, i) => b.setAttribute('aria-pressed', String(i === F)));
+  render();
+}
+
+// ---------- wiring ----------
+$('#flights').innerHTML = FLIGHTS.map((f, i) => `<button type="button" data-i="${i}"><b>${f.id}</b> ${f.from} → ${f.to}<span>${AC[f.ac].label} · ETA ${when(DAY + f.eta * MIN)} · ${f.hint}</span></button>`).join('');
+$('#ac').innerHTML = Object.entries(AC).map(([k, a]) => `<option value="${k}">${a.label}</option>`).join('');
+$('#flights').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { F = +b.dataset.i; off.clear(); load(); } });
+$('#ac').addEventListener('change', e => { S[F].ac = e.target.value; render(); });
+$('#eta').addEventListener('input', e => { S[F].eta = +e.target.value; render(); });
+for (const k of ['notams', 'metar', 'taf']) $('#' + k).addEventListener('input', e => { S[F][k] = e.target.value; render(); });
+$('#reset').addEventListener('click', () => { S[F] = {...FLIGHTS[F]}; off.clear(); load(); });
+$('#cards').addEventListener('change', e => {
+  const id = e.target.dataset.id;
+  if (!id) return;
+  if (e.target.checked) off.delete(id); else off.add(id);
+  render();
+  const again = [...document.querySelectorAll('#cards input')].find(x => x.dataset.id === id);
+  if (again) again.focus();
+});
+$('#tl').addEventListener('click', e => {
+  const lane = e.target.closest('.lane');
+  if (!lane) return;
+  const r = lane.getBoundingClientRect(), t = T0 + (e.clientX - r.left) / r.width * (T1 - T0);
+  S[F].eta = Math.min(1435, Math.max(T0, Math.round(t / 5) * 5));
+  $('#eta').value = S[F].eta;
+  render();
+});
+load();
+</script>
+</body>
+</html>
