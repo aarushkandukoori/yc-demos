@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Source records to EBITDA findings - a toy diagnostic</title>
+<style>
+:root {
+  --bg: #f5f4ef; --card: #fff; --ink: #16181b; --mut: #62676f; --line: #e2e0d8;
+  --acc: #1d5c45; --au: #3341a0; --aub: #eceefb; --du: #7d5200; --dub: #fbf0dc;
+  --bo: #a3262a; --bob: #fbe8e8; --kp: #5a3a9c; --kpb: #f0eafa;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+button { font: inherit; color: inherit; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 22px 20px 40px; }
+header { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; margin-bottom: 16px; }
+h1 { font-size: 23px; margin: 0 0 4px; letter-spacing: -.01em; }
+.sub { color: var(--mut); margin: 0; max-width: 820px; }
+.tag { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; background: #ebe9e1; color: #4c5058; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.muted { color: var(--mut); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+
+.srcs { display: grid; grid-template-columns: repeat(4, 1fr) minmax(230px, auto); gap: 10px; margin-bottom: 12px; }
+#tiles { display: contents; }
+.src { padding: 10px 12px; text-align: left; cursor: pointer; }
+.src:hover, .src.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc) inset; }
+.src b { display: block; font-size: 13px; }
+.src span { color: var(--mut); font-size: 12px; }
+.run { display: flex; flex-direction: column; gap: 6px; justify-content: center; padding: 10px 12px; }
+.primary { background: var(--acc); color: #fff; border: 0; border-radius: 7px; padding: 9px 14px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.primary:disabled { opacity: .6; cursor: progress; }
+.bar { height: 4px; background: #ecebe5; border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--acc); transition: width .15s; }
+.stage { font-size: 12px; color: var(--mut); min-height: 16px; }
+
+.roll { display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; margin-bottom: 12px; min-height: 92px; }
+.kpi { padding: 12px 16px; border-left: 1px solid var(--line); }
+.kpi:first-child { border-left: 0; }
+.kpi .l { font-size: 12px; color: var(--mut); }
+.kpi .v { font-size: 24px; font-weight: 650; letter-spacing: -.02em; }
+.kpi .s { font-size: 12px; color: var(--mut); }
+.kpi.main .v { color: var(--acc); font-size: 28px; }
+.kpi.warn .v { color: var(--du); }
+.kpi.risk .v { color: var(--kp); }
+
+.assume { display: grid; grid-template-columns: repeat(5, 1fr) auto; gap: 14px; padding: 10px 16px; margin-bottom: 14px; align-items: end; }
+.assume label { font-size: 12px; color: var(--mut); display: block; }
+.assume output { float: right; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--acc); }
+.sw { display: flex; gap: 8px; align-items: center; font-size: 12px; cursor: pointer; white-space: nowrap; color: var(--ink) !important; }
+.sw input { accent-color: var(--acc); width: 16px; height: 16px; margin: 0; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 14px; align-items: start; }
+.sec { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); margin: 4px 2px 8px; }
+.sec span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.f {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; width: 100%; text-align: left; padding: 11px 13px; margin-bottom: 8px; cursor: pointer;
+  opacity: 0; transform: translateY(4px); transition: opacity .25s, transform .25s, border-color .15s;
+}
+.f.in { opacity: 1; transform: none; }
+.f:hover { border-color: #bdb9ad; }
+.f.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink) inset; }
+.f .t { font-weight: 600; }
+.f .d { color: var(--mut); font-size: 12.5px; grid-column: 1; }
+.f .v { grid-row: 1 / 3; grid-column: 2; text-align: right; align-self: center; font-size: 17px; font-weight: 650; }
+.f .v small { display: block; font-size: 11px; font-weight: 500; color: var(--mut); }
+.f .v s { display: block; color: var(--mut); font-weight: 500; font-size: 12px; }
+.b { display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; margin-right: 6px; vertical-align: 1px; }
+.b.auto { background: var(--aub); color: var(--au); }
+.b.dup { background: var(--dub); color: var(--du); }
+.b.bott { background: var(--bob); color: var(--bo); }
+.b.kp { background: var(--kpb); color: var(--kp); }
+.conf { font-size: 11px; color: var(--mut); font-weight: 400; margin-left: 4px; }
+
+.panel { padding: 16px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+.panel h2 { font-size: 17px; margin: 4px 0 8px; }
+.kv { display: grid; grid-template-columns: 112px 1fr; gap: 6px 12px; font-size: 13px; margin: 10px 0; }
+.kv dt { color: var(--mut); }
+.kv dd { margin: 0; }
+.formula { background: #f8f7f3; border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.6; overflow-x: auto; white-space: pre; }
+.note { font-size: 12.5px; padding: 8px 10px; border-radius: 7px; background: var(--dub); color: #5a3c00; margin: 10px 0; }
+.note.ov { background: #fff3dc; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; font-weight: 600; color: var(--mut); border-bottom: 1px solid var(--line); padding: 6px; position: sticky; top: 0; background: #fff; }
+td { padding: 5px 6px; border-bottom: 1px solid #f0efe9; white-space: nowrap; }
+tr.shared td { background: #fff8ea; }
+.chip { font-size: 10.5px; padding: 1px 5px; border-radius: 3px; background: #fbe3b8; color: #6b4500; font-weight: 600; }
+.lnk { background: none; border: 0; padding: 0; color: var(--acc); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.steps td, .steps th { padding: 7px 8px; }
+.steps tbody tr { cursor: pointer; }
+.steps tbody tr:hover td { background: #faf9f5; }
+.wb { display: inline-block; height: 7px; border-radius: 2px; background: #d8d5ca; vertical-align: middle; margin-right: 6px; }
+.wb.hot { background: var(--bo); }
+footer { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--mut); font-size: 12.5px; }
+@media (max-width: 980px) {
+  .grid { grid-template-columns: 1fr; }
+  .roll, .srcs, .assume { grid-template-columns: 1fr 1fr; }
+  .panel { position: static; max-height: none; }
+}
+@media (prefers-reduced-motion: reduce) { .f, .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Source records in, ranked EBITDA findings out</h1>
+      <p class="sub">A toy operational diagnostic. It reads one month of raw records from a fictional distributor's systems, rebuilds every order's path, runs four detection rules and prices each finding in annual EBITDA. Click a finding to see the exact records behind it, then any order to follow its full trail.</p>
+    </div>
+    <span class="tag">Synthetic data · fictional company</span>
+  </header>
+
+  <div class="srcs">
+    <div id="tiles"></div>
+    <div class="card run">
+      <button class="primary" id="go">Run on a new synthetic month</button>
+      <div class="bar"><i id="pb"></i></div>
+      <div class="stage" id="stage"></div>
+    </div>
+  </div>
+
+  <div class="card roll" id="roll"></div>
+
+  <div class="card assume" id="assume">
+    <div><label for="a-cost">Loaded labor cost <output id="o-cost"></output></label><input id="a-cost" type="range" min="30" max="90" step="1" value="52"></div>
+    <div><label for="a-cap">Automation capture <output id="o-cap"></output></label><input id="a-cap" type="range" min="20" max="90" step="5" value="60"></div>
+    <div><label for="a-rem">Duplicate removal <output id="o-rem"></output></label><input id="a-rem" type="range" min="50" max="100" step="5" value="90"></div>
+    <div><label for="a-rec">Lost orders recoverable <output id="o-rec"></output></label><input id="a-rec" type="range" min="10" max="80" step="5" value="40"></div>
+    <div><label for="a-abs">P(key person out 13 wks) <output id="o-abs"></output></label><input id="a-abs" type="range" min="5" max="40" step="5" value="15"></div>
+    <label class="sw"><input id="a-once" type="checkbox" checked> Count each record once</label>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="sec">Upside, ranked</div>
+      <div id="up"></div>
+      <div class="sec" style="margin-top:14px">Risks <span>· not added to upside</span></div>
+      <div id="risk"></div>
+      <div class="sec" style="margin-top:14px">Reconstructed process <span>· red wait = the only wait that moves an outcome · click a step for its records</span></div>
+      <div class="card" style="overflow-x:auto"><table class="steps" id="steps"></table></div>
+    </div>
+    <div class="card panel" id="panel"></div>
+  </div>
+
+  <footer>Independent demo built by Aarush Kandukoori, inspired by Snowstone (YC S26). Not affiliated with Snowstone. Every company, person, order and number here is synthetic and generated in your browser; nothing is sent anywhere.</footer>
+</div>
+
+<script>
+"use strict";
+/* ---------- 1. Synthetic source systems (seeded: the same seed rebuilds the same month) ---------- */
+function rng(a) {
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let R = Math.random;
+const U = (a, b) => a + (b - a) * R();
+function gauss() {
+  let u = 0, v = 0;
+  while (!u) u = R();
+  while (!v) v = R();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+const logn = (med, s) => med * Math.exp(s * gauss());
+function pick(xs, ws) {
+  let r = R();
+  if (!ws) return xs[Math.floor(r * xs.length)];
+  for (let i = 0; i < xs.length - 1; i++) { r -= ws[i]; if (r < 0) return xs[i]; }
+  return xs[xs.length - 1];
+}
+
+const ACT = { // activity: [label, system, class of work]
+  "po.received": ["PO received", "Inbox", "intake"],
+  "order.keyed.crm": ["Order keyed in CRM", "CRM", "order entry"],
+  "order.keyed.erp": ["Order keyed in ERP", "ERP", "order entry"],
+  "credit.check.crm": ["Credit check in CRM", "CRM", "credit check"],
+  "credit.check.erp": ["Credit check in ERP", "ERP", "credit check"],
+  "price.approval": ["Discount approval", "CRM", "price approval"],
+  "order.cancelled": ["Order cancelled", "CRM", "cancellation"],
+  "order.shipped": ["Picked and shipped", "Warehouse", "shipping"],
+  "invoice.created": ["Invoice created", "ERP", "invoice"],
+  "invoice.corrected": ["Invoice corrected", "ERP", "invoice"],
+  "cash.applied": ["Cash applied", "ERP", "cash application"]
+};
+const SYS = { CRM: "CRM", ERP: "ERP", Inbox: "Shared inbox", Warehouse: "Warehouse system" };
+const MACHINE = new Set(["Customer", "Bank feed"]);
+const N = 2400, DAYS = 28, ANN = 13, GM = 0.23, T0 = Date.UTC(2026, 2, 2, 8);
+
+function generate(seed) {
+  R = rng(seed);
+  const ev = [], cases = new Map();
+  const reps = ["B. Farrow", "C. Lindgren", "G. Osei", "H. Tanaka", "N. Duarte"];
+  const ops = ["A. Mensah", "R. Alvarez", "J. Novak"], wh = ["W. Brooks", "T. Haddad", "F. Iqbal"];
+  const bill = ["L. Moreau", "S. Patel"], ar = ["E. Ruiz", "V. Kowalski"];
+  const add = (c, act, t, actor, touch, exc, note) =>
+    ev.push({ c: c.id, act, t, actor, touch: Math.round(touch * 10) / 10, exc: !!exc, note });
+
+  for (let i = 0; i < N; i++) {
+    const c = { id: "SO-" + (40001 + i), val: Math.round(3100 * Math.exp(0.55 * gauss() - 0.15)), viaRep: R() < 0.55 };
+    cases.set(c.id, c);
+    const rep = pick(reps);
+    let t = R() * DAYS * 24; // hours since the sample started
+    add(c, "po.received", t, "Customer", 0, 0, "purchase order PDF by email");
+    if (c.viaRep) { t += U(0.5, 6); add(c, "order.keyed.crm", t, rep, U(7, 13), R() < 0.04, "typed from PO"); }
+    t += U(1, 8); add(c, "order.keyed.erp", t, pick(ops, [0.4, 0.35, 0.25]), U(8, 14), R() < 0.06, "typed from PO");
+    if (c.viaRep && R() < 0.7) { t += U(0.2, 3); add(c, "credit.check.crm", t, rep, U(5, 10), 0, "CRM credit lookup: pass"); }
+    t += U(0.5, 6);
+    const over = R() < 0.07;
+    const analyst = over ? (R() < 0.95 ? "K. Ivanova" : "D. Okafor") : (R() < 0.45 ? "K. Ivanova" : "D. Okafor");
+    add(c, "credit.check.erp", t, analyst, over ? U(25, 45) : U(4, 9), over, over ? "over limit: manual review" : "within limit: pass");
+    if (R() < 0.45) { // discount above policy needs a pricing sign-off
+      const away = t / 24 >= 12 && t / 24 < 14; // M. Chen is out for two days
+      const who = away ? "P. Lindqvist" : (R() < 0.92 ? "M. Chen" : "P. Lindqvist");
+      const w = away ? logn(46, 0.5) : who === "M. Chen" ? logn(17, 0.75) : logn(8, 0.5);
+      t += w; c.appr = true;
+      const changed = R() < 0.18;
+      add(c, "price.approval", t, who, U(3, 7), changed, changed ? "discount changed" : "approved as requested");
+      if (R() < (w > 48 ? 0.22 : 0.03)) {
+        t += U(1, 10); c.cancel = true;
+        add(c, "order.cancelled", t, c.viaRep ? rep : pick(ops), U(5, 10), 0, "customer withdrew order");
+        continue;
+      }
+    }
+    t += U(4, 30); add(c, "order.shipped", t, pick(wh), U(15, 35), 0, "picked, packed, shipped");
+    t += U(1, 20);
+    const override = R() < 0.1;
+    add(c, "invoice.created", t, pick(bill, [0.6, 0.4]), U(6, 12), override, override ? "manual price override" : "invoice from order");
+    if (R() < (c.appr ? 0.24 : 0.02)) {
+      t += U(24, 120);
+      add(c, "invoice.corrected", t, pick(bill), U(15, 30), 1, "customer disputed price: approved discount missing");
+    }
+    t += U(20, 40) * 24;
+    const manual = R() < 0.78;
+    add(c, "cash.applied", t, manual ? pick(ar, [0.7, 0.3]) : "Bank feed", manual ? U(7, 15) : 0,
+      manual && R() < 0.09, manual ? "matched by hand from remittance PDF" : "auto-matched bank file");
+  }
+  ev.sort((a, b) => a.t - b.t);
+  ev.forEach((e, i) => { e.id = "R" + String(i + 1).padStart(5, "0"); });
+  const byCase = groupBy(ev, e => e.c);
+  for (const list of byCase.values()) list.forEach((e, i) => { e.wait = i ? e.t - list[i - 1].t : 0; });
+  return { ev, cases, byCase };
+}
+
+/* ---------- 2. The diagnostic engine: four rules over raw records, then reconciliation ---------- */
+function groupBy(xs, f) {
+  const m = new Map();
+  for (const x of xs) { const k = f(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
+  return m;
+}
+const sum = (xs, f) => xs.reduce((a, x) => a + f(x), 0);
+const median = xs => {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+const human = e => !MACHINE.has(e.actor);
+const workClass = e => ACT[e.act][2];
+const NOT_WORK = new Set(["intake", "shipping", "cancellation"]);
+const isWork = e => human(e) && !NOT_WORK.has(workClass(e));
+const mins = es => sum(es, e => e.touch);
+const TITLES = {
+  auto: { "order entry": "Orders typed by hand from emailed POs", "credit check": "Credit checks that pass at standard limits",
+    "cash application": "Remittances matched to invoices by hand", "invoice": "Invoices typed from orders",
+    "price approval": "Discount approvals that rarely change" },
+  dup: { "order entry": "Orders keyed twice, in CRM then ERP", "credit check": "Credit checked twice, in CRM then ERP",
+    "invoice": "Invoices redone after price disputes" }
+};
+const BADGE = { auto: "Automation", dup: "Duplicated work", bott: "Bottleneck", kp: "Key-person risk" };
+
+function analyze(D, A) {
+  const { ev, cases, byCase } = D, F = [], risks = [];
+  const byClass = groupBy(ev.filter(isWork), workClass);
+  const margin = e => cases.get(e.c).val * GM;
+
+  // Rule 1, automation potential: frequent human work that almost never hits an exception.
+  for (const [k, es] of byClass) {
+    const routine = es.filter(e => !e.exc), share = routine.length / es.length;
+    if (es.length < 300 || share < 0.85 || mins(es) / es.length < 4) continue;
+    const per = mins(routine) / routine.length, rate = A.cap * A.cost * ANN / 60;
+    F.push({ type: "auto", k, conf: "Medium", recs: routine, title: TITLES.auto[k] || "Routine " + k + " done by hand",
+      claims: routine.map(e => [e.id, e.touch * rate]),
+      d: `${fmt(routine.length)} of ${fmt(es.length)} events hit no exception (${pct(share)}), ${per.toFixed(1)} min each`,
+      rule: "Human work · 300+ events · 85%+ finish with no exception · 4+ min each",
+      formula: `${fmt(routine.length)} routine events × ${per.toFixed(1)} min ÷ 60 × ${ANN} (annualize)\n  × ${pct(A.cap)} capture × $${A.cost}/h` });
+  }
+
+  // Rule 2, duplicated work: the same class of work done twice on one order. The ERP record is kept.
+  const dups = new Map();
+  for (const list of byCase.values()) {
+    for (const [k, es] of groupBy(list.filter(isWork), workClass)) {
+      if (es.length < 2) continue;
+      const keep = es.find(e => ACT[e.act][1] === "ERP") || es[0];
+      for (const e of es) if (e !== keep) { if (!dups.has(k)) dups.set(k, []); dups.get(k).push(e); }
+    }
+  }
+  for (const [k, es] of dups) {
+    if (es.length < 50) continue;
+    es.sort((a, b) => a.t - b.t);
+    const per = mins(es) / es.length, rate = A.rem * A.cost * ANN / 60;
+    const f = { type: "dup", k, conf: "High", recs: es, title: TITLES.dup[k] || k + " done twice on one order",
+      claims: es.map(e => [e.id, e.touch * rate]),
+      d: `${fmt(es.length)} repeat events on ${fmt(new Set(es.map(e => e.c)).size)} orders, ${fmt(mins(es) / 60 * ANN)} h a year`,
+      rule: "Same class of work done 2+ times on one order · the ERP record is kept, the rest are repeats",
+      formula: `${fmt(es.length)} repeat events × ${per.toFixed(1)} min ÷ 60 × ${ANN}\n  × ${pct(A.rem)} removable × $${A.cost}/h` };
+    if (k === "invoice") {
+      const live = [...cases.values()].filter(c => !c.cancel);
+      const fixed = c => byCase.get(c.id).some(e => e.act === "invoice.corrected");
+      const rateOf = cs => cs.filter(fixed).length / Math.max(1, cs.length);
+      f.note = `Corrected on ${pct(rateOf(live.filter(c => c.appr)))} of orders with a CRM discount approval vs ${pct(rateOf(live.filter(c => !c.appr)))} without. Likely cause: approved discounts live in CRM and never reach the ERP invoice.`;
+    }
+    F.push(f);
+  }
+
+  // Rule 3, bottleneck: a long wait only counts if it moves an outcome (here, the order getting cancelled).
+  const cancelledAfter = e => !!cases.get(e.c).cancel && byCase.get(e.c).some(x => x.act === "order.cancelled" && x.t > e.t);
+  for (const act of Object.keys(ACT)) {
+    const es = ev.filter(e => e.act === act && human(e) && e.wait > 0);
+    const slow = es.filter(e => e.wait > 48), fast = es.filter(e => e.wait <= 48);
+    if (slow.length < 30 || !fast.length) continue;
+    const lost = slow.filter(cancelledAfter);
+    const rs = lost.length / slow.length, rf = fast.filter(cancelledAfter).length / fast.length, gap = rs - rf;
+    if (gap < 0.05) continue;
+    const avgM = sum(lost, margin) / lost.length, perYear = gap * slow.length * ANN;
+    F.push({ type: "bott", k: act, conf: "Medium", recs: slow, title: "Orders lost while waiting on " + ACT[act][0].toLowerCase(),
+      claims: lost.map(e => ["m:" + e.c, margin(e) * A.rec * ANN * gap / rs]),
+      d: `${fmt(slow.length)} waited 48h+; ${pct(rs)} of those were cancelled vs ${pct(rf)} when faster`,
+      rule: "A wait counts only if it moves an outcome · cancellations after 48h+ waits vs faster ones",
+      formula: `(${pct(rs, 1)} − ${pct(rf, 1)}) × ${fmt(slow.length)} slow orders × ${ANN} = ${fmt(perYear)} lost orders/yr\n  × $${fmt(avgM)} avg margin × ${pct(A.rec)} recoverable`,
+      note: `Median wait ${median(es.map(e => e.wait)).toFixed(1)} h for ${median(es.map(e => e.touch)).toFixed(1)} min of work. Correlation, not proof: urgent orders may both wait less and cancel less.` });
+  }
+
+  // Rule 4, key-person risk: one person carries 80%+ of a step, or of its exceptions.
+  for (const [k, es] of byClass) {
+    for (const [scope, set] of [["volume", es], ["exceptions", es.filter(e => e.exc)]]) {
+      if (set.length < 50) continue;
+      const counts = [...groupBy(set, e => e.actor)].map(([who, xs]) => [who, xs.length]).sort((a, b) => b[1] - a[1]);
+      const who = counts[0][0], share = counts[0][1] / set.length;
+      if (share < 0.8) continue;
+      const exposed = sum(set.filter(e => e.actor === who && !cases.get(e.c).cancel), margin) * ANN;
+      // Days when this person handled none of 3+ requests are a natural experiment in what their absence costs.
+      const day = e => Math.floor((e.t - e.wait) / 24);
+      const cover = new Set([...groupBy(set, day)].filter(([, xs]) => xs.length >= 3 && !xs.some(e => e.actor === who)).map(([d]) => d));
+      let loss = 0.1, how = "assumed at 10%: no day in the sample without " + who;
+      if (cover.size) {
+        const cov = set.filter(e => cover.has(day(e))), rest = set.filter(e => !cover.has(day(e)));
+        const cancelRate = xs => xs.filter(e => cases.get(e.c).cancel).length / Math.max(1, xs.length);
+        loss = Math.max(0, cancelRate(cov) - cancelRate(rest));
+        const days = [...cover].sort((a, b) => a - b).map(dayLabel).join(", ");
+        how = `measured on the days ${who} was out (${days}): median wait ${median(cov.map(e => e.wait)).toFixed(0)} h vs ${median(rest.map(e => e.wait)).toFixed(0)} h, ${pct(cancelRate(cov))} of orders cancelled vs ${pct(cancelRate(rest))}`;
+      }
+      risks.push({ type: "kp", k, conf: cover.size ? "Medium" : "Low", recs: set.filter(e => e.actor === who),
+        title: `${who} handles ${pct(share)} of ${scope === "volume" ? k + "s" : k + " exceptions"}`,
+        value: exposed * A.abs * (13 / 52) * loss, exposed,
+        d: `${money(exposed)} of gross margin a year passes through one person`,
+        rule: "One person carries 80%+ of a step's volume, or of its exceptions",
+        formula: `${money(exposed)} margin through ${who} × ${pct(A.abs)} chance of a 13-week absence\n  × 13/52 × ${pct(loss, 1)} of orders lost while uncovered`,
+        note: `Loss rate ${how}.` });
+      break;
+    }
+  }
+
+  // Reconcile: every record (or lost order's margin) is credited once, to the finding that values it most.
+  const claimants = new Map(), shared = new Set();
+  for (const f of F) {
+    f.stand = sum(f.claims, c => c[1]); f.once = 0; f.lostTo = new Map(); f.wonFrom = new Map();
+    for (const [key, v] of f.claims) { if (!claimants.has(key)) claimants.set(key, []); claimants.get(key).push([f, v]); }
+  }
+  for (const [key, cl] of claimants) {
+    let best = cl[0];
+    for (const c of cl) if (c[1] > best[1]) best = c;
+    const win = best[0];
+    win.once += best[1];
+    if (cl.length < 2) continue;
+    shared.add(key);
+    for (const [g] of cl) if (g !== win) {
+      g.lostTo.set(win, (g.lostTo.get(win) || 0) + 1);
+      win.wonFrom.set(g, (win.wonFrom.get(g) || 0) + 1);
+    }
+  }
+  return { F, risks, shared, naive: sum(F, f => f.stand), once: sum(F, f => f.once), risk: sum(risks, r => r.value) };
+}
+
+/* ---------- 3. UI ---------- */
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString("en-US");
+const pct = (x, d = 0) => (x * 100).toFixed(d) + "%";
+const money = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "M" : v >= 1e4 ? "$" + Math.round(v / 1e3) + "k" : "$" + (v / 1e3).toFixed(1) + "k";
+const DTF = new Intl.DateTimeFormat("en-US",
+  { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" });
+const when = t => DTF.format(new Date(T0 + t * 36e5));
+const dayLabel = d => new Date(T0 + d * 864e5).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const hrsTxt = h => h >= 48 ? (h / 24).toFixed(0) + " d" : h.toFixed(1) + " h";
+
+let D = null, RES = null, seed = 7, sel = null, view = null;
+const opts = () => ({ cost: +$("a-cost").value, cap: $("a-cap").value / 100, rem: $("a-rem").value / 100,
+  rec: $("a-rec").value / 100, abs: $("a-abs").value / 100, once: $("a-once").checked });
+
+function renderTiles() {
+  const n = {};
+  for (const e of D.ev) { const s = ACT[e.act][1]; n[s] = (n[s] || 0) + 1; }
+  $("tiles").innerHTML = Object.keys(SYS).map(s =>
+    `<button class="card src${view && view.sys === s ? " on" : ""}" data-sys="${s}"><b>${SYS[s]}</b><span class="num">${fmt(n[s] || 0)} records · read-only</span></button>`).join("");
+  document.querySelectorAll(".src").forEach(b => { b.onclick = () => { sel = null; view = { sys: b.dataset.sys }; renderAll(); }; });
+}
+
+function renderRoll() {
+  const a = opts(), r = RES, over = Math.max(0, r.naive - r.once), shown = a.once ? r.once : r.naive;
+  const rev = sum([...D.cases.values()].filter(c => !c.cancel), c => c.val) * ANN;
+  $("roll").innerHTML = `
+    <div class="kpi main"><div class="l">Annual EBITDA upside, ${a.once ? "each record counted once" : "naive sum"}</div>
+      <div class="v num">${money(shown)}</div><div class="s">${pct(shown / rev, 2)} of ≈${money(rev)} revenue (annualized sample)</div></div>
+    <div class="kpi"><div class="l">${a.once ? "Naive sum of the findings" : "Counted once"}</div>
+      <div class="v num">${money(a.once ? r.naive : r.once)}</div><div class="s">${a.once ? "what adding up the cards would claim" : "what survives reconciliation"}</div></div>
+    <div class="kpi warn"><div class="l">Double counting ${a.once ? "removed" : "included"}</div>
+      <div class="v num">${money(over)}</div><div class="s">${pct(over / (r.once || 1), 1)} overstatement · ${fmt(r.shared.size)} records claimed twice</div></div>
+    <div class="kpi risk"><div class="l">Expected EBITDA at risk</div>
+      <div class="v num">${money(r.risk)}</div><div class="s">key-person exposure, kept out of upside</div></div>`;
+}
+
+function card(f, i, isRisk) {
+  const a = opts(), v = isRisk ? f.value : (a.once ? f.once : f.stand), cut = !isRisk && a.once && f.once < f.stand - 1;
+  return `<button class="card f${sel === f ? " on" : ""}" data-i="${i}" data-r="${isRisk ? 1 : 0}">
+    <span class="t"><span class="b ${f.type}">${BADGE[f.type]}</span>${esc(f.title)}<span class="conf">· ${f.conf} confidence</span></span>
+    <span class="v num">${cut ? `<s>${money(f.stand)}</s>` : ""}${money(v)}<small>${isRisk ? "at risk / yr" : "per year"}</small></span>
+    <span class="d">${esc(f.d)}</span></button>`;
+}
+
+function renderFindings(animate) {
+  const a = opts();
+  const up = [...RES.F].sort((x, y) => a.once ? y.once - x.once : y.stand - x.stand);
+  const rk = [...RES.risks].sort((x, y) => y.value - x.value);
+  $("up").innerHTML = up.map(f => card(f, RES.F.indexOf(f), false)).join("") || `<p class="muted">No finding met a rule this month.</p>`;
+  $("risk").innerHTML = rk.map(f => card(f, RES.risks.indexOf(f), true)).join("") || `<p class="muted">No key-person concentration this month.</p>`;
+  document.querySelectorAll(".f").forEach((b, i) => {
+    b.onclick = () => {
+      sel = (b.dataset.r === "1" ? RES.risks : RES.F)[+b.dataset.i]; view = null; renderAll();
+      const on = document.querySelector(".f.on"); if (on) on.focus();
+    };
+    if (animate) setTimeout(() => b.classList.add("in"), 60 * i); else b.classList.add("in");
+  });
+}
+
+function renderSteps() {
+  const all = [...RES.F, ...RES.risks];
+  const rows = Object.keys(ACT).map(act => {
+    const es = D.ev.filter(e => e.act === act);
+    if (!es.length) return "";
+    const hm = es.filter(human), people = groupBy(hm, e => e.actor);
+    const top = hm.length ? Math.max(...[...people.values()].map(xs => xs.length)) / hm.length : 0;
+    const w = median(es.filter(e => e.wait > 0).map(e => e.wait));
+    const hot = RES.F.some(f => f.type === "bott" && f.k === act);
+    const flags = new Set(all.filter(f => f.k === act || (f.type !== "bott" && f.recs.some(e => e.act === act))).map(f => f.type));
+    return `<tr data-act="${act}"><td><button class="lnk" data-act="${act}">${ACT[act][0]}</button></td><td class="muted">${SYS[ACT[act][1]]}</td>
+      <td class="num">${fmt(es.length)}</td>
+      <td class="num"><span class="wb${hot ? " hot" : ""}" style="width:${Math.min(60, w * 1.2).toFixed(0)}px"></span>${w ? hrsTxt(w) : "-"}</td>
+      <td class="num">${hm.length ? median(hm.map(e => e.touch)).toFixed(1) + " min" : "-"}</td>
+      <td class="num">${hm.length ? pct(1 - hm.filter(e => e.exc).length / hm.length) : "-"}</td>
+      <td class="num">${hm.length ? pct(top) : "-"}</td>
+      <td>${[...flags].map(t => `<span class="b ${t}">${BADGE[t]}</span>`).join("")}</td></tr>`;
+  }).join("");
+  $("steps").innerHTML = `<thead><tr><th>Step</th><th>System</th><th>Events</th><th>Median wait before</th><th>Touch</th><th>No exception</th><th>Top person</th><th>Flags</th></tr></thead><tbody>${rows}</tbody>`;
+  document.querySelectorAll("#steps tbody tr").forEach(tr => {
+    tr.onclick = () => { sel = null; view = { act: tr.dataset.act }; renderAll(); };
+  });
+}
+
+function recTable(recs, showShared) {
+  const cap = 120;
+  const rows = recs.slice(0, cap).map(e => {
+    const sh = showShared && RES.shared.has(e.id);
+    return `<tr class="${sh ? "shared" : ""}"><td class="mono">${e.id}</td><td class="mono">${when(e.t)}</td><td>${SYS[ACT[e.act][1]]}</td>
+      <td>${ACT[e.act][0]}</td><td>${esc(e.actor)}</td><td><button class="lnk mono" data-case="${e.c}">${e.c}</button></td>
+      <td class="num">${e.touch ? e.touch.toFixed(1) + "m" : "-"}</td><td class="num">${e.wait ? e.wait.toFixed(1) + "h" : "-"}</td>
+      <td>${sh ? `<span class="chip">claimed twice</span>` : esc(e.note)}</td></tr>`;
+  }).join("");
+  return `<div style="overflow-x:auto"><table><thead><tr><th>Record</th><th>Time</th><th>System</th><th>Activity</th><th>Person</th><th>Order</th><th>Touch</th><th>Wait</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="muted" style="font-size:12px">${recs.length > cap ? `Showing ${cap} of ${fmt(recs.length)} source records.` : `${fmt(recs.length)} source records.`}</p>`;
+}
+
+function overlapNote(f, a) {
+  const lost = [...f.lostTo].map(([g, n]) => `${fmt(n)} of these records are also claimed by <b>${esc(g.title)}</b>, which values them higher, so ${a.once ? "they count there, not here" : "they are counted twice while the toggle is off"}.`);
+  const won = [...f.wonFrom].map(([g, n]) => `${fmt(n)} of these records are also claimed by <b>${esc(g.title)}</b>; they count here, where they are worth more.`);
+  return [...lost, ...won].join(" ");
+}
+
+function renderPanel() {
+  const P = $("panel"), a = opts();
+  let h;
+  if (view && view.c) {
+    const list = D.byCase.get(view.c), c = D.cases.get(view.c);
+    const tags = e => [...RES.F, ...RES.risks].filter(f => f.recs.includes(e)).map(f => `<span class="b ${f.type}">${BADGE[f.type]}</span>`).join("");
+    h = `<button class="lnk" id="back">← back</button><h2 class="mono" style="font-size:16px">${c.id}</h2>
+      <dl class="kv"><dt>Order value</dt><dd class="num">$${fmt(c.val)} · gross margin $${fmt(c.val * GM)}</dd>
+      <dt>Trail</dt><dd>${list.length} records across ${new Set(list.map(e => ACT[e.act][1])).size} systems${c.cancel ? ` · <b style="color:var(--bo)">cancelled</b>` : ""}</dd></dl>
+      <table><thead><tr><th>Record</th><th>Time</th><th>Activity</th><th>Person</th><th>Wait</th><th>Touch</th><th>Used by</th></tr></thead><tbody>${list.map(e =>
+        `<tr><td class="mono">${e.id}</td><td class="mono">${when(e.t)}</td><td>${ACT[e.act][0]}<div class="muted" style="font-size:11px">${esc(e.note)}</div></td>
+        <td>${esc(e.actor)}</td><td class="num">${e.wait ? e.wait.toFixed(1) + "h" : "-"}</td><td class="num">${e.touch ? e.touch.toFixed(1) + "m" : "-"}</td><td>${tags(e)}</td></tr>`).join("")}</tbody></table>`;
+  } else if (view) {
+    const recs = D.ev.filter(e => view.sys ? ACT[e.act][1] === view.sys : e.act === view.act);
+    h = `<h2>${view.sys ? SYS[view.sys] + ": raw records" : ACT[view.act][0] + ": every record"}</h2>
+      <p class="muted" style="margin-top:0">Straight from the source system, before any rule runs. Click an order to follow it across systems.</p>${recTable(recs, false)}`;
+  } else if (sel) {
+    const f = sel, isR = f.type === "kp", ov = isR ? "" : overlapNote(f, a);
+    const steps = [...groupBy(f.recs, e => e.act)].map(([act, xs]) => `${ACT[act][0]}: ${fmt(xs.length)}`).join(" · ");
+    h = `<span class="b ${f.type}">${BADGE[f.type]}</span><span class="conf">${f.conf} confidence</span><h2>${esc(f.title)}</h2>
+      <dl class="kv"><dt>Found by</dt><dd>${f.rule}</dd><dt>Measured</dt><dd>${esc(f.d)}</dd><dt>Records</dt><dd>${steps}</dd>
+      <dt>${isR ? "Expected at risk" : "Standalone"}</dt><dd class="num"><b>${money(isR ? f.value : f.stand)}</b> / yr</dd>
+      ${isR ? "" : `<dt>Counted once</dt><dd class="num"><b>${money(f.once)}</b> / yr${f.once < f.stand - 1 ? ` <span class="muted">(${money(f.stand - f.once)} double counted)</span>` : ""}</dd>`}</dl>
+      <div class="formula">${esc(f.formula)}\n  = ${money(isR ? f.value : f.stand)} / yr</div>
+      ${f.note ? `<div class="note">${esc(f.note)}</div>` : ""}${ov ? `<div class="note ov">${ov}</div>` : ""}
+      <div class="sec" style="margin-top:14px">Source records behind this finding</div>${recTable(f.recs, !isR)}`;
+  } else {
+    h = `<h2>Pick a finding</h2><p class="muted">Each finding links to the records that produced it. Records claimed by two findings are highlighted; the toggle above decides whether they count once or twice.</p>`;
+  }
+  P.innerHTML = h;
+  P.scrollTop = 0;
+  P.querySelectorAll("[data-case]").forEach(b => { const prev = view; b.onclick = () => { view = { c: b.dataset.case, prev }; renderPanel(); }; });
+  const back = $("back");
+  if (back) back.onclick = () => { view = view.prev || null; renderAll(); };
+}
+
+function renderAll(animate) {
+  if (!RES) return;
+  renderTiles(); renderRoll(); renderFindings(animate); renderSteps(); renderPanel();
+}
+
+function syncOutputs() {
+  const a = opts();
+  $("o-cost").textContent = "$" + a.cost + "/h"; $("o-cap").textContent = pct(a.cap); $("o-rem").textContent = pct(a.rem);
+  $("o-rec").textContent = pct(a.rec); $("o-abs").textContent = pct(a.abs);
+}
+
+function recompute() {
+  syncOutputs();
+  const key = sel && sel.type + "|" + sel.k;
+  RES = analyze(D, opts());
+  if (key) sel = [...RES.F, ...RES.risks].find(f => f.type + "|" + f.k === key) || null;
+}
+
+function run(s) {
+  seed = s; sel = null; view = null; RES = null;
+  D = generate(seed);
+  renderTiles();
+  const go = $("go");
+  go.disabled = true;
+  $("roll").innerHTML = `<div class="kpi main"><div class="l">Annual EBITDA upside</div><div class="v">…</div></div>`;
+  $("up").innerHTML = ""; $("risk").innerHTML = ""; $("steps").innerHTML = "";
+  $("panel").innerHTML = `<h2>Running the diagnostic…</h2>`;
+  const stages = [`Reading ${fmt(D.ev.length)} records from 4 systems`, `Rebuilding ${fmt(N)} order trails`,
+    "Measuring waits, touch time and exceptions", "Running 4 detection rules", "Pricing findings and reconciling shared records"];
+  let i = 0;
+  const tick = () => {
+    $("pb").style.width = ((i + 1) / stages.length * 100) + "%";
+    $("stage").textContent = stages[i];
+    if (++i < stages.length) { setTimeout(tick, 170); return; }
+    setTimeout(() => {
+      recompute();
+      sel = [...RES.F].sort((x, y) => y.once - x.once)[0] || null;
+      $("stage").textContent = `seed ${seed} · ${fmt(D.ev.length)} records · ${fmt(N)} orders · 4 weeks`;
+      go.disabled = false;
+      renderAll(true);
+    }, 170);
+  };
+  tick();
+}
+
+$("go").onclick = () => run(seed + 1);
+document.querySelectorAll("#assume input").forEach(inp => inp.addEventListener("input", () => {
+  if (!RES) { syncOutputs(); return; }
+  recompute(); renderRoll(); renderFindings(false); renderPanel();
+}));
+syncOutputs();
+run(seed);
+</script>
+</body>
+</html>
